@@ -1,0 +1,121 @@
+.player-loading-panel {
+  background-color: #000;
+  display: none;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 57;
+
+  .player-loading-panel-text {
+    bottom: 56px;
+    color: hsla(0, 0%, 100%, 0.6);
+    font-size: 12px;
+    left: 12px;
+    line-height: 1.6;
+    position: absolute;
+    right: 12px;
+  }
+}
+
+.player-loading-panel-blur {
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  align-items: center;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  pointer-events: none;
+  position: relative;
+  width: 100%;
+
+  .player-loading-panel-blur-detail {
+    -webkit-animation: animation-loading 0.94s steps(1) infinite;
+    animation: animation-loading 0.94s steps(1) infinite;
+    background: url(@/hili-player/assets/images/ploading.png) no-repeat;
+    height: 184px;
+    -webkit-transform: scale(0.5);
+    transform: scale(0.5);
+    width: 320px;
+  }
+
+  // 加载动画
+  @keyframes animation-loading {
+    0% {
+      background-position: 0 0;
+    }
+
+    6.25% {
+      background-position: -320px 0;
+    }
+
+    12.5% {
+      background-position: -640px 0;
+    }
+
+    18.75% {
+      background-position: -960px 0;
+    }
+
+    25% {
+      background-position: -1280px 0;
+    }
+
+    31.25% {
+      background-position: -1600px 0;
+    }
+
+    37.5% {
+      background-position: -1920px 0;
+    }
+
+    43.75% {
+      background-position: -2240px 0;
+    }
+
+    50% {
+      background-position: -2560px 0;
+    }
+
+    56.25% {
+      background-position: -2880px 0;
+    }
+
+    62.5% {
+      background-position: -3200px 0;
+    }
+
+    68.75% {
+      background-position: -3520px 0;
+    }
+
+    75% {
+      background-position: -3840px 0;
+    }
+
+    81.25% {
+      background-position: -4160px 0;
+    }
+
+    87.5% {
+      background-position: -4480px 0;
+    }
+
+    93.75% {
+      background-position: 0 -184px;
+    }
+
+    100% {
+      background-position: -320px -184px;
+    }
+  }
+}
+
+.player-loading-panel.state-loading {
+  display: block;
+}

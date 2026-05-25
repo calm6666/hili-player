@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hili Player - 极简视频播放器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      color: #fff;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .player-wrapper {
+      width: 100%;
+      max-width: 900px;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .controls-info {
+      margin-top: 30px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      line-height: 1.8;
+      text-align: center;
+    }
+
+    .controls-info code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .features {
+      margin-top: 30px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .feature-card {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 15px;
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 13px;
+    }
+
+    .feature-card strong {
+      color: #00b4d8;
+      display: block;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Hili Player</h1>
+  <p class="subtitle">基于纯 h 函数架构的极简 TypeScript 视频播放器</p>
+
+  <div class="player-wrapper" id="player-container"></div>
+
+  <div class="controls-info">
+    <p>键盘快捷键：<code>Space/K</code> 播放/暂停 | <code>←/→</code> 快退/快进 5秒 | <code>↑/↓</code> 音量增减</p>
+    <p><code>F</code> 全屏 | <code>M</code> 静音 | 双击视频区域切换全屏</p>
+  </div>
+
+  <div class="features">
+    <div class="feature-card">
+      <strong>零运行时开销</strong>
+      直接操作真实 DOM，无虚拟 DOM Diff，性能等价于手写原生 JavaScript
+    </div>
+    <div class="feature-card">
+      <strong>TypeScript 原生</strong>
+      完整类型支持，极致的开发体验和代码提示
+    </div>
+    <div class="feature-card">
+      <strong>模块化设计</strong>
+      组件、指令、工具函数分离，按需使用
+    </div>
+    <div class="feature-card">
+      <strong>功能完备</strong>
+      支持多画质、全屏、画中画、键盘快捷键等
+    </div>
+  </div>
+
+  <script type="module">
+    import { VideoPlayer } from './packages/player/src/index.ts';
+
+    // 获取容器元素
+    const container = document.getElementById('player-container');
+    if (!container) {
+      console.error('找不到播放器容器');
+      throw new Error('找不到播放器容器');
+    }
+
+    // 创建播放器
+    const player = new VideoPlayer({
+      src: [
+        { quality: '1080p', url: 'http://127.0.0.1:9000/hfs/d2564b1ae7286c6b6f6d3e52551c8c3cb4a87b2ade979543711679428fb2e92e.mp4', name: '1080P' },
+        { quality: '720p', url: 'http://127.0.0.1:9000/hfs/d2564b1ae7286c6b6f6d3e52551c8c3cb4a87b2ade979543711679428fb2e92e.mp4', name: '720P' },
+        { quality: '480p', url: 'http://127.0.0.1:9000/hfs/d2564b1ae7286c6b6f6d3e52551c8c3cb4a87b2ade979543711679428fb2e92e.mp4', name: '480P' },
+      ],
+      poster: '',
+      autoplay: false,
+      muted: false,
+      volume: 0.8,
+      controls: true,
+      keyboard: true,
+      pip: true,
+      fullscreen: true,
+    });
+
+    // 挂载播放器到容器
+    player.mount(container);
+
+    // 监听播放器事件
+    player.on('ready', () => {
+      console.log('播放器已就绪');
+    });
+
+    player.on('play', () => {
+      console.log('开始播放');
+    });
+
+    player.on('pause', () => {
+      console.log('播放暂停');
+    });
+
+    player.on('timeupdate', (currentTime, duration) => {
+      // console.log('播放进度:', currentTime, '/', duration);
+    });
+
+    player.on('statechange', (state) => {
+      console.log('状态变化:', state);
+    });
+
+    // 暴露到全局供调试
+    window.player = player;
+  </script>
+</body>
+</html>

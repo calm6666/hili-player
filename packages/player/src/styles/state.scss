@@ -1,0 +1,9 @@
+.player-state-wrap {
+  pointer-events: none;
+
+  .player-state-buff-icon,
+  .player-state-buff-text,
+  .player-state-play {
+    display: none;
+  }
+}

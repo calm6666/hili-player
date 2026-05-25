@@ -1,0 +1,31 @@
+{
+  "name": "hili-player",
+  "version": "1.0.0",
+  "description": "极简 TypeScript 视频播放器 - hili-player",
+  "type": "module",
+  "scripts": {
+    "dev": "cd packages/player && pnpm dev",
+    "build": "cd packages/player && pnpm build && cd ../plugins && pnpm build",
+    "build:player": "cd packages/player && pnpm build",
+    "build:plugins": "cd packages/plugins && pnpm build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint packages --ext .ts",
+    "lint:fix": "eslint packages --ext .ts --fix"
+  },
+  "keywords": [
+    "video-player",
+    "typescript",
+    "h-function",
+    "lightweight"
+  ],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^6.0.3"
+  }
+}

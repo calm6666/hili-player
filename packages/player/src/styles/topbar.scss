@@ -1,0 +1,154 @@
+.player-top-wrap {
+  color: #fff;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  -webkit-transition: all 0.2s ease-in-out;
+  transition: all 0.2s ease-in-out;
+  width: 100%;
+  z-index: 45;
+
+  .player-top-mask {
+    background: -webkit-gradient(
+      linear,
+      left top,
+      left bottom,
+      color-stop(16.87%, transparent),
+      color-stop(94%, rgba(0, 0, 0, 0.3))
+    );
+    background: linear-gradient(
+      180deg,
+      transparent 16.87%,
+      rgba(0, 0, 0, 0.3) 94%
+    );
+    height: 240px;
+    left: 0;
+    position: absolute;
+    top: 0;
+    -webkit-transform: matrix(1, 0, 0, -1, 0, 0);
+    transform: matrix(1, 0, 0, -1, 0, 0);
+    -webkit-transition: all 0.2s ease-in-out;
+    transition: all 0.2s ease-in-out;
+    width: 100%;
+    z-index: -1;
+  }
+}
+
+.player-top-left-title,
+.player-top-title {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  margin: 18px 0 0 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100% !important;
+  z-index: 2;
+}
+
+.player-top-follow {
+  -webkit-box-flex: 0;
+  -ms-flex: none;
+  flex: none;
+}
+
+.player-top-left {
+  left: 12px;
+  margin-top: 18px;
+  position: absolute;
+
+  .player-top-left-title {
+    margin: 0 0 8px;
+    display: none;
+  }
+}
+
+.player-top-issue {
+  -webkit-box-flex: 0;
+  cursor: pointer;
+  -ms-flex: none;
+  flex: none;
+  height: 24px;
+  line-height: 24px;
+  margin: 18px 12px 0;
+  min-width: 36px;
+  pointer-events: all;
+  text-align: center;
+  z-index: 2;
+
+  .player-top-issue-icon {
+    -webkit-box-flex: 0;
+    display: inline-block;
+    -ms-flex: none;
+    flex: none;
+    height: 22px;
+    width: 22px;
+
+    .common-svg-icon {
+      height: 100%;
+      vertical-align: middle;
+
+      svg {
+        fill: hsla(0, 0%, 100%, 0.8);
+      }
+    }
+  }
+}
+
+.player-follow {
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  -webkit-box-flex: 0;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.4);
+  border-radius: 26px;
+  cursor: pointer;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex: 0;
+  flex: 0;
+  font-size: 12px;
+  font-weight: 400;
+  height: 32px;
+  line-height: 32px;
+  margin-bottom: 8px;
+  pointer-events: all;
+  text-align: center;
+  width: 89px;
+  z-index: 2;
+
+  .player-follow-face {
+    -webkit-box-flex: 0;
+    border-radius: 50%;
+    -ms-flex: none;
+    flex: none;
+    height: 24px;
+    margin-left: 4px;
+    vertical-align: bottom;
+    width: 24px;
+  }
+
+  .player-follow-icon {
+    fill: #fff;
+    -webkit-box-flex: 0;
+    -ms-flex: none;
+    flex: none;
+    height: 14px;
+    line-height: 14px;
+    margin-left: 8px;
+    width: 14px;
+  }
+
+  .player-follow-text {
+    -webkit-box-flex: 0;
+    -ms-flex: none;
+    flex: none;
+    margin-left: 5px;
+  }
+}

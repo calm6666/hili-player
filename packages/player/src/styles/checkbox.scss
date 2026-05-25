@@ -1,0 +1,81 @@
+.u-checkbox {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 14px;
+    line-height: 1;
+    // overflow: hidden;
+    .u-checkbox-wrap {
+      .u-checkbox-box {
+        display: inline-flex;
+        align-items: flex-start;
+        cursor: pointer;
+        &:hover {
+          .checkbox-box {
+            border-color: var(
+              --player-fn-color,
+              #00aeec
+            );
+          }
+
+          .checkbox-label {
+            color: var(--player-fn-color, #00aeec);
+          }
+        }
+        .checkbox-box {
+          /*
+                  如果所有项目的flex-shrink属性都为1，当空间不足时，都将等比例缩小
+                  如果一个项目的flex-shrink属性为0，其他项目都为1，则空间不足时，前者不缩小。
+                */
+          flex-shrink: 0; // 默认 1.即空间不足时，项目将缩小
+          position: relative;
+          top: 3px;
+          width: 13px;
+          height: 13px;
+          background: transparent;
+          border: 1px solid #d9d9d9;
+          border-radius: 2px;
+          &::after {
+            box-sizing: border-box;
+            position: absolute;
+            top: 50%;
+            left: 21.5%;
+            display: table;
+            width: 5.7142857142857135px;
+            height: 9.142857142857142px;
+            border: 2px solid #fff;
+            border-top: 0;
+            border-left: 0;
+            transform: rotate(45deg) scale(0)
+              translate(-50%, -50%);
+            opacity: 0;
+            content: "";
+          }
+        }
+        .checkbox-checked {
+          background-color: var(
+            --player-fn-color,
+            #00aeec
+          );
+          border-color: var(
+            --player-fn-color,
+            #00aeec
+          );
+          &::after {
+            opacity: 1;
+            transform: rotate(45deg) scale(1)
+              translate(-50%, -50%);
+          }
+        }
+        .checkbox-label {
+          word-break: break-all;
+          padding: 0 8px;
+          line-height: 1.5714285714285714;
+          color: #fff;
+          font-size: 13px;
+          vertical-align: middle;
+        }
+      }
+    }
+  }

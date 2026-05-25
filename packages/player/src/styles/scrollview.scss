@@ -1,0 +1,167 @@
+// ScrollView 组件样式
+// 高性能滚动视图组件样式
+
+.scroll-view {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-overflow-scrolling: auto;
+
+  // 内容包装器
+  .scroll-view-content {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    perspective: 1000;
+    -webkit-perspective: 1000;
+  }
+
+  // 滚动条轨道
+  .scroll-view-scrollbar-track {
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    bottom: 2px;
+    width: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 100;
+
+    // 暗色主题下的轨道
+    .ui-dark & {
+      background: rgba(255, 255, 255, 0.05);
+    }
+  }
+
+  // 滚动条滑块
+  .scroll-view-scrollbar-thumb {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 3px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.2s ease, transform 0.1s ease;
+    will-change: transform;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    &:active {
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    // 暗色主题下的滑块
+    .ui-dark & {
+      background: rgba(255, 255, 255, 0.25);
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.45);
+      }
+
+      &:active {
+        background: rgba(255, 255, 255, 0.6);
+      }
+    }
+  }
+
+  // 悬停时显示滚动条
+  &:hover {
+    .scroll-view-scrollbar-track {
+      opacity: 1;
+    }
+  }
+
+  // 滚动中状态
+  &.is-scrolling {
+    .scroll-view-scrollbar-track {
+      opacity: 1;
+    }
+  }
+
+  // 拖拽状态
+  &.is-dragging {
+    .scroll-view-scrollbar-track {
+      opacity: 1;
+    }
+
+    .scroll-view-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.7);
+    }
+  }
+}
+
+// 播放器主题适配
+.player-docker {
+  .scroll-view {
+    .scroll-view-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .scroll-view-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.3);
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.5);
+      }
+
+      &:active {
+        background: rgba(0, 0, 0, 0.6);
+      }
+    }
+  }
+}
+
+// 暗色主题
+.player-docker[data-theme="dark"],
+.ui-dark {
+  .scroll-view {
+    .scroll-view-scrollbar-track {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .scroll-view-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.3);
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      &:active {
+        background: rgba(255, 255, 255, 0.65);
+      }
+    }
+  }
+}
+
+// 简洁模式（更细的滚动条）
+.scroll-view.scroll-view-thin {
+  .scroll-view-scrollbar-track {
+    width: 4px;
+    right: 1px;
+  }
+
+  .scroll-view-scrollbar-thumb {
+    border-radius: 2px;
+  }
+}
+
+// 始终显示滚动条模式
+.scroll-view.scroll-view-always-visible {
+  .scroll-view-scrollbar-track {
+    opacity: 1;
+  }
+}
+
+// 隐藏滚动条模式（仅支持触摸/滚轮）
+.scroll-view.scroll-view-hidden-scrollbar {
+  .scroll-view-scrollbar-track {
+    display: none !important;
+  }
+}

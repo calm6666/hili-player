@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["packages/player/src/*"],
+      "@/types": ["types/index.ts"],
+      "@/core": ["core/index.ts"],
+      "@/core/*": ["core/*"],
+      "@/utils": ["utils/index.ts"],
+      "@/utils/*": ["utils/*"],
+      "@/directives": ["directives/index.ts"],
+      "@/directives/*": ["directives/*"],
+      "@/events": ["events/index.ts"],
+      "@/events/*": ["events/*"],
+      "@/error": ["error/index.ts"],
+      "@/error/*": ["error/*"],
+      "@/hili-player/*": ["packages/player/src/*"],
+      "@/hili-player/plugins/*": ["packages/plugins/src/*"]
+    }
+  },
+  "include": [
+    "core/**/*",
+    "types/**/*",
+    "utils/**/*",
+    "directives/**/*",
+    "events/**/*",
+    "error/**/*",
+    "packages/player/src/**/*",
+    "packages/plugins/src/**/*"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

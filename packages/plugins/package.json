@@ -1,0 +1,68 @@
+{
+  "name": "@hili-player/plugins",
+  "version": "1.0.0",
+  "description": "hili-player 官方插件集合",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./danmaku": {
+      "import": "./dist/danmaku/index.js",
+      "types": "./dist/danmaku/index.d.ts"
+    },
+    "./subtitle": {
+      "import": "./dist/subtitle/index.js",
+      "types": "./dist/subtitle/index.d.ts"
+    },
+    "./dash": {
+      "import": "./dist/dash/index.js",
+      "types": "./dist/dash/index.d.ts"
+    },
+    "./hls": {
+      "import": "./dist/hls/index.js",
+      "types": "./dist/hls/index.d.ts"
+    },
+    "./flv": {
+      "import": "./dist/flv/index.js",
+      "types": "./dist/flv/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "video-player",
+    "plugins",
+    "danmaku",
+    "subtitle",
+    "dash",
+    "hls",
+    "flv"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@hili-player/player": "workspace:*",
+    "dashjs": "^5.1.1",
+    "hls.js": "^1.6.16",
+    "flv.js": "^1.6.2"
+  },
+  "dependencies": {
+    
+  },
+  "devDependencies": {
+    "vite": "^5.2.0",
+    "vite-plugin-dts": "^3.8.0"
+  }
+}

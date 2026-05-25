@@ -1,0 +1,55 @@
+/**
+ * ============================================
+ * hili-player 核心播放器
+ * ============================================
+ *
+ * 使用方式：
+ * import { VideoPlayer } from '@hili-player/core';
+ *
+ * const player = new VideoPlayer({
+ *   src: 'video.mp4',
+ *   container: '#player-container'
+ * });
+ */
+
+// 导出播放器
+export { VideoPlayer } from './player';
+
+// 导出类型
+export type { PlayerConfig } from '@/types';
+export type {
+  StateManager,
+  EventBus,
+  HookSystem,
+} from '@/core';
+
+// 导出插件相关（从 plugins 包）
+export type {
+  Plugin,
+  PluginContext,
+} from '@/hili-player/core/plugin';
+export { PlayerHooks } from '@/hili-player/core/plugin';
+
+// 导出事件系统
+export { createEventBus } from '@/events';
+export type { EventHandler } from '@/events';
+
+// 导出错误处理系统
+export {
+  ErrorHandler,
+  createErrorHandler,
+  ErrorLevel,
+  ErrorType,
+} from '@/error';
+
+export type {
+  ErrorInfo,
+  ErrorHandlerConfig,
+} from '@/error';
+
+// 导出 SSR 相关功能
+export {
+  isServer,
+  createSSRConfig,
+} from '@/utils';
+export type { SSRConfig } from '@/utils';

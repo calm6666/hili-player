@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(awk ' *)",
+      "Bash(npx eslint *)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}
