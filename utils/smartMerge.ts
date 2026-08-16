@@ -22,6 +22,7 @@ function deepClone<T>(obj: T): T {
   }
 
   if (Array.isArray(obj)) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return obj.map((item) => deepClone(item)) as unknown as T;
   }
 
@@ -46,7 +47,7 @@ export function smartMerge<T extends Record<string, unknown>>(
   source: Partial<T>
 ): MergeResult<T> {
   const result = deepClone(target);
-  const changedProps: Array<{ key: string; oldVal: unknown; newVal: unknown }> = [];
+  const changedProps: Array<{ key: string; oldVal: string | number | boolean | null; newVal: string | number | boolean | null }> = [];
 
   for (const key in source) {
     if (Object.prototype.hasOwnProperty.call(source, key)) {
@@ -54,7 +55,11 @@ export function smartMerge<T extends Record<string, unknown>>(
       const newVal = source[key];
 
       if (oldVal !== newVal) {
-        changedProps.push({ key, oldVal, newVal });
+        changedProps.push({
+          key,
+          oldVal: oldVal as string | number | boolean | null,
+          newVal: newVal as string | number | boolean | null,
+        });
         (result as Record<string, unknown>)[key] = newVal;
       }
     }

@@ -5,123 +5,276 @@
  * 独立的函数组件，拥有自己的生命周期
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref, useState, useContext } from '@/core';
 import type { VNode } from '@/types';
-import type { ControlConfig } from '@/hili-player/types';
+import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
+import { StateContext } from '@/store/runtimeState';
+import { VolumeSlider } from './VolumeSlider';
+import { QualityMenu, type QualityItem } from './QualityMenu';
+import { PlaybackRateMenu } from './PlaybackRateMenu';
+import { SettingMenu } from './SettingMenu';
+import { LottieIcon, type LottieIconApi } from './LottieIcon';
+import fullscreenAnimationData from '../assets/lottie-icon/fullscreen-animation.json';
+import webFullscreenAnimationData from '../assets/lottie-icon/web-fullscreen-animation.json';
+import webExitFullscreenAnimationData from '../assets/lottie-icon/web-exit-fullscreen-animation.json';
+import wideHoverAnimationData from '../assets/lottie-icon/wide-hover-animation.json';
+import wideExitHoverAnimationData from '../assets/lottie-icon/wide-exit-hover-animation.json';
+import pipHoverAnimationData from '../assets/lottie-icon/pip-hover-animation.json';
+import pipExitHoverAnimationData from '../assets/lottie-icon/pip-exit-hover-animation.json';
+
+
 
 /**
  * RightControls 组件 Props 接口
  */
-export interface RightControlsProps {
-  config: ControlConfig;
-}
+export type RightControlsEvents = {
+  fullscreen: undefined;
+  webFullscreen: undefined;
+  pip: undefined;
+  wide: undefined;
+  mute: undefined;
+  backrateChange: number;
+  volumeChange: number;
+  muteToggle: undefined;
+  qualityChange: string;
+  settingChange: { key: string; value: boolean | string | number };
+  menuAnimation: { type: 'quality' | 'eplist' | 'playbackrate' | 'volume' | 'setting'; action: 'show' | 'hide' };
+  moreSettingClick: undefined;
+  rightControlsMounted: undefined;
+};
+
+export interface RightControlsProps {}
 
 /**
  * RightControls 组件 - 使用 defineComponent 创建独立组件
  */
-export const RightControls = defineComponent<RightControlsProps>((props, lifecycle) => {
-  const { config } = props;
+export const RightControls = defineComponent<RightControlsProps, RightControlsEvents>((_props, lifecycle) => {
+  const configCtx = useContext(ConfigContext);
+  const config = configCtx;
+  const state = useContext(StateContext);
+
+  const qualities: QualityItem[] = [];
+  const currentQuality = state?.get(PlayerStateKeyEnum.QUALITY) ?? 'auto';
+  const rate = state?.get(PlayerStateKeyEnum.PLAYBACK_RATE) ?? 1;
+  const rates = [2, 1.5, 1.25, 1, 0.75, 0.5];
+
+  const onQualityChange = (quality: string): void => {
+    lifecycle.emit?.('qualityChange', quality);
+  };
+  const onRateChange = (r: number): void => {
+    lifecycle.emit?.('backrateChange', r);
+  };
+  const onSettingChange = (key: string, value: boolean | string | number): void => {
+    lifecycle.emit?.('settingChange', { key, value });
+  };
+  const onMenuAnimation = (type: 'quality' | 'eplist' | 'playbackrate' | 'volume' | 'setting', action: 'show' | 'hide'): void => {
+    lifecycle.emit?.('menuAnimation', { type, action });
+  };
 
   // ============================================
   // DOM 引用
   // ============================================
-  const ctrlQualityBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const ctrlEplistBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const ctrlBackrateBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const ctrlVolumeBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const ctrlVolumeIconBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const ctrlMutedIconBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const ctrlSettingBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const qualityResultRef: { current: HTMLDivElement | null } = { current: null };
-  const qualityMenuRef: { current: HTMLUListElement | null } = { current: null };
-  const eplistResultRef: { current: HTMLDivElement | null } = { current: null };
-  const eplistMenuRef: { current: HTMLUListElement | null } = { current: null };
-  const backrateResultTextRef: { current: HTMLDivElement | null } = { current: null };
-  const volumeNumberRef: { current: HTMLDivElement | null } = { current: null };
-  const volumeSliderAreaRef: { current: HTMLDivElement | null } = { current: null };
-  const volumeProgressbarRef: { current: HTMLDivElement | null } = { current: null };
-  const volumeSliderThumbRef: { current: HTMLDivElement | null } = { current: null };
-  const settingMenuAreaRef: { current: HTMLDivElement | null } = { current: null };
-  const settingMenuRightRef: { current: HTMLDivElement | null } = { current: null };
-  const settingMenuMoreRef: { current: HTMLDivElement | null } = { current: null };
-  const settingOthersContentRef: { current: HTMLDivElement | null } = { current: null };
-  const pipBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const wideBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const webBtnRef: { current: HTMLDivElement | null } = { current: null };
-  const fullBtnRef: { current: HTMLDivElement | null } = { current: null };
 
-  // ============================================
-  // 状态
-  // ============================================
-  const backrateMenuItems: HTMLLIElement[] = [];
+  /** 选集按钮元素引用 */
+  const ctrlEplistBtnRef = ref<HTMLDivElement>();
+
+  /** 选集结果显示元素引用 */
+  const eplistResultRef = ref<HTMLDivElement>();
+
+  /** 选集菜单列表元素引用 */
+  const eplistMenuRef = ref<HTMLUListElement>();
+
+  /** 画中画按钮元素引用 */
+  const pipBtnRef = ref<HTMLDivElement>();
+
+  /** 宽屏按钮元素引用 */
+  const wideBtnRef = ref<HTMLDivElement>();
+
+  /** 网页全屏按钮元素引用 */
+  const webBtnRef = ref<HTMLDivElement>();
+
+  /** 全屏按钮元素引用 */
+  const fullBtnRef = ref<HTMLDivElement>();
 
   // ============================================
   // 事件处理函数
   // ============================================
+
+  /**
+   * 切换全屏状态
+   */
   const toggleFullscreen = (): void => { lifecycle.emit?.('fullscreen'); };
+
+  /**
+   * 切换网页全屏状态
+   */
   const toggleWebFullscreen = (): void => { lifecycle.emit?.('webFullscreen'); };
+
+  /**
+   * 切换画中画状态
+   */
   const togglePip = (): void => { lifecycle.emit?.('pip'); };
+
+  /**
+   * 切换宽屏状态
+   */
   const toggleWide = (): void => { lifecycle.emit?.('wide'); };
-  const toggleMute = (): void => { lifecycle.emit?.('mute'); };
+
+  /** 全屏按钮 API 引用 */
+  const fullscreenRef = ref<LottieIconApi>();
+  /** 网页全屏按钮 API 引用 */
+  const webFullscreenRef = ref<LottieIconApi>();
+  /** 宽屏按钮 API 引用 */
+  const wideRef = ref<LottieIconApi>();
+  /** 画中画按钮 API 引用 */
+  const pipRef = ref<LottieIconApi>();
+
+
+
+  /**
+   * 全屏悬悬停事件处理函数
+   */
+  const mouseFullscreenEnter = (): void => {
+    fullscreenRef.current?.play();
+  };
+
+  /**
+   * 全屏悬停事件处理函数
+   */
+  const mouseFullscreenLeave = (): void => {
+  };
+
+  /**
+   * 网页全屏悬悬停事件处理函数
+   */
+  const mouseWebEnter = (): void => {
+    webFullscreenRef.current?.play();
+  };
+
+  /**
+   * 网页全屏悬停事件处理函数
+   */
+  const mouseWebLeave = (): void => {
+  };
+
+  /**
+   * 宽屏悬悬停事件处理函数
+   */
+  const mouseWideEnter = (): void => {
+    wideRef.current?.play();
+  };
+
+  /**
+   * 宽屏悬停事件处理函数
+   */
+  const mouseWideLeave = (): void => {
+  };
+
+  /**
+   * 画中画悬悬停事件处理函数
+   */
+  const mousePipEnter = (): void => {
+    pipRef.current?.play();
+  };
+
+  /**
+   * 画中画悬停事件处理函数
+   */
+  const mousePipLeave = (): void => {
+  };
 
   // ============================================
-  // 辅助函数
+  // 状态监听（通过 useState + useContext 订阅 TypedStateManager）
   // ============================================
-  const renderBackrateItem = (value: string, label: string): VNode => {
-    return h('li', {
-      class: 'player-ctrl-playbackrate-menu-item',
-      'data-value': value,
-      onClick: (e: MouseEvent) => {
-        const target = e.currentTarget;
-        if (target instanceof HTMLElement) {
-          changeBackrate(parseFloat(value), target);
+  // useContext(StateContext) 从最近的 Provider 获取状态管理器实例
+  // 无需 props 传递，组件直接订阅，避免层级穿透
+  //
+  // 当外部改变全屏/画中画/宽屏等状态时，自动更新按钮的视觉反馈
+  // 例如：用户按 F11 → VideoPlayer 检测到 fullscreenchange
+  //   → state.set(PlayerStateKeyEnum.IS_FULLSCREEN, true)
+  //   → 此处 updater 自动执行，给按钮添加 active 样式
+
+  if (state) {
+    /**
+     * 监听全屏状态变化
+     * 进入全屏时给全屏按钮添加 'state-active' 样式类，退出时移除
+     * 例如：state.set(PlayerStateKeyEnum.IS_FULLSCREEN, true)
+     */
+    useState(
+      state,
+      PlayerStateKeyEnum.IS_FULLSCREEN,
+      (isFullscreen) => {
+        console.log("RightControls isFullscreen: ", isFullscreen);
+        if (fullBtnRef.current) {
+          fullBtnRef.current.classList.toggle('state-active', isFullscreen);
         }
-      }
-    }, label);
-  };
+      },
+      lifecycle
+    );
 
-  const changeBackrate = (backrate: number, target: HTMLElement): void => {
-    lifecycle.emit?.('backrateChange', backrate);
-    backrateMenuItems.forEach((item) => item.classList.remove('active'));
-    target.classList.add('active');
-    if (backrateResultTextRef.current) {
-      backrateResultTextRef.current.innerText = backrate === 1 ? '倍速' : backrate + 'X';
-    }
-  };
+    /**
+     * 监听网页全屏状态变化
+     * 进入网页全屏时给按钮添加 'state-active' 样式类，退出时移除
+     * 例如：state.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, true)
+     */
+    useState(
+      state,
+      PlayerStateKeyEnum.IS_WEB_FULLSCREEN,
+      (isWebFullscreen) => {
+        console.log("RightControls isWebFullscreen: ", isWebFullscreen);
+        if (webBtnRef.current) {
+          webBtnRef.current.classList.toggle('state-active', isWebFullscreen);
+        }
+      },
+      lifecycle
+    );
 
-  const volumeMouseDown = (event: MouseEvent): void => {
-    lifecycle.emit?.('volumeMouseDown', event);
-  };
+    /**
+     * 监听画中画状态变化
+     * 进入画中画时给按钮添加 'state-active' 样式类，退出时移除
+     * 例如：state.set(PlayerStateKeyEnum.IS_PIP, true)
+     */
+    useState(
+      state,
+      PlayerStateKeyEnum.IS_PIP,
+      (isPip) => {
+        console.log("RightControls isPip: ", isPip);
+        if (pipBtnRef.current) {
+          pipBtnRef.current.classList.toggle('state-active', isPip);
+        }
+      },
+      lifecycle
+    );
 
-  const handlVolumeMouseDown = (event: MouseEvent): void => {
-    lifecycle.emit?.('handlVolumeMouseDown', event);
-  };
+    /**
+     * 监听宽屏状态变化
+     * 进入宽屏模式时给按钮添加 'state-active' 样式类，退出时移除
+     * 例如：state.set(PlayerStateKeyEnum.IS_WIDE_SCREEN, true)
+     */
+    useState(
+      state,
+      PlayerStateKeyEnum.IS_WIDE_SCREEN,
+      (isWide) => {
+        if (wideBtnRef.current) {
+          wideBtnRef.current.classList.toggle('state-active', isWide);
+        }
+      },
+      lifecycle
+    );
+  }
 
   // ============================================
   // 底部右侧按钮渲染器映射表
   // ============================================
+
+  /** 按钮类型到渲染函数的映射表，每个键对应一种控制按钮的渲染逻辑 */
   const bottomRightRenderers: Record<string, () => VNode | null> = {
+    /** 渲染画质选择菜单 */
     quality: () => {
       if (!config.quality) return null;
-      return h('div', {
-        class: 'player-ctrl-btn player-ctrl-quality',
-        role: 'button',
-        'aria-label': '清晰度',
-        ref: ctrlQualityBtnRef,
-        onMouseEnter: () => lifecycle.emit?.('menuAnimation', 'quality', 'show'),
-        onMouseLeave: () => lifecycle.emit?.('menuAnimation', 'quality', 'hide')
-      },
-        h('div', { class: 'player-ctrl-quality-result', ref: qualityResultRef }, '自动'),
-        h('div', { class: 'player-ctrl-quality-menu-wrap' },
-          h('ul', { class: 'player-ctrl-quality-menu', ref: qualityMenuRef },
-            h('li', { class: 'player-ctrl-quality-menu-item' },
-              h('span', { class: 'player-ctrl-quality-text' }),
-              h('span', { class: 'player-ctrl-quality-badge player-ctrl-quality-badge-bigvip' }, '大会员')
-            )
-          )
-        )
-      );
+      return h(QualityMenu, { qualities, currentQuality, onQualityChange, onMenuAnimation });
     },
+    /** 渲染选集菜单 */
     eplist: () => {
       if (!config.eplist) return null;
       return h('div', {
@@ -129,8 +282,8 @@ export const RightControls = defineComponent<RightControlsProps>((props, lifecyc
         role: 'button',
         'aria-label': '选集',
         ref: ctrlEplistBtnRef,
-        onMouseEnter: () => lifecycle.emit?.('menuAnimation', 'eplist', 'show'),
-        onMouseLeave: () => lifecycle.emit?.('menuAnimation', 'eplist', 'hide')
+        onMouseEnter: () => lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'show' }),
+        onMouseLeave: () => lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'hide' })
       },
         h('div', { class: 'player-ctrl-eplist-result', ref: eplistResultRef }, '选集'),
         h('div', { class: 'player-ctrl-eplist-menu-wrap', style: { minHeight: '180px' } },
@@ -171,129 +324,16 @@ export const RightControls = defineComponent<RightControlsProps>((props, lifecyc
         )
       );
     },
-    playbackrate: () => h('div', {
-      class: 'player-ctrl-btn player-ctrl-playbackrate',
-      role: 'button',
-      'aria-label': '倍速',
-      ref: ctrlBackrateBtnRef,
-      onMouseEnter: () => lifecycle.emit?.('menuAnimation', 'playbackrate', 'show'),
-      onMouseLeave: () => lifecycle.emit?.('menuAnimation', 'playbackrate', 'hide')
-    },
-      h('div', { class: 'player-ctrl-playbackrate-result', ref: backrateResultTextRef }, '倍速'),
-      h('div', { class: 'player-ctrl-playbackrate-menu-wrap' },
-        h('ul', { class: 'player-ctrl-playbackrate-menu' },
-          renderBackrateItem('2', '2.0X'),
-          renderBackrateItem('1.5', '1.5X'),
-          renderBackrateItem('1.25', '1.25X'),
-          renderBackrateItem('1', '1.0X'),
-          renderBackrateItem('0.75', '0.75X'),
-          renderBackrateItem('0.5', '0.5X')
-        )
-      )
-    ),
-    volume: () => h('div', {
-      class: 'player-ctrl-btn player-ctrl-volume',
-      role: 'button',
-      'aria-label': '音量',
-      ref: ctrlVolumeBtnRef,
-      onClick: toggleMute,
-      onMouseEnter: () => lifecycle.emit?.('menuAnimation', 'volume', 'show'),
-      onMouseLeave: () => lifecycle.emit?.('menuAnimation', 'volume', 'hide')
-    },
-      h('div', { class: 'player-ctrl-btn-icon player-ctrl-volume-icon', ref: ctrlVolumeIconBtnRef },
-        h('span', { class: 'common-svg-icon' })
-      ),
-      h('div', { class: 'player-ctrl-btn-icon player-ctrl-muted-icon', ref: ctrlMutedIconBtnRef },
-        h('span', { class: 'common-svg-icon' })
-      ),
-      h('div', { class: 'player-ctrl-volume-box' },
-        h('div', { class: 'player-ctrl-volume-number', ref: volumeNumberRef }),
-        h('div', { class: 'player-ctrl-volume-progress slider' },
-          h('div', { class: 'slider-area', ref: volumeSliderAreaRef, onClick: volumeMouseDown, onMouseDown: handlVolumeMouseDown },
-            h('div', { class: 'slider-bar-wrap' },
-              h('div', { class: 'slider-bar', role: 'progressbar', ref: volumeProgressbarRef })
-            ),
-            h('div', { class: 'slider-thumb', role: 'thumb', ref: volumeSliderThumbRef },
-              h('div', { class: 'slider-thumb-dot' })
-            )
-          )
-        )
-      )
-    ),
+    /** 渲染播放速率选择菜单 */
+    playbackrate: () => h(PlaybackRateMenu, { rate, rates, onRateChange, onMenuAnimation }),
+    /** 渲染音量滑块组件 */
+    volume: () => h(VolumeSlider, {}),
+    /** 渲染设置菜单 */
     setting: () => {
       if (!config.setting) return null;
-      return h('div', {
-        class: 'player-ctrl-btn player-ctrl-setting',
-        role: 'button',
-        'aria-label': '设置',
-        ref: ctrlSettingBtnRef,
-        onMouseEnter: () => lifecycle.emit?.('menuAnimation', 'setting', 'show'),
-        onMouseLeave: () => lifecycle.emit?.('menuAnimation', 'setting', 'hide')
-      },
-        h('div', { class: 'player-ctrl-btn-icon' }, h('span', { class: 'common-svg-icon' })),
-        h('div', { class: 'player-ctrl-setting-box' },
-          h('div', { class: 'player-ctrl-setting-menu ui ui-panel ui-dark', ref: settingMenuAreaRef },
-            h('div', { class: 'ui-area' },
-              h('div', { class: 'player-ctrl-seting-menu-left' },
-                h('div', { class: 'player-ctrl-seting-menu-left-item' }, h('span', {}, '镜像画面')),
-                h('div', { class: 'player-ctrl-seting-menu-left-item' }, h('span', {}, '洗脑循环')),
-                h('div', { class: 'player-ctrl-seting-menu-left-item' }, h('span', {}, '自动开播')),
-                h('div', {
-                  class: 'player-ctrl-seting-menu-left-item setting-more',
-                  ref: settingMenuMoreRef,
-                  onClick: () => {
-                    settingMenuAreaRef.current?.classList.add('state-show-right');
-                    settingMenuRightRef.current?.classList.add('player-ctrl-seting-more-area');
-                    lifecycle.emit?.('moreSettingClick');
-                  }
-                },
-                  h('span', {}, '更多播放设置'),
-                  h('span', { class: 'common-svg-icon' })
-                )
-              ),
-              h('div', { class: 'player-ctrl-seting-menu-right', ref: settingMenuRightRef },
-                h('div', { class: 'player-ctrl-seting-menu-right-area' },
-                  h('div', { class: 'player-ctrl-setting-handoff' },
-                    h('div', { class: 'player-ctrl-setting-handoff-title' }, '播放方式'),
-                    h('div', { class: 'player-ctrl-setting-handoff-conent' },
-                      h('div', { class: 'bui-radio-wrap-button' },
-                        h('div', { class: 'radio-button active' }, h('span', {}, '自动切集')),
-                        h('div', { class: 'radio-button' }, h('span', {}, '播完暂停'))
-                      )
-                    )
-                  ),
-                  h('div', { class: 'player-ctrl-setting-aspect' },
-                    h('div', { class: 'player-ctrl-setting-aspect-title' }, '视频比例'),
-                    h('div', { class: 'player-ctrl-setting-aspect-conent' },
-                      h('div', { class: 'bui-radio-wrap-button' },
-                        h('div', { class: 'radio-button active' }, h('span', {}, '自动')),
-                        h('div', { class: 'radio-button' }, h('span', {}, '4:3')),
-                        h('div', { class: 'radio-button' }, h('span', {}, '16:9'))
-                      )
-                    )
-                  ),
-                  h('div', { class: 'player-ctrl-setting-codec' },
-                    h('div', { class: 'player-ctrl-setting-codec-title' }, '播放策略'),
-                    h('div', { class: 'player-ctrl-setting-codec-conent' },
-                      h('div', { class: 'bui-radio-wrap-button' },
-                        h('div', { class: 'radio-button active' }, h('span', {}, '默认')),
-                        h('div', { class: 'radio-button' }, h('span', {}, 'AV1')),
-                        h('div', { class: 'radio-button' }, h('span', {}, 'HEVC')),
-                        h('div', { class: 'radio-button' }, h('span', {}, 'AVC'))
-                      )
-                    )
-                  ),
-                  h('div', { class: 'player-ctrl-setting-others' },
-                    h('div', { class: 'player-ctrl-setting-others-title' }, '其他设置'),
-                    h('div', { class: 'player-ctrl-setting-others-content', ref: settingOthersContentRef })
-                  )
-                )
-              )
-            )
-          )
-        )
-      );
+      return h(SettingMenu, { onSettingChange, onMenuAnimation });
     },
+    /** 渲染画中画按钮 */
     pip: () => {
       if (!config.pip) return null;
       return h('div', {
@@ -301,11 +341,32 @@ export const RightControls = defineComponent<RightControlsProps>((props, lifecyc
         role: 'button',
         'aria-label': '画中画',
         ref: pipBtnRef,
-        onClick: togglePip
+        onClick: togglePip,
+        onMouseEnter: mousePipEnter,
+        onMouseLeave: mousePipLeave,
       },
-        h('div', { class: 'player-ctrl-btn-icon' }, h('span', { class: 'common-svg-icon' }))
+        h('div', { class: 'player-ctrl-btn-icon' },
+          h(LottieIcon, {
+            name: 'pip',
+            sequence: [
+              {
+                animationData: pipHoverAnimationData,
+                complete: 'stop',
+                autoplay: false
+              },
+              {
+                animationData: pipExitHoverAnimationData,
+                complete: 'stop',
+                autoplay: false
+              }
+            ],
+            ref: pipRef
+          }
+          )
+        ),
       );
     },
+    /** 渲染宽屏按钮 */
     wide: () => {
       if (!config.wide) return null;
       return h('div', {
@@ -313,11 +374,32 @@ export const RightControls = defineComponent<RightControlsProps>((props, lifecyc
         role: 'button',
         'aria-label': '宽屏',
         ref: wideBtnRef,
-        onClick: toggleWide
+        onClick: toggleWide,
+        onMouseEnter: mouseWideEnter,
+        onMouseLeave: mouseWideLeave,
       },
-        h('div', { class: 'player-ctrl-btn-icon' }, h('span', { class: 'common-svg-icon' }))
+        h('div', { class: 'player-ctrl-btn-icon' },
+          h(LottieIcon, {
+            name: 'wide',
+            sequence: [
+              {
+                animationData: wideHoverAnimationData,
+                complete: 'stop',
+                autoplay: false
+              },
+              {
+                animationData: wideExitHoverAnimationData,
+                complete: 'stop',
+                autoplay: false
+              }
+            ],
+            ref: wideRef
+          }
+          )
+        )
       );
     },
+    /** 渲染网页全屏按钮 */
     web: () => {
       if (!config.web) return null;
       return h('div', {
@@ -325,32 +407,65 @@ export const RightControls = defineComponent<RightControlsProps>((props, lifecyc
         role: 'button',
         'aria-label': '网页全屏',
         ref: webBtnRef,
-        onClick: toggleWebFullscreen
+        onClick: toggleWebFullscreen,
+        onMouseEnter: mouseWebEnter,
+        onMouseLeave: mouseWebLeave,
       },
-        h('div', { class: 'player-ctrl-btn-icon' }, h('span', { class: 'common-svg-icon' }))
+        h('div', { class: 'player-ctrl-btn-icon' },
+          h(LottieIcon, {
+            name: 'webFullscreen',
+            sequence: [
+              {
+                animationData: webFullscreenAnimationData,
+                complete: 'stop',
+                autoplay: false
+              },
+              {
+                animationData: webExitFullscreenAnimationData,
+                complete: 'stop',
+                autoplay: false
+              }
+            ],
+            ref: webFullscreenRef
+          }
+          )
+        )
       );
     },
+    /** 渲染全屏按钮 */
     full: () => h('div', {
       class: 'player-ctrl-btn player-ctrl-full',
       role: 'button',
       'aria-label': '全屏',
       ref: fullBtnRef,
+      onMouseEnter: mouseFullscreenEnter,
+      onMouseLeave: mouseFullscreenLeave,
       onClick: toggleFullscreen
     },
-      h('div', { class: 'player-ctrl-btn-icon' }, h('span', { class: 'common-svg-icon' }))
-    ),
+      h('div', { class: 'player-ctrl-btn-icon' },
+        h(LottieIcon,
+          {
+            name: 'fullscreen',
+            animationData: fullscreenAnimationData,
+            ref: fullscreenRef,
+            autoplay: false
+          }
+        )
+      )
+    )
   };
 
-  // ============================================
-  // 底部右侧按钮渲染顺序配置
-  // ============================================
+  /** 底部右侧按钮的渲染顺序配置 */
   const bottomRightOrder = ['quality', 'eplist', 'playbackrate', 'volume', 'setting', 'pip', 'wide', 'web', 'full'];
 
   // ============================================
   // 生命周期钩子
   // ============================================
+
+  /**
+   * 组件挂载后，通知上层组件
+   */
   lifecycle.onMounted = (): void => {
-    // 组件挂载后的初始化逻辑
     lifecycle.emit?.('rightControlsMounted');
   };
 
@@ -360,6 +475,7 @@ export const RightControls = defineComponent<RightControlsProps>((props, lifecyc
   return h('div', { class: 'player-control-bottom-right' },
     ...bottomRightOrder
       .map(key => {
+        /** 当前键对应的渲染函数 */
         const renderer = bottomRightRenderers[key];
         if (!renderer) return null;
         return renderer();

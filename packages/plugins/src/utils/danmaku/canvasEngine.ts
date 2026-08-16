@@ -8,14 +8,18 @@ import {
   DanmakuSpeed,
   DanmakuArea,
   ScreenMode,
-  type DanmakuItem,
-  type DanmakuRenderItem,
-  type DanmakuFilter,
-  type DanmakuMaskConfig,
+} from '@/types/danmaku';
+import type {
+  DanmakuItem,
+  DanmakuFilter,
+} from '@/types/danmaku';
+import type {
+  DanmakuRenderItem,
+  DanmakuMaskConfig,
 } from './types';
 import { DanmakuItemPool } from './objectPool';
 import { TrackManager } from './trackManager';
-import { rafTimeout, cancelRaf, createLogger } from '@/utils';
+import { rafTimeout, cancelRaf, createLogger, isBrowser } from '@/utils';
 import { calculateFontSize } from './scaleHelper';
 const logger = createLogger('CanvasEngine');
 
@@ -63,12 +67,14 @@ const SPEED_MULTIPLIERS: Record<DanmakuSpeed, number> = {
 };
 
 export class CanvasEngine {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
   private container: HTMLElement;
   private config: CanvasEngineConfig;
   private itemPool: DanmakuItemPool;
   private trackManager: TrackManager;
+  private isAttached = false;
+  private mouseEventsBound = false;
 
   // 渲染状态
   private renderItems: Map<string, DanmakuRenderItem> = new Map();
@@ -81,15 +87,18 @@ export class CanvasEngine {
   private fps = 60;
 
   // 性能优化
-  private offscreenCanvas: HTMLCanvasElement;
-  private offscreenCtx: CanvasRenderingContext2D;
+  private offscreenCanvas: HTMLCanvasElement | null = null;
+  private offscreenCtx: CanvasRenderingContext2D | null = null;
   private textMeasureCache: Map<string, TextMetrics> = new Map();
 
   // 尺寸
   private width = 0;
   private height = 0;
-  private dpr = window.devicePixelRatio || 1;
+  private dpr = 1;
   private isResizing = false;
+
+  // 双缓冲快照（resize 时防止闪烁）
+  private lastSnapshot: ImageData | null = null;
 
   // 鼠标悬停回调
   private onDanmakuHover:
@@ -139,52 +148,65 @@ export class CanvasEngine {
       ...config,
     };
 
-    this.canvas = document.createElement('canvas');
-    this.canvas.className = 'danmaku-canvas';
-    this.canvas.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: auto;
-    `;
-
-    // 启用硬件加速的 Canvas 上下文配置
-    const ctx = this.canvas.getContext('2d', {
-      alpha: true,
-      desynchronized: true, // 启用去同步渲染，减少延迟
-    });
-    if (!ctx) {
-      throw new Error('Failed to get canvas context');
-    }
-    this.ctx = ctx;
-
-    // 离屏Canvas - 用于双缓冲渲染
-    this.offscreenCanvas = document.createElement('canvas');
-    const offscreenCtx = this.offscreenCanvas.getContext('2d', {
-      alpha: true,
-    });
-    if (!offscreenCtx) {
-      throw new Error('Failed to get offscreen canvas context');
-    }
-    this.offscreenCtx = offscreenCtx;
-
-    // 启用 CSS 硬件加速
-    this.canvas.style.willChange = 'transform';
-    this.canvas.style.transform = 'translateZ(0)';
-
-    container.appendChild(this.canvas);
-
-    // 绑定鼠标事件
-    this.bindMouseEvents();
-
     // 初始化防挡遮罩
     if (this.config.maskConfig?.enabled && this.config.maskConfig.maskImage) {
       this.loadMaskImage(this.config.maskConfig.maskImage);
     }
+  }
 
-    this.resize();
+  /** 仅在 Canvas 模式时调用 — 创建 Canvas 并插入 DOM */
+  ensureCanvas(): HTMLCanvasElement | null {
+    if (!isBrowser()) {
+      return null;
+    }
+
+    if (!this.canvas) {
+      this.canvas = document.createElement('canvas');
+      this.canvas.className = 'hili-danmaku-canvas';
+      this.canvas.style.cssText =
+        'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50';
+
+      const ctx = this.canvas.getContext('2d', {
+        alpha: true,
+        desynchronized: true,
+      });
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+      this.ctx = ctx;
+
+      // 启用 CSS 硬件加速
+      this.canvas.style.willChange = 'transform';
+      this.canvas.style.transform = 'translateZ(0)';
+
+      // 离屏Canvas - 用于双缓冲渲染
+      this.offscreenCanvas = document.createElement('canvas');
+      const offscreenCtx = this.offscreenCanvas.getContext('2d', {
+        alpha: true,
+      });
+      if (!offscreenCtx) {
+        throw new Error('Failed to get offscreen canvas context');
+      }
+      this.offscreenCtx = offscreenCtx;
+    }
+    if (!this.isAttached) {
+      this.container.appendChild(this.canvas);
+      this.isAttached = true;
+      // 绑定鼠标事件（仅首次挂载时）
+      if (!this.mouseEventsBound) {
+        this.bindMouseEvents();
+        this.mouseEventsBound = true;
+      }
+      // 首次挂载时调整尺寸
+      this.resize();
+    }
+    return this.canvas;
+  }
+
+  /** DOM 模式时移除 Canvas */
+  detachCanvas(): void {
+    this.canvas?.remove();
+    this.isAttached = false;
   }
 
   /**
@@ -194,16 +216,18 @@ export class CanvasEngine {
    * @param originalHeight 遮罩原始高度（可选）
    */
   private loadMaskImage(url: string, originalWidth?: number, originalHeight?: number): void {
+    if (!isBrowser()) return;
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
+    img.onload = (): void => {
       this.maskImage = img;
       // 保存原始尺寸，如果没有提供则使用图片实际尺寸
       this.maskOriginalWidth = originalWidth || img.naturalWidth || img.width;
       this.maskOriginalHeight = originalHeight || img.naturalHeight || img.height;
       this.createMaskCanvas();
     };
-    img.onerror = () => {
+    img.onerror = (): void => {
       // 静默处理错误
     };
     img.src = url;
@@ -213,6 +237,8 @@ export class CanvasEngine {
    * 创建遮罩Canvas
    */
   private createMaskCanvas(): void {
+    if (!isBrowser()) return;
+
     if (!this.maskImage) return;
 
     this.maskCanvas = document.createElement('canvas');
@@ -234,6 +260,8 @@ export class CanvasEngine {
    * 最终 maskCanvas：透明=切除弹幕(不显示)，黑色=保留弹幕(显示)
    */
   private updateMaskCanvas(): void {
+    if (!isBrowser()) return;
+
     if (!this.maskImage || !this.maskCtx || !this.maskCanvas) return;
 
     // 使用遮罩原始尺寸或图片实际尺寸计算比例
@@ -330,6 +358,10 @@ export class CanvasEngine {
    * 调整Canvas尺寸
    */
   resize(): void {
+    if (!isBrowser()) return;
+
+    if (!this.canvas || !this.ctx) return;
+
     // 使用getBoundingClientRect获取尺寸，它比clientWidth更实时
     const rect = this.container.getBoundingClientRect();
 
@@ -343,13 +375,19 @@ export class CanvasEngine {
     }
 
     this.isResizing = true;
+
+    // Step 1: 保存当前快照（防止 resize 闪烁）
+    try {
+      this.lastSnapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    } catch { /* canvas not initialized */ }
+
     this.width = newWidth;
     this.height = newHeight;
 
     // 限制DPR最大为2，避免在高DPR屏幕上渲染过大的画布
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-    // 设置Canvas实际尺寸
+    // Step 2: 设置Canvas实际尺寸
     this.canvas.width = this.width * this.dpr;
     this.canvas.height = this.height * this.dpr;
 
@@ -358,12 +396,22 @@ export class CanvasEngine {
     this.canvas.style.height = `${this.height}px`;
 
     // 缩放上下文
-    this.ctx.scale(this.dpr, this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     // 离屏Canvas
-    this.offscreenCanvas.width = this.width * this.dpr;
-    this.offscreenCanvas.height = this.height * this.dpr;
-    this.offscreenCtx.scale(this.dpr, this.dpr);
+    if (this.offscreenCanvas && this.offscreenCtx) {
+      this.offscreenCanvas.width = this.width * this.dpr;
+      this.offscreenCanvas.height = this.height * this.dpr;
+      this.offscreenCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    }
+
+    // Step 3: 立即恢复快照（防止白屏闪烁）
+    if (this.lastSnapshot) {
+      this.ctx.putImageData(this.lastSnapshot, 0, 0);
+    }
+
+    // Step 4: 下一帧清除快照引用
+    requestAnimationFrame(() => { this.lastSnapshot = null; });
 
     // 初始化轨道（保持当前区域档位）
     this.trackManager.initTracks(this.width, this.height, this.config.area);
@@ -557,7 +605,7 @@ export class CanvasEngine {
     const cacheKey = `${text}_${size}`;
 
     let metrics = this.textMeasureCache.get(cacheKey);
-    if (!metrics) {
+    if (!metrics && this.offscreenCtx) {
       // 使用离屏Canvas进行文本测量，避免影响主Canvas
       this.offscreenCtx.font = `bold ${size}px ${this.config.fontFamily}`;
       metrics = this.offscreenCtx.measureText(text);
@@ -565,7 +613,7 @@ export class CanvasEngine {
     }
 
     return {
-      width: metrics.width,
+      width: metrics?.width ?? 0,
       height: size * 1.2,
     };
   }
@@ -575,6 +623,8 @@ export class CanvasEngine {
    */
   start(): void {
     if (this.isPlaying) return;
+    if (!isBrowser()) return;
+    this.ensureCanvas();
     this.isPlaying = true;
     this.lastFrameTime = performance.now();
     this.renderLoop();
@@ -597,7 +647,7 @@ export class CanvasEngine {
   pauseAnimations(): void {
     this.isPaused = true;
     // 添加暂停类名到容器（用于样式标记）
-    this.canvas.classList.add('is-paused');
+    this.canvas?.classList.add('is-paused');
   }
 
   /**
@@ -606,7 +656,7 @@ export class CanvasEngine {
   resumeAnimations(): void {
     this.isPaused = false;
     // 移除暂停类名
-    this.canvas.classList.remove('is-paused');
+    this.canvas?.classList.remove('is-paused');
     this.lastFrameTime = performance.now();
   }
 
@@ -631,7 +681,7 @@ export class CanvasEngine {
     });
     this.renderItems.clear();
     this.trackManager.reset();
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    this.ctx?.clearRect(0, 0, this.width, this.height);
   }
 
   /**
@@ -708,7 +758,7 @@ export class CanvasEngine {
    * 渲染循环
    */
   private renderLoop = (): void => {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || !isBrowser()) return;
 
     const currentTime = performance.now();
 
@@ -798,6 +848,8 @@ export class CanvasEngine {
    * 绘制弹幕
    */
   private draw(): void {
+    if (!this.ctx) return;
+
     // 优化：使用透明填充代替clearRect，在某些浏览器上更快
     this.ctx.clearRect(0, 0, this.width, this.height);
 
@@ -844,7 +896,7 @@ export class CanvasEngine {
    * 应用防挡遮罩
    */
   private applyMask(): void {
-    if (!this.maskImage || !this.maskCanvas || !this.config.maskConfig?.enabled) {
+    if (!this.ctx || !this.maskImage || !this.maskCanvas || !this.config.maskConfig?.enabled) {
       return;
     }
 
@@ -861,6 +913,8 @@ export class CanvasEngine {
    * @param item 弹幕项
    */
   private drawItem(item: DanmakuRenderItem): void {
+    if (!this.ctx) return;
+
     const { text, x, y, height, color, width, uid } = item;
 
     this.ctx.textBaseline = 'middle';
@@ -970,7 +1024,7 @@ export class CanvasEngine {
     const updateInterval = config.updateInterval || 1000;
     let lastTimeKey = -1;
 
-    const updateMask = async () => {
+    const updateMask = async (): Promise<void> => {
       if (!config.maskLoader) {
         return;
       }
@@ -1060,13 +1114,17 @@ export class CanvasEngine {
    * 绑定鼠标事件
    */
   private bindMouseEvents(): void {
+    if (!this.canvas) return;
+
     // 当前悬停的弹幕
     let hoveredItem: DanmakuRenderItem | null = null;
     // 自动恢复定时器
     let autoResumeTimer: { id: number } | null = null;
 
-    this.canvas.addEventListener('mousemove', (e) => {
-      const rect = this.canvas.getBoundingClientRect();
+    const canvas = this.canvas;
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
@@ -1135,7 +1193,7 @@ export class CanvasEngine {
       }
     });
 
-    this.canvas.addEventListener('mouseleave', () => {
+    canvas.addEventListener('mouseleave', () => {
       // 清除自动恢复定时器
       if (autoResumeTimer) {
         cancelRaf(autoResumeTimer);
@@ -1156,7 +1214,11 @@ export class CanvasEngine {
   destroy(): void {
     this.stop();
     this.clear();
-    this.canvas.remove();
+    this.detachCanvas();
+    this.canvas = null;
+    this.ctx = null;
+    this.offscreenCanvas = null;
+    this.offscreenCtx = null;
     this.textMeasureCache.clear();
   }
 }

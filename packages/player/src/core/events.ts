@@ -90,12 +90,22 @@ export enum PlayerEventEnum {
   DANMAKU_OPACITY_CHANGE = 'DANMAKU_OPACITY_CHANGE',
   /** 弹幕速度改变 */
   DANMAKU_SPEED_CHANGE = 'DANMAKU_SPEED_CHANGE',
+  /** 发送弹幕 { text, options } */
+  DANMAKU_SEND = 'DANMAKU_SEND',
+  /** 弹幕发送成功 { danmaku } */
+  DANMAKU_SENT = 'DANMAKU_SENT',
+  /** 清空弹幕 */
+  DANMAKU_CLEAR = 'DANMAKU_CLEAR',
+  /** 弹幕设置变更 */
+  DANMAKU_SETTING_CHANGE = 'DANMAKU_SETTING_CHANGE',
 
   // 字幕相关事件
   /** 字幕显示状态改变 */
   SUBTITLE_TOGGLE = 'SUBTITLE_TOGGLE',
   /** 字幕语言改变 */
   SUBTITLE_LANG_CHANGE = 'SUBTITLE_LANG_CHANGE',
+  /** 字幕切换 */
+  SUBTITLE_SWITCH = 'SUBTITLE_SWITCH',
 
   // 监控相关事件
   /** 监控数据更新 */
@@ -114,6 +124,36 @@ export enum PlayerEventEnum {
   MONITOR_STOP = 'MONITOR_STOP',
   /** 设置播放器实例到监控器（供流媒体插件使用） */
   MONITOR_SET_PLAYER = 'MONITOR_SET_PLAYER',
+
+  // 互动相关事件
+  /** 互动点赞 */
+  INTERACTION_LIKE = 'INTERACTION_LIKE',
+  /** 互动投币 */
+  INTERACTION_COIN = 'INTERACTION_COIN',
+  /** 互动收藏 */
+  INTERACTION_COLLECT = 'INTERACTION_COLLECT',
+  /** 互动关注 */
+  INTERACTION_FOLLOW = 'INTERACTION_FOLLOW',
+  /** 外链点击 */
+  INTERACTION_LINK_CLICK = 'INTERACTION_LINK_CLICK',
+  /** 投票选择 */
+  INTERACTION_VOTE_SELECT = 'INTERACTION_VOTE_SELECT',
+  /** 评分选择 */
+  INTERACTION_SCORE_SELECT = 'INTERACTION_SCORE_SELECT',
+  /** 卡片关闭 */
+  INTERACTION_CARD_CLOSE = 'INTERACTION_CARD_CLOSE',
+  /** 位置变化 */
+  INTERACTION_POSITION_CHANGE = 'INTERACTION_POSITION_CHANGE',
+
+  // 流媒体相关事件
+  /** 流媒体加载完成 */
+  STREAM_LOAD_COMPLETE = 'STREAM_LOAD_COMPLETE',
+  /** 流媒体错误 */
+  STREAM_ERROR = 'STREAM_ERROR',
+  /** 流媒体统计更新 */
+  STREAM_STATS_UPDATE = 'STREAM_STATS_UPDATE',
+  /** 流媒体清晰度变化（自动或手动切换），payload: { width, height, bitrate, isAuto } */
+  STREAM_QUALITY_CHANGE = 'STREAM_QUALITY_CHANGE',
 
   // 提示工具相关事件
   /** 显示 tooltip 提示 */
@@ -340,57 +380,4 @@ export enum PlayerConfigEnum {
 
   // 插件配置
   PLUGINS = 'PLUGINS',
-}
-
-/**
- * 播放器状态键枚举
- * 用于状态管理器的路径定义
- */
-export enum PlayerStateKeyEnum {
-  // 播放状态
-  STATE = 'STATE',
-  CURRENT_TIME = 'CURRENT_TIME',
-  DURATION = 'DURATION',
-  BUFFERED = 'BUFFERED',
-
-  // 音量状态
-  VOLUME = 'VOLUME',
-  MUTED = 'MUTED',
-
-  // 播放属性
-  PLAYBACK_RATE = 'PLAYBACK_RATE',
-  QUALITY = 'QUALITY',
-
-  // 显示状态
-  IS_FULLSCREEN = 'IS_FULLSCREEN',
-  IS_PIP = 'IS_PIP',
-  IS_WEB_FULLSCREEN = 'IS_WEB_FULLSCREEN',
-  IS_WIDE_SCREEN = 'IS_WIDE_SCREEN',
-
-  // 视频属性
-  VIDEO_WIDTH = 'VIDEO_WIDTH',
-  VIDEO_HEIGHT = 'VIDEO_HEIGHT',
-  ASPECT_RATIO = 'ASPECT_RATIO',
-
-  // 错误状态
-  ERROR_CODE = 'ERROR_CODE',
-  ERROR_MESSAGE = 'ERROR_MESSAGE',
-
-  // 加载状态
-  IS_LOADING = 'IS_LOADING',
-  LOAD_PROGRESS = 'LOAD_PROGRESS',
-
-  // 控制栏状态
-  CONTROLS_VISIBLE = 'CONTROLS_VISIBLE',
-  CONTROLS_HOVER = 'CONTROLS_HOVER',
-
-  // 弹幕状态
-  DANMAKU_VISIBLE = 'DANMAKU_VISIBLE',
-  DANMAKU_OPACITY = 'DANMAKU_OPACITY',
-  DANMAKU_SPEED = 'DANMAKU_SPEED',
-  DANMAKU_DENSITY = 'DANMAKU_DENSITY',
-
-  // 字幕状态
-  SUBTITLE_VISIBLE = 'SUBTITLE_VISIBLE',
-  SUBTITLE_LANG = 'SUBTITLE_LANG',
 }

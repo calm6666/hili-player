@@ -136,7 +136,7 @@ function safeGetJSON<T>(key: string, guard?: (value: unknown) => value is T): T 
     () => {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
-      const parsed = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
       if (guard && guard(parsed)) {
         return parsed;
       }
@@ -176,7 +176,7 @@ function safeGetItem(key: string): unknown {
     () => {
       const raw = localStorage.getItem(key);
       if (raw === null) return null;
-      return JSON.parse(raw);
+      return JSON.parse(raw) as unknown;
     },
     'STORAGE_READ_FAILED',
     `读取 localStorage 失败 (${key})`,
@@ -320,8 +320,10 @@ function ensureAllKeysInitialized(state: PlayerPersistentState): void {
 
 /**
  * 如果 key 不存在则写入，存在则跳过
+ * SSR 安全：服务端环境下 localStorage 不存在，直接跳过
  */
 function initKey(key: string, defaultValue: unknown): void {
+  if (typeof localStorage === "undefined") return;
   if (localStorage.getItem(key) === null) {
     safeSetItem(key, defaultValue);
   }

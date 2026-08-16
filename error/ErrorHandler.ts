@@ -42,6 +42,8 @@ export enum ErrorType {
   RUNTIME = 'runtime',
   /** 未知错误 */
   UNKNOWN = 'unknown',
+  /** 通用错误 */
+  GENERAL = 'GENERAL',
 }
 
 /**
@@ -101,7 +103,7 @@ export class ErrorHandler {
       enableReport: false,
       reportUrl: '',
       maxCacheSize: 100,
-      customHandler: () => {},
+      customHandler: (): void => {},
       ...config,
     };
 
@@ -120,7 +122,7 @@ export class ErrorHandler {
       this.handle({
         type: ErrorType.RUNTIME,
         level: ErrorLevel.ERROR,
-        message: `未处理的 Promise 错误: ${event.reason}`,
+        message: `未处理的 Promise 错误: ${String(event.reason)}`,
         error: event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
         timestamp: Date.now(),
         source: 'global',
@@ -133,7 +135,7 @@ export class ErrorHandler {
         type: ErrorType.RUNTIME,
         level: ErrorLevel.ERROR,
         message: `全局错误: ${event.message}`,
-        error: event.error,
+        error: event.error as Error | undefined,
         data: {
           filename: event.filename,
           lineno: event.lineno,
@@ -357,9 +359,25 @@ export function createErrorHandler(config?: ErrorHandlerConfig): ErrorHandler {
 }
 
 /**
+ * 安全调用工具接口
+ */
+export interface SafeCallUtils {
+  /** 安全执行存储操作 */
+  storage<T>(fn: () => T, code: string, message: string): SafeResult<T>;
+  /** 安全执行网络操作 */
+  network<T>(fn: () => T, code: string, message: string): SafeResult<T>;
+  /** 安全执行媒体操作 */
+  media<T>(fn: () => T, code: string, message: string): SafeResult<T>;
+  /** 安全执行插件操作 */
+  plugin<T>(fn: () => T, code: string, message: string): SafeResult<T>;
+  /** 安全执行通用操作 */
+  general<T>(fn: () => T, code: string, message: string): SafeResult<T>;
+}
+
+/**
  * 创建模块专用的安全调用工具
  */
-export function createSafeCall(source: string) {
+export function createSafeCall(source: string): SafeCallUtils {
   return {
     /** 安全执行存储操作 */
     storage<T>(fn: () => T, code: string, message: string): SafeResult<T> {

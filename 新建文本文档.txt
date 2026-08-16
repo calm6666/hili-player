@@ -1,0 +1,1146 @@
+<div id="bilibili-player"><div data-injector="nano" class="bpx-docker bpx-docker-major" data-iid="1"><div class="bpx-player-container bpx-state-paused bpx-state-no-cursor" data-revision="1" data-screen="normal" data-ctrl-hidden="true">
+            <div class="bpx-player-primary-area" aria-label="哔哩哔哩播放器">
+                <div class="bpx-player-video-area">
+                    <div class="bpx-player-video-perch">
+                        <div class="bpx-player-video-wrap"><video crossorigin="anonymous" preload="auto" src="blob:https://www.bilibili.com/2e39fd4a-d554-4325-9f97-2f17ac7b08d3"></video></div>
+                    </div>
+                    <div class="bpx-player-video-poster" hidden=""></div>
+                    <div class="bpx-player-visual-wrap">
+                        <div class="bpx-player-visual-pixel"></div>
+                    </div>
+                    <div class="bpx-player-new-dialogue-area"></div>
+                    <div class="bpx-player-render-dm-wrap">
+                        <div class="bpx-player-dm-svg-mask-wrap" style="opacity: 0;visibility:hidden;"></div>
+                        <div class="bpx-player-dm-mask-wrap" style="">
+                            <div class="bpx-player-adv-dm-wrap"></div>
+                             <div class="bpx-player-row-dm-wrap bili-danmaku-x-paused" style="contain: paint;"><div class="bili-danmaku-x-dm-rotate"></div><div aria-live="polite" role="comment" class="bili-danmaku-x-dm" style="--opacity: 1; --fontSize: 29.035999999999998px; --fontFamily: SimHei, 'Microsoft JhengHei', Arial, Helvetica, sans-serif; --fontWeight: normal; --color: #ffffff; --textShadow: 1px 0 1px #000000,0 1px 1px #000000,0 -1px 1px #000000,-1px 0 1px #000000; --offset: 1722.7265382304493px; --translateX: -2016px; --duration: 12.62s; --top: 4px;">这种水沟可以抓鱼</div></div>
+                        </div>
+                        <div class="bpx-player-bas-dm-wrap"><div class="bas-danmaku bas-danmaku-pause" style="width: 100%;"></div></div>
+                        <div class="bpx-player-cmd-dm-wrap">
+                            <div class="bpx-player-cmd-dm-inside" style="width: 668px; height: 376px;"></div>
+                        </div>
+                    </div>
+
+                    <div class="bpx-player-ending-wrap" data-select="0">
+                        <div class="bpx-player-ending-backdrop" data-option="0"></div>
+                        <div class="bpx-player-ending-panel" data-option="1"></div>
+                        <div class="bpx-player-share-panel" data-option="2"></div>
+                    </div>
+                    <div class="bpx-player-subtitle-wrap"><div class="bili-subtitle-x-subtitle-panel" style="display: none; color: rgb(255, 255, 255); text-shadow: none;">
+                <div class="bili-subtitle-x-subtitle-panel-position" data-position="bottom" data-textalign="center" style="bottom: 14px;">
+                    <div class="bili-subtitle-x-subtitle-panel-wrap">
+                        <div class="bili-subtitle-x-subtitle-panel-major-group" style="font-size: 0px;"></div>
+                        <div class="bili-subtitle-x-subtitle-panel-minor-group" style="font-size: 0px;"></div>
+                    </div>
+                </div>
+            <div></div></div></div>
+                    <div class="bpx-player-top-wrap">
+                        <div class="bpx-player-top-mask" hidden=""></div>
+                        <div class="bpx-player-top-title"></div>
+                        <div class="bpx-player-top-follow"></div>
+                        <div class="bpx-player-top-left">
+                            <div class="bpx-player-top-left-title" style="font-size: 20px; display: none;">乡村vlog|暴雨刚停，我就拿把伞往田里走。暴雨后的村庄很热闹，到处都是声音。</div>
+                            <div class="bpx-player-top-left-follow"><div class="bpx-player-follow" style="opacity: 1;"><img class="bpx-player-follow-face" src="//i0.hdslb.com/bfs/face/6713d15b2441e6b0f6bf3a04eda6f3f5152c7d59.jpg@96w.webp"><span class="bpx-player-follow-icon"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" fill="currentColor" data-pointer="none" style="enable-background:new 0 0 16 16" viewBox="0 0 16 16"><path d="M7.25 7.25v-4.5a.75.75 0 0 1 1.5 0v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5z"></path></svg></span></span><span class="bpx-player-follow-text">关注</span></div></div>
+                            <div class="bpx-player-top-left-music" style=""></div>
+                            <div class="bpx-player-top-left-panorama"></div>
+                        </div>
+                        <div class="bpx-player-top-issue">
+                            <span class="bpx-player-top-issue-icon"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" data-pointer="none" viewBox="0 0 22 22"><defs><filter id="__j9H-pv6__a" width="162.5%" height="162.5%" x="-31.2%" y="-25%" filterUnits="objectBoundingBox"><feOffset dy="1" in="SourceAlpha" result="shadowOffsetOuter1"></feOffset><feGaussianBlur in="shadowOffsetOuter1" result="shadowBlurOuter1" stdDeviation="1.5"></feGaussianBlur><feColorMatrix in="shadowBlurOuter1" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.24 0"></feColorMatrix></filter><path id="__j9H-pv6__b" d="m6 16-3 3V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6Zm4-4v2h2v-2h-2Zm2-.998c0-.34.149-.523.636-.925.022-.018.296-.24.379-.31a5.81 5.81 0 0 0 .173-.152C13.705 9.145 14 8.656 14 8a3 3 0 0 0-5.698-1.314c-.082.17-.153.41-.213.72A.5.5 0 0 0 8.581 8h1.023a.5.5 0 0 0 .476-.348.851.851 0 0 1 .114-.244A.999.999 0 0 1 12 8c0 1.237-2 1.16-2 3h2Z"></path></defs><g fill-rule="evenodd"><use xlink:href="#__j9H-pv6__b" filter="url(#__j9H-pv6__a)"></use><use xlink:href="#__j9H-pv6__b"></use></g></svg></span></span>
+                        </div>
+                    </div>
+                    <div class="bpx-player-state-wrap">
+                        <div class="bpx-player-state-play"></div>
+                        <div class="bpx-player-state-buff-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_2"><rect width="24" height="24" x="0" y="0"></rect></clipPath><clipPath id="__lottie_element_19"><path d="M0,0 L24,0 L24,24 L0,24z"></path></clipPath></defs><g clip-path="url(#__lottie_element_2)"><g transform="matrix(0.7071067690849304,0.7071067690849304,-0.7071067690849304,0.7071067690849304,9.609993934631348,8.918749809265137)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-0.25999999046325684,-6.370999813079834)"><path fill="rgb(0,161,214)" fill-opacity="1" d=" M0,-3.388000011444092 C-0.40799999237060547,-3.388000011444092 -0.7390000224113464,-3.056999921798706 -0.7390000224113464,-2.6489999294281006 C-0.7390000224113464,-2.6489999294281006 -0.7390000224113464,2.6489999294281006 -0.7390000224113464,2.6489999294281006 C-0.7390000224113464,3.056999921798706 -0.40799999237060547,3.388000011444092 0,3.388000011444092 C0.40799999237060547,3.388000011444092 0.7390000224113464,3.056999921798706 0.7390000224113464,2.6489999294281006 C0.7390000224113464,2.6489999294281006 0.7390000224113464,-2.6489999294281006 0.7390000224113464,-2.6489999294281006 C0.7390000224113464,-3.056999921798706 0.40799999237060547,-3.388000011444092 0,-3.388000011444092z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(69,69,69)" stroke-opacity="1" stroke-width="0" d=" M0,-3.388000011444092 C-0.40799999237060547,-3.388000011444092 -0.7390000224113464,-3.056999921798706 -0.7390000224113464,-2.6489999294281006 C-0.7390000224113464,-2.6489999294281006 -0.7390000224113464,2.6489999294281006 -0.7390000224113464,2.6489999294281006 C-0.7390000224113464,3.056999921798706 -0.40799999237060547,3.388000011444092 0,3.388000011444092 C0.40799999237060547,3.388000011444092 0.7390000224113464,3.056999921798706 0.7390000224113464,2.6489999294281006 C0.7390000224113464,2.6489999294281006 0.7390000224113464,-2.6489999294281006 0.7390000224113464,-2.6489999294281006 C0.7390000224113464,-3.056999921798706 0.40799999237060547,-3.388000011444092 0,-3.388000011444092z"></path></g></g><g transform="matrix(0.7071067690849304,-0.7071067690849304,0.7071067690849304,0.7071067690849304,14.453581809997559,8.441146850585938)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-0.25999999046325684,-6.370999813079834)"><path fill="rgb(0,161,214)" fill-opacity="1" d=" M0,-3.388000011444092 C-0.40799999237060547,-3.388000011444092 -0.7390000224113464,-3.056999921798706 -0.7390000224113464,-2.6489999294281006 C-0.7390000224113464,-2.6489999294281006 -0.7390000224113464,2.6489999294281006 -0.7390000224113464,2.6489999294281006 C-0.7390000224113464,3.056999921798706 -0.40799999237060547,3.388000011444092 0,3.388000011444092 C0.40799999237060547,3.388000011444092 0.7390000224113464,3.056999921798706 0.7390000224113464,2.6489999294281006 C0.7390000224113464,2.6489999294281006 0.7390000224113464,-2.6489999294281006 0.7390000224113464,-2.6489999294281006 C0.7390000224113464,-3.056999921798706 0.40799999237060547,-3.388000011444092 0,-3.388000011444092z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(69,69,69)" stroke-opacity="1" stroke-width="0" d=" M0,-3.388000011444092 C-0.40799999237060547,-3.388000011444092 -0.7390000224113464,-3.056999921798706 -0.7390000224113464,-2.6489999294281006 C-0.7390000224113464,-2.6489999294281006 -0.7390000224113464,2.6489999294281006 -0.7390000224113464,2.6489999294281006 C-0.7390000224113464,3.056999921798706 -0.40799999237060547,3.388000011444092 0,3.388000011444092 C0.40799999237060547,3.388000011444092 0.7390000224113464,3.056999921798706 0.7390000224113464,2.6489999294281006 C0.7390000224113464,2.6489999294281006 0.7390000224113464,-2.6489999294281006 0.7390000224113464,-2.6489999294281006 C0.7390000224113464,-3.056999921798706 0.40799999237060547,-3.388000011444092 0,-3.388000011444092z"></path></g></g><g clip-path="url(#__lottie_element_19)" transform="matrix(1,0,0,1,0,0)" opacity="1" style="display: block;"><g transform="matrix(1,0,0,1,9.875,11.25)" opacity="0.5" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-2.2850000858306885,2.7149999141693115)"><path fill="rgb(0,161,214)" fill-opacity="1" d=" M0,-1.4019999504089355 C-0.7739999890327454,-1.4019999504089355 -1.4019999504089355,-0.7739999890327454 -1.4019999504089355,0 C-1.4019999504089355,0.7739999890327454 -0.7739999890327454,1.4019999504089355 0,1.4019999504089355 C0.7739999890327454,1.4019999504089355 1.4019999504089355,0.7739999890327454 1.4019999504089355,0 C1.4019999504089355,-0.7739999890327454 0.7739999890327454,-1.4019999504089355 0,-1.4019999504089355z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(69,69,69)" stroke-opacity="1" stroke-width="0" d=" M0,-1.4019999504089355 C-0.7739999890327454,-1.4019999504089355 -1.4019999504089355,-0.7739999890327454 -1.4019999504089355,0 C-1.4019999504089355,0.7739999890327454 -0.7739999890327454,1.4019999504089355 0,1.4019999504089355 C0.7739999890327454,1.4019999504089355 1.4019999504089355,0.7739999890327454 1.4019999504089355,0 C1.4019999504089355,-0.7739999890327454 0.7739999890327454,-1.4019999504089355 0,-1.4019999504089355z"></path></g></g><g transform="matrix(1,0,0,1,14.406000137329102,11.25)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-2.2850000858306885,2.7149999141693115)"><path fill="rgb(0,161,214)" fill-opacity="1" d=" M0,-1.4019999504089355 C-0.7739999890327454,-1.4019999504089355 -1.4019999504089355,-0.7739999890327454 -1.4019999504089355,0 C-1.4019999504089355,0.7739999890327454 -0.7739999890327454,1.4019999504089355 0,1.4019999504089355 C0.7739999890327454,1.4019999504089355 1.4019999504089355,0.7739999890327454 1.4019999504089355,0 C1.4019999504089355,-0.7739999890327454 0.7739999890327454,-1.4019999504089355 0,-1.4019999504089355z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(69,69,69)" stroke-opacity="1" stroke-width="0" d=" M0,-1.4019999504089355 C-0.7739999890327454,-1.4019999504089355 -1.4019999504089355,-0.7739999890327454 -1.4019999504089355,0 C-1.4019999504089355,0.7739999890327454 -0.7739999890327454,1.4019999504089355 0,1.4019999504089355 C0.7739999890327454,1.4019999504089355 1.4019999504089355,0.7739999890327454 1.4019999504089355,0 C1.4019999504089355,-0.7739999890327454 0.7739999890327454,-1.4019999504089355 0,-1.4019999504089355z"></path></g></g><g transform="matrix(1,0,0,1,19.0939998626709,11.25)" opacity="0.5" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-2.2850000858306885,2.7149999141693115)"><path fill="rgb(0,161,214)" fill-opacity="1" d=" M0,-1.4019999504089355 C-0.7739999890327454,-1.4019999504089355 -1.4019999504089355,-0.7739999890327454 -1.4019999504089355,0 C-1.4019999504089355,0.7739999890327454 -0.7739999890327454,1.4019999504089355 0,1.4019999504089355 C0.7739999890327454,1.4019999504089355 1.4019999504089355,0.7739999890327454 1.4019999504089355,0 C1.4019999504089355,-0.7739999890327454 0.7739999890327454,-1.4019999504089355 0,-1.4019999504089355z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(69,69,69)" stroke-opacity="1" stroke-width="0" d=" M0,-1.4019999504089355 C-0.7739999890327454,-1.4019999504089355 -1.4019999504089355,-0.7739999890327454 -1.4019999504089355,0 C-1.4019999504089355,0.7739999890327454 -0.7739999890327454,1.4019999504089355 0,1.4019999504089355 C0.7739999890327454,1.4019999504089355 1.4019999504089355,0.7739999890327454 1.4019999504089355,0 C1.4019999504089355,-0.7739999890327454 0.7739999890327454,-1.4019999504089355 0,-1.4019999504089355z"></path></g></g></g><g style="display: none;"><g><path></path><path stroke-linecap="round" stroke-linejoin="round" fill-opacity="0"></path></g><g><path></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4"></path></g><g><path></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4"></path></g></g><g transform="matrix(0.9840099811553955,0,0,1.070970058441162,12,13.75)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(11,163,149)" fill-opacity="0" d=" M-0.05000000074505806,-6.757999897003174 C-0.05000000074505806,-6.757999897003174 -3.0820000171661377,-6.72599983215332 -6.130000114440918,-6.72599983215332 C-9.178000450134277,-6.72599983215332 -10.121000289916992,-4.785999774932861 -10.121000289916992,-2.5850000381469727 C-10.121000289916992,-0.5540000200271606 -10.13700008392334,1.4800000190734863 -10.13700008392334,3.078000068664551 C-10.13700008392334,5.164999961853027 -9.178000450134277,6.815999984741211 -6.1620001792907715,6.815999984741211 C-4.13100004196167,6.815999984741211 3.609999895095825,6.822000026702881 6.0920000076293945,6.822000026702881 C9.145999908447266,6.822000026702881 10.270000457763672,5.164999961853027 10.270000457763672,3.072999954223633 C10.270000457763672,1.1979999542236328 10.28499984741211,-0.8349999785423279 10.28499984741211,-2.634999990463257 C10.28499984741211,-4.784999847412109 9.145999908447266,-6.7179999351501465 6.091000080108643,-6.7179999351501465 C4.247000217437744,-6.7179999351501465 -0.05000000074505806,-6.757999897003174 -0.05000000074505806,-6.757999897003174z"></path><path stroke-linecap="round" stroke-linejoin="round" fill-opacity="0" stroke="rgb(0,161,214)" stroke-opacity="1" stroke-width="1.5" d=" M-0.05000000074505806,-6.757999897003174 C-0.05000000074505806,-6.757999897003174 -3.0820000171661377,-6.72599983215332 -6.130000114440918,-6.72599983215332 C-9.178000450134277,-6.72599983215332 -10.121000289916992,-4.785999774932861 -10.121000289916992,-2.5850000381469727 C-10.121000289916992,-0.5540000200271606 -10.13700008392334,1.4800000190734863 -10.13700008392334,3.078000068664551 C-10.13700008392334,5.164999961853027 -9.178000450134277,6.815999984741211 -6.1620001792907715,6.815999984741211 C-4.13100004196167,6.815999984741211 3.609999895095825,6.822000026702881 6.0920000076293945,6.822000026702881 C9.145999908447266,6.822000026702881 10.270000457763672,5.164999961853027 10.270000457763672,3.072999954223633 C10.270000457763672,1.1979999542236328 10.28499984741211,-0.8349999785423279 10.28499984741211,-2.634999990463257 C10.28499984741211,-4.784999847412109 9.145999908447266,-6.7179999351501465 6.091000080108643,-6.7179999351501465 C4.247000217437744,-6.7179999351501465 -0.05000000074505806,-6.757999897003174 -0.05000000074505806,-6.757999897003174z"></path></g><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(11,163,149)" fill-opacity="0" d=" M-0.19099999964237213,0.2329999953508377"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(0,161,214)" stroke-opacity="1" stroke-width="1.5" d=" M-0.19099999964237213,0.2329999953508377"></path></g><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(11,163,149)" fill-opacity="0" d="M0 0"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(11,163,149)" stroke-opacity="1" stroke-width="1.5" d="M0 0"></path></g></g><g style="display: none;"><g><path></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4"></path></g></g><g style="display: none;"><g><path></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4"></path></g></g><g transform="matrix(1,0,0,1,12,12)" opacity="1" style="display: block;"></g></g></svg></div>
+                        <div class="bpx-player-state-buff-text">
+                            <span class="bpx-player-state-buff-title">正在缓冲...</span>
+                            <span class="bpx-player-state-buff-speed"></span>
+                        </div>
+                    </div>
+                    <div class="bpx-player-loading-panel">
+                        <div class="bpx-player-loading-panel-text" hidden=""></div>
+                        <div class="bpx-player-loading-panel-blur" hidden="">
+                            <div class="bpx-player-loading-panel-blur-detail"></div>
+                        </div>
+                    </div>
+                    <div class="bpx-player-toast-wrap">
+                        <div class="bpx-player-toast-auto"></div>
+                        <div class="bpx-player-toast-fixed"></div>
+                    </div>
+                    <div class="bpx-player-summary-wrap"></div>
+                    <div class="bpx-player-control-wrap">
+                        <div class="bpx-player-control-mask"></div>
+                        <div class="bpx-player-control-entity" data-shadow-show="true">
+                            <div class="bpx-player-control-top"><div class="bpx-player-progress-area">
+                <div class="bpx-player-progress-freezone"></div>
+                <div class="bpx-player-progress-wrap">
+                    <div class="bpx-player-progress">
+                        <div class="bpx-player-progress-schedule-wrap">
+                <div class="bpx-player-progress-schedule">
+                    <div class="bpx-player-progress-schedule-buffer" style="transform: scaleX(0.999705);"></div>
+                    <div class="bpx-player-progress-schedule-current" style="transform: scaleX(0.721703);"></div>
+                </div>
+            </div>
+                        <div class="bpx-player-progress-point-wrap"></div>
+                        <div class="bpx-player-progress-thumb" style="transform: translateX(450.342px);">
+                            <div class="bpx-player-progress-thumb-icon bpx-player-progress-thumb-icon-dynamic"><div><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_55"><rect width="18" height="18" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_55)"><g transform="matrix(0.9883429408073425,-0.7275781631469727,0.6775955557823181,0.920446515083313,7.3224687576293945,-0.7606706619262695)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(0.9937776327133179,-0.11138220876455307,0.11138220876455307,0.9937776327133179,-2.5239999294281006,1.3849999904632568)"><path fill="rgb(51,51,51)" fill-opacity="1" d=" M0.75,-1.25 C0.75,-1.25 0.75,1.25 0.75,1.25 C0.75,1.663925051689148 0.4139249920845032,2 0,2 C0,2 0,2 0,2 C-0.4139249920845032,2 -0.75,1.663925051689148 -0.75,1.25 C-0.75,1.25 -0.75,-1.25 -0.75,-1.25 C-0.75,-1.663925051689148 -0.4139249920845032,-2 0,-2 C0,-2 0,-2 0,-2 C0.4139249920845032,-2 0.75,-1.663925051689148 0.75,-1.25z"></path></g></g><g transform="matrix(1.1436611413955688,0.7535901665687561,-0.6317168474197388,0.9587040543556213,16.0070743560791,2.902894973754883)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(0.992861807346344,0.1192704513669014,-0.1192704513669014,0.992861807346344,-2.5239999294281006,1.3849999904632568)"><path fill="rgb(51,51,51)" fill-opacity="1" d=" M0.75,-1.25 C0.75,-1.25 0.75,1.25 0.75,1.25 C0.75,1.663925051689148 0.4139249920845032,2 0,2 C0,2 0,2 0,2 C-0.4139249920845032,2 -0.75,1.663925051689148 -0.75,1.25 C-0.75,1.25 -0.75,-1.25 -0.75,-1.25 C-0.75,-1.663925051689148 -0.4139249920845032,-2 0,-2 C0,-2 0,-2 0,-2 C0.4139249920845032,-2 0.75,-1.663925051689148 0.75,-1.25z"></path></g></g><g transform="matrix(1,0,0,1,8.890999794006348,8.406000137329102)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0.09099999815225601,1.1009999513626099)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M7,-3 C7,-3 7,3 7,3 C7,4.379749774932861 5.879749774932861,5.5 4.5,5.5 C4.5,5.5 -4.5,5.5 -4.5,5.5 C-5.879749774932861,5.5 -7,4.379749774932861 -7,3 C-7,3 -7,-3 -7,-3 C-7,-4.379749774932861 -5.879749774932861,-5.5 -4.5,-5.5 C-4.5,-5.5 4.5,-5.5 4.5,-5.5 C5.879749774932861,-5.5 7,-4.379749774932861 7,-3z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(51,51,51)" stroke-opacity="1" stroke-width="1.5" d=" M7,-3 C7,-3 7,3 7,3 C7,4.379749774932861 5.879749774932861,5.5 4.5,5.5 C4.5,5.5 -4.5,5.5 -4.5,5.5 C-5.879749774932861,5.5 -7,4.379749774932861 -7,3 C-7,3 -7,-3 -7,-3 C-7,-4.379749774932861 -5.879749774932861,-5.5 -4.5,-5.5 C-4.5,-5.5 4.5,-5.5 4.5,-5.5 C5.879749774932861,-5.5 7,-4.379749774932861 7,-3z"></path></g></g><g transform="matrix(1,0,0,1,8.89900016784668,8.083999633789062)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-2.5239999294281006,1.3849999904632568)"><path fill="rgb(51,51,51)" fill-opacity="1" d=" M0.875,-1.125 C0.875,-1.125 0.875,1.125 0.875,1.125 C0.875,1.607912540435791 0.48291251063346863,2 0,2 C0,2 0,2 0,2 C-0.48291251063346863,2 -0.875,1.607912540435791 -0.875,1.125 C-0.875,1.125 -0.875,-1.125 -0.875,-1.125 C-0.875,-1.607912540435791 -0.48291251063346863,-2 0,-2 C0,-2 0,-2 0,-2 C0.48291251063346863,-2 0.875,-1.607912540435791 0.875,-1.125z"></path></g></g><g transform="matrix(1,0,0,1,14.008999824523926,8.083999633789062)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-2.5239999294281006,1.3849999904632568)"><path fill="rgb(51,51,51)" fill-opacity="1" d=" M0.8999999761581421,-1.100000023841858 C0.8999999761581421,-1.100000023841858 0.8999999761581421,1.100000023841858 0.8999999761581421,1.100000023841858 C0.8999999761581421,1.596709966659546 0.4967099726200104,2 0,2 C0,2 0,2 0,2 C-0.4967099726200104,2 -0.8999999761581421,1.596709966659546 -0.8999999761581421,1.100000023841858 C-0.8999999761581421,1.100000023841858 -0.8999999761581421,-1.100000023841858 -0.8999999761581421,-1.100000023841858 C-0.8999999761581421,-1.596709966659546 -0.4967099726200104,-2 0,-2 C0,-2 0,-2 0,-2 C0.4967099726200104,-2 0.8999999761581421,-1.596709966659546 0.8999999761581421,-1.100000023841858z"></path></g></g></g></svg></div></div>
+                        </div>
+                        <div class="bpx-player-progress-move-indicator" style="left: 468px;">
+                            <div class="bpx-player-progress-move-indicator-down"></div>
+                            <div class="bpx-player-progress-move-indicator-up"></div>
+                        </div>
+                        <div class="bpx-player-progress-popup" style="left: 388px;">
+                            <div class="bpx-player-progress-preview">
+                                <img class="bpx-player-progress-preview-image" src="data:image/jpeg;base64,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">
+                                <div class="bpx-player-progress-preview-charging-tip">
+                                    <div class="bpx-player-progress-preview-charging-icon">
+                                        <div class="bpx-player-progress-charging-svg">
+                                            <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 14 14"><g clip-path="url(#__pJwkeh7__a)"><path fill="#FF548C" d="M7 14A7 7 0 1 0 7 0a7 7 0 0 0 0 14Z"></path><path fill="#fff" d="M4.703 11.527c-.042.106.095.19.17.105l4.85-5.45a.203.203 0 0 0-.152-.339h-1.7L9.757 2.79a.203.203 0 0 0-.173-.31H6.577a.407.407 0 0 0-.38.264L4.46 7.4a.203.203 0 0 0 .19.274h1.586l-1.534 3.854Z"></path></g><defs><clipPath id="__pJwkeh7__a"><path fill="#fff" d="M0 0h14v14H0z"></path></clipPath></defs></svg></span>
+                                        </div>
+                                    </div>
+                                    <div class="bpx-player-progress-preview-charging-text">
+                                        为TA充电后即可观看
+                                    </div>
+                                </div>
+                                <div class="bpx-player-progress-preview-time">02:44</div>
+                            </div>
+                            <div class="bpx-player-progress-hotspot"></div>
+                        </div>
+                        <div class="bpx-player-progress-pull-indicator" style="transform: translateX(450.342px);"></div>
+                        <div class="bpx-player-progress-cursor" style="transform: translateX(464.776px);"></div>
+                        <div class="bpx-player-progress-scaleplate"></div>
+                    </div>
+                </div>
+            </div></div>
+                            <div class="bpx-player-control-bottom">
+                                <div class="bpx-player-control-bottom-left"><div class="bpx-player-ctrl-btn bpx-player-ctrl-play" role="button" aria-label="播放/暂停" tabindex="0"><div class="bpx-player-ctrl-btn-icon"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_223"><rect width="28" height="28" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_223)"><g transform="matrix(0,0,0,0,19.437999725341797,14.125)" opacity="7.512492445016505e-7" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path></g></g><g transform="matrix(0.7189439535140991,0,0,0.7189439535140991,22.748554229736328,14)" opacity="0.06308687690746254" style="display: none;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-5.484000205993652,-10 C-7.953000068664551,-10 -8,-7.984000205993652 -8,-7.984000205993652 C-8,-7.984000205993652 -8.008000373840332,7.984000205993652 -8.008000373840332,7.984000205993652 C-8.008000373840332,7.984000205993652 -7.984000205993652,9.991999626159668 -5.5,9.991999626159668 C-3.0160000324249268,9.991999626159668 -3.003999948501587,7.995999813079834 -3.003999948501587,7.995999813079834 C-3.003999948501587,7.995999813079834 -2.9839999675750732,-8 -2.9839999675750732,-8 C-2.9839999675750732,-8 -3.015000104904175,-10 -5.484000205993652,-10z"></path></g></g><g style="display: block;" transform="matrix(1,0,0,1,14,14)" opacity="1"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d="M0 0"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d="M0 0"></path></g><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-7.031000137329102,-10.875 C-7.031000137329102,-10.875 -8.32800006866455,-11.25 -9.42199993133545,-10.468999862670898 C-10.109999656677246,-9.906999588012695 -10,-7.992000102996826 -10,-7.992000102996826 C-10,-7.992000102996826 -10,8.015999794006348 -10,8.015999794006348 C-10,8.015999794006348 -10.125,10.241999626159668 -9,10.991999626159668 C-7.875,11.741999626159668 -5,10.031000137329102 -5,10.031000137329102 C-5,10.031000137329102 7.968999862670898,1.875 7.968999862670898,1.875 C7.968999862670898,1.875 9,1.062000036239624 9,0 C9,-1.062000036239624 7.968999862670898,-1.937999963760376 7.968999862670898,-1.937999963760376 C7.968999862670898,-1.937999963760376 -7.031000137329102,-10.875 -7.031000137329102,-10.875z"></path><path stroke-linecap="butt" stroke-linejoin="miter" fill-opacity="0" stroke-miterlimit="4" stroke="rgb(255,255,255)" stroke-opacity="1" stroke-width="0" d=" M-7.031000137329102,-10.875 C-7.031000137329102,-10.875 -8.32800006866455,-11.25 -9.42199993133545,-10.468999862670898 C-10.109999656677246,-9.906999588012695 -10,-7.992000102996826 -10,-7.992000102996826 C-10,-7.992000102996826 -10,8.015999794006348 -10,8.015999794006348 C-10,8.015999794006348 -10.125,10.241999626159668 -9,10.991999626159668 C-7.875,11.741999626159668 -5,10.031000137329102 -5,10.031000137329102 C-5,10.031000137329102 7.968999862670898,1.875 7.968999862670898,1.875 C7.968999862670898,1.875 9,1.062000036239624 9,0 C9,-1.062000036239624 7.968999862670898,-1.937999963760376 7.968999862670898,-1.937999963760376 C7.968999862670898,-1.937999963760376 -7.031000137329102,-10.875 -7.031000137329102,-10.875z"></path></g></g></g></svg></span></div></div><div class="bpx-player-ctrl-btn bpx-player-ctrl-time">
+                <input class="bpx-player-ctrl-time-seek" value="00:00" style="display: none;">
+                <div class="bpx-player-ctrl-time-label">
+                    <span class="bpx-player-ctrl-time-current">02:44</span>
+                    <span class="bpx-player-ctrl-time-divide">/</span>
+                    <span class="bpx-player-ctrl-time-duration">03:46</span>
+                </div>
+            </div></div>
+                                <div class="bpx-player-control-bottom-center"></div>
+                                <div class="bpx-player-control-bottom-right"><div class="bpx-player-ctrl-btn bpx-player-ctrl-quality" role="button" aria-label="清晰度" tabindex="0">
+                <div class="bpx-player-ctrl-quality-result">自动</div>
+                <div class="bpx-player-ctrl-quality-menu-wrap">
+                    <ul class="bpx-player-ctrl-quality-menu"><li class="bpx-player-ctrl-quality-menu-item" data-value="112"><span class="bpx-player-ctrl-quality-text">1080P 高码率</span><span class="bpx-player-ctrl-quality-badge bpx-player-ctrl-quality-badge-bigvip">大会员</span></li><li class="bpx-player-ctrl-quality-menu-item" data-value="80"><span class="bpx-player-ctrl-quality-text">1080P 高清</span></li><li class="bpx-player-ctrl-quality-menu-item" data-value="64"><span class="bpx-player-ctrl-quality-text">720P 准高清</span></li><li class="bpx-player-ctrl-quality-menu-item" data-value="32"><span class="bpx-player-ctrl-quality-text">480P 标清</span></li><li class="bpx-player-ctrl-quality-menu-item" data-value="16"><span class="bpx-player-ctrl-quality-text">360P 流畅</span></li><li class="bpx-player-ctrl-quality-menu-item bpx-state-active" data-value="0">自动(1080P)</li></ul>
+                </div>
+               
+            <div class="bpx-player-ctrl-quality-bubble"></div></div><div class="bpx-player-ctrl-btn bpx-player-ctrl-playbackrate" role="button" aria-label="倍速" tabindex="0">
+                <div class="bpx-player-ctrl-playbackrate-result">倍速</div>
+                <ul class="bpx-player-ctrl-playbackrate-menu">
+                    <li class="bpx-player-ctrl-playbackrate-menu-item " data-value="2">2.0x</li><li class="bpx-player-ctrl-playbackrate-menu-item " data-value="1.5">1.5x</li><li class="bpx-player-ctrl-playbackrate-menu-item " data-value="1.25">1.25x</li><li class="bpx-player-ctrl-playbackrate-menu-item bpx-state-active" data-value="1">1.0x</li><li class="bpx-player-ctrl-playbackrate-menu-item " data-value="0.75">0.75x</li><li class="bpx-player-ctrl-playbackrate-menu-item " data-value="0.5">0.5x</li>
+                </ul>
+            </div><div class="bpx-player-ctrl-btn bpx-player-ctrl-subtitle" aria-label="字幕" tabindex="0">
+            <div class="bpx-player-ctrl-subtitle-result-wrap">
+                <div class="bpx-player-ctrl-subtitle-result">字幕</div>
+                <span class="bpx-common-svg-icon" style="display:none"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 14 12"><rect width="13.5" height="11.5" x=".25" y=".25" stroke="#fff" stroke-opacity=".5" stroke-width=".5" rx="5.75"></rect><path fill="#fff" d="M5.248 2.788h.76L8.256 8.5h-.712l-.608-1.6H4.312l-.608 1.6H3l2.248-5.712Zm-.728 3.56h2.208l-1.08-2.856h-.032L4.52 6.348Zm4.362-3.56h.648V8.5h-.648V2.788Z"></path></svg></span>
+            </div>
+                <div class="bpx-player-ctrl-subtitle-box">
+                    <div class="bpx-player-ctrl-subtitle-menu bui bui-panel bui-dark"><div class="bui-area"><div class="bui-panel-wrap" style="width: 168px; height: 176px;">
+    <div class="bui-panel-move" style="width: 434px;">
+        
+        <div class="bui-panel-item bui-panel-item-active" style="width: 168px; height: 176px;"><div class="bpx-player-ctrl-subtitle-menu-left">
+                            <div class="bpx-player-ctrl-subtitle-menu-translation" style="display: none;">
+                                <div class="bpx-player-ctrl-translation-title-area">
+                                    <div class="bpx-player-ctrl-translation-add-wrap bpx-player-ctrl-subtitle-item-flex">
+                                        <div class="bpx-player-ctrl-translation-title">
+                                            <div class="bpx-player-ctrl-translation-title-text"></div>
+                                            <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 16 16"><path fill="#fff" d="M8 2.333a5.667 5.667 0 1 0 0 11.333A5.667 5.667 0 0 0 8 2.333ZM1.333 7.999a6.667 6.667 0 1 1 13.334 0A6.667 6.667 0 0 1 1.333 8Z"></path><path fill="#fff" d="M8.583 10.624a.583.583 0 1 1-1.166 0 .583.583 0 0 1 1.166 0ZM8 5.916a.833.833 0 0 0-.833.833.5.5 0 1 1-1 0 1.833 1.833 0 0 1 3.666 0c0 .492-.177.85-.411 1.134-.11.134-.232.25-.34.35l-.093.085c-.076.07-.144.132-.214.202-.167.167-.226.285-.25.354a.572.572 0 0 0-.025.209.5.5 0 1 1-1 0c0-.136.007-.326.08-.536.082-.237.234-.48.488-.735a7.97 7.97 0 0 1 .261-.245l.074-.068c.102-.094.182-.173.247-.252a.719.719 0 0 0 .183-.498A.833.833 0 0 0 8 5.916Z"></path></svg></span>
+                                        </div>
+                                    </div>
+                                    <div class="bpx-player-ctrl-translation-close-switch bpx-state-active" data-action="close">关闭</div>
+                                </div>
+                                <div class="bpx-player-ctrl-translation-language">
+                                    <div class="bpx-player-ctrl-translation-content">
+                                        <div class="bpx-player-ctrl-translation-inner"></div>
+                                    </div>
+                                </div>
+                                <div class="bpx-player-ctrl-translation-separator" style="display: none;"></div>
+                                <div class="bpx-player-ctrl-translation-unlogin" style="display: none">
+                                    <div class="bpx-player-ctrl-translation-unlogin-content">登录可享</div>
+                                </div>
+                                <div class="bpx-player-ctrl-translation-feedback" style="display: none;">
+                                    <div class="bpx-player-ctrl-translation-feedback-text">原声翻译体验反馈</div>
+                                    <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z"></path></svg></span>
+                                </div>
+                            </div>
+                            <div class="bpx-player-ctrl-subtitle-menu-origin">
+                                <div class="bpx-player-ctrl-subtitle-title-area">
+                                    <div class="bpx-player-ctrl-subtitle-add-wrap bpx-player-ctrl-subtitle-item-flex">
+                                        <div class="bpx-player-ctrl-subtitle-title">字幕</div>
+                                        <div class="bpx-player-ctrl-subtitle-add" style="display: none;">添加字幕</div>
+                                    </div>
+                                    <div class="bpx-player-ctrl-subtitle-close-switch bpx-state-active" data-action="close">关闭</div>
+                                    <div class="bpx-player-ctrl-subtitle-fake-switch" style="display: none">
+                                         <div class="bpx-player-ctrl-subtitle-fake-switch-text">关闭</div>
+                                         <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 12 12"><path fill="#61666D" d="M6 1.875a4.125 4.125 0 1 0 0 8.25 4.125 4.125 0 0 0 0-8.25ZM.875 6a5.125 5.125 0 1 1 10.25 0A5.125 5.125 0 0 1 .875 6Z"></path><path fill="#61666D" d="M6 3.5a.5.5 0 0 1 .5.5v2.25a.5.5 0 1 1-1 0V4a.5.5 0 0 1 .5-.5ZM6 7.25a.5.5 0 0 1 .5.5v.125a.5.5 0 1 1-1 0V7.75a.5.5 0 0 1 .5-.5Z"></path></svg></span>
+                                    </div>
+                                <div class="bpx-player-ctrl-subtitle-separator-above" style="display: none;"></div>
+                                <div class="bpx-player-ctrl-subtitle-language-unlogin" style="display: none">
+                                    <div class="bpx-player-ctrl-subtitle-language-unlogin-content">登录可享</div>
+                                </div>
+                                <div class="bpx-player-ctrl-subtitle-bilingual-above" style="display: none;">字幕</div>
+                                <div class="bpx-player-ctrl-subtitle-language">
+                                    <div class="bpx-player-ctrl-subtitle-nolan" style="display: none;">暂无字幕</div>
+                                    <div class="bpx-player-ctrl-subtitle-major" style="width: 100%;">
+                                        <div class="bpx-player-ctrl-subtitle-major-title" style="display: none;">主字幕</div>
+                                        <div class="bpx-player-ctrl-subtitle-major-content" style="height: 40px;">
+                                            <div class="bpx-player-ctrl-subtitle-major-inner"><div class="bpx-player-ctrl-subtitle-language-item" data-lan="ai-zh">
+                    <div class="bpx-player-ctrl-subtitle-language-item-text">中文</div> <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 14 12"><rect width="13.5" height="11.5" x=".25" y=".25" stroke="#fff" stroke-opacity=".5" stroke-width=".5" rx="5.75"></rect><path fill="#fff" d="M5.248 2.788h.76L8.256 8.5h-.712l-.608-1.6H4.312l-.608 1.6H3l2.248-5.712Zm-.728 3.56h2.208l-1.08-2.856h-.032L4.52 6.348Zm4.362-3.56h.648V8.5h-.648V2.788Z"></path></svg></span>
+                </div></div>
+                                        </div>
+                                    </div>
+                                    <div class="bpx-player-ctrl-subtitle-minor" style="display: none;">
+                                        <div class="bpx-player-ctrl-subtitle-minor-title">副字幕</div>
+                                        <div class="bpx-player-ctrl-subtitle-minor-content">
+                                            <div class="bpx-player-ctrl-subtitle-minor-inner"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bpx-player-ctrl-subtitle-separator-bottom"></div>
+                                <div class="bpx-player-ctrl-subtitle-bilingual-bottom" style="display: none;">字幕</div>
+                                <div class="bpx-player-ctrl-subtitle-setting">
+                                    <span class="bpx-player-ctrl-subtitle-setting-text">字幕设置</span>
+                                    <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z"></path></svg></span>
+                                </div>
+                            </div>    
+                        </div>
+                        
+                        <div class="bpx-player-ctrl-subtitle-menu-description" style="display: none;">
+                            <div class="bpx-player-ctrl-description-title">
+                                <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 6 10"><path fill="#fff" d="M4.93.15c.231-.213.613-.197.865.035l.038.034a.556.556 0 0 1 0 .795L1.538 5l4.295 4.017a.557.557 0 0 1 0 .796l-.053.047c-.26.19-.63.19-.851-.014L.167 5.396a.557.557 0 0 1 0-.795L4.93.15Z"></path></svg></span>
+                                <div class="bpx-player-ctrl-description-title-text"></div>
+                            </div>
+                            <div class="bpx-player-ctrl-description-separator"></div>
+                            <div class="bpx-player-ctrl-description-content">
+                <p>B站自研的AI原声翻译功能通过大模型翻译、音色克隆、中文字幕改写、口型匹配等AI能力，将中文原生视频转化为"外语原生视频"：</p>
+                <ul>
+                    <li>• 将中文内容翻译为外语</li>
+                    <li>• 保留原视频内说话人的音色、语调和话语节奏</li>
+                    <li>• 在可能的情况下，会同步将原视频内的中文字幕擦除并匹配对应外语字幕、将讲中文的嘴型匹配为外语嘴型</li>
+                </ul>
+            </div>
+                        </div>
+                    </div></div>
+        
+        <div class="bui-panel-item" style="width: 266px; height: 260px;"><div class="bpx-player-ctrl-subtitle-menu-right">
+                            <div class="bpx-player-ctrl-subtitle-item bpx-player-ctrl-subtitle-item-flex">
+                                <div class="bpx-player-ctrl-subtitle-fontsize">
+                                    <div class="bpx-player-ctrl-subtitle-fontsize-title">字幕大小</div>
+                                    <div class="bpx-player-ctrl-subtitle-fontsize-content bui bui-select bui-dark"><div class="bui-area"><div class="bui-select-wrap">
+    <div class="bui-select-border">
+        <div class="bui-select-header">
+            <span class="bui-select-result">适中</span>
+            <span class="bui-select-arrow">
+                <span class="bui-select-arrow-down"></span>
+            </span>
+        </div>
+        <div class="bui-select-list-wrap" style="">
+            <ul class="bui-select-list" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: initial;">
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="0.6">最小</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="0.8">较小</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                         bui-select-item-active" data-value="1">适中</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="1.3">较大</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="1.6">最大</li>
+                
+            </ul>
+        </div>
+    </div>
+</div></div></div>
+                                </div>
+                                <div class="bpx-player-ctrl-subtitle-color">
+                                    <div class="bpx-player-ctrl-subtitle-color-title">字幕颜色</div>
+                                    <div class="bpx-player-ctrl-subtitle-color-content bui bui-select bui-dark"><div class="bui-area"><div class="bui-select-wrap">
+    <div class="bui-select-border">
+        <div class="bui-select-header">
+            <span class="bui-select-result"><span style="background: #ffffff;"></span><span>白色</span></span>
+            <span class="bui-select-arrow">
+                <span class="bui-select-arrow-down"></span>
+            </span>
+        </div>
+        <div class="bui-select-list-wrap" style="">
+            <ul class="bui-select-list" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: initial;">
+                
+                <li class="bui-select-item
+                        
+                        
+                         bui-select-item-active" data-value="16777215"><span style="background: #ffffff;"></span><span>白色</span></li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="16007990"><span style="background: #F44336;"></span><span>红色</span></li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="10233776"><span style="background: #9C27B0;"></span><span>紫色</span></li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="6765239"><span style="background: #673AB7;"></span><span>深紫色</span></li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="4149685"><span style="background: #3F51B5;"></span><span>靛青色</span></li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="2201331"><span style="background: #2196F3;"></span><span>蓝色</span></li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="240116"><span style="background: #03A9F4;"></span><span>亮蓝色</span></li>
+                
+            </ul>
+        </div>
+    </div>
+</div></div></div>
+                                </div>
+                            </div>
+                            <div class="bpx-player-ctrl-subtitle-item bpx-player-ctrl-subtitle-item-flex">
+                                <div class="bpx-player-ctrl-subtitle-shadow">
+                                    <div class="bpx-player-ctrl-subtitle-shadow-title">描边方式</div>
+                                    <div class="bpx-player-ctrl-subtitle-shadow-content bui bui-select bui-dark"><div class="bui-area"><div class="bui-select-wrap">
+    <div class="bui-select-border">
+        <div class="bui-select-header">
+            <span class="bui-select-result">无描边</span>
+            <span class="bui-select-arrow">
+                <span class="bui-select-arrow-down"></span>
+            </span>
+        </div>
+        <div class="bui-select-list-wrap" style="">
+            <ul class="bui-select-list" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: initial;">
+                
+                <li class="bui-select-item
+                        
+                        
+                         bui-select-item-active" data-value="0">无描边</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="1">重墨</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="2">描边</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="3">45°投影</li>
+                
+            </ul>
+        </div>
+    </div>
+</div></div></div>
+                                </div>
+                                <div class="bpx-player-ctrl-subtitle-position">
+                                    <div class="bpx-player-ctrl-subtitle-position-title">默认位置</div>
+                                    <div class="bpx-player-ctrl-subtitle-position-content bui bui-select bui-dark"><div class="bui-area"><div class="bui-select-wrap">
+    <div class="bui-select-border">
+        <div class="bui-select-header">
+            <span class="bui-select-result">底部居中</span>
+            <span class="bui-select-arrow">
+                <span class="bui-select-arrow-down"></span>
+            </span>
+        </div>
+        <div class="bui-select-list-wrap" style="">
+            <ul class="bui-select-list" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: initial;">
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="bottom-left">左下角</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                         bui-select-item-active" data-value="bottom-center">底部居中</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="bottom-right">右下角</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="top-left">左上角</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="top-center">顶部居中</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="top-right">右上角</li>
+                
+            </ul>
+        </div>
+    </div>
+</div></div></div>
+                                </div>
+                            </div>
+                            <div class="bpx-player-ctrl-subtitle-item bpx-player-ctrl-subtitle-opacity">
+                                <div class="bpx-player-ctrl-subtitle-opacity-title">背景不透明度</div>
+                                <div class="bpx-player-ctrl-subtitle-opacity-content bui bui-slider bui-dark"><div class="bui-area"><div class="bui-track
+            
+            
+            " style="">
+    
+        <div class="bui-bar-wrap">
+            
+            
+            <div class="bui-bar bui-bar-normal" role="progressbar" style="transform: scaleX(0.87);"></div>
+            
+        </div>
+    
+    
+    <div class="bui-thumb" style="transform: translateX(186.18px);">
+        
+        
+        <div class="bui-thumb-dot" style=""></div>
+        
+    </div>
+</div></div></div>
+                            </div>
+                            <div class="bpx-player-ctrl-subtitle-other">
+                                <div class="bpx-player-ctrl-subtitle-other-title">其它设置</div>
+                                <div class="bpx-player-ctrl-subtitle-other-content">
+                                    <span class="bpx-player-ctrl-subtitle-scale bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" checked="" aria-label="等比缩放">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">等比缩放</span>
+</label></div></span>
+                                    <span class="bpx-player-ctrl-subtitle-fade bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" aria-label="淡入淡出">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">淡入淡出</span>
+</label></div></span>
+                                </div>
+                            </div>
+                            <div class="bpx-player-ctrl-subtitle-separator"></div>
+                            <div class="bpx-player-ctrl-subtitle-reset bui bui-button"><div class="bui-area bui-button-transparent">恢复默认设置</div></div>
+                        </div></div>
+        
+    </div>
+</div></div></div>
+            </div></div><div class="bpx-player-ctrl-btn bpx-player-ctrl-volume" role="button" aria-label="音量" tabindex="0">
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-volume-icon"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_94"><rect width="88" height="88" x="0" y="0"></rect></clipPath><clipPath id="__lottie_element_96"><path d="M0,0 L88,0 L88,88 L0,88z"></path></clipPath></defs><g clip-path="url(#__lottie_element_94)"><g clip-path="url(#__lottie_element_96)" transform="matrix(1,0,0,1,0,0)" opacity="1" style="display: block;"><g transform="matrix(1,0,0,1,28,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M15.5600004196167,-25.089000701904297 C15.850000381469727,-24.729000091552734 16,-24.288999557495117 16,-23.839000701904297 C16,-23.839000701904297 16,23.840999603271484 16,23.840999603271484 C16,24.94099998474121 15.100000381469727,25.840999603271484 14,25.840999603271484 C13.550000190734863,25.840999603271484 13.109999656677246,25.680999755859375 12.75,25.400999069213867 C12.75,25.400999069213867 -4,12.00100040435791 -4,12.00100040435791 C-4,12.00100040435791 -8,12.00100040435791 -8,12.00100040435791 C-12.420000076293945,12.00100040435791 -16,8.420999526977539 -16,4.000999927520752 C-16,4.000999927520752 -16,-3.999000072479248 -16,-3.999000072479248 C-16,-8.418999671936035 -12.420000076293945,-11.99899959564209 -8,-11.99899959564209 C-8,-11.99899959564209 -4,-11.99899959564209 -4,-11.99899959564209 C-4,-11.99899959564209 12.75,-25.39900016784668 12.75,-25.39900016784668 C13.609999656677246,-26.089000701904297 14.869999885559082,-25.948999404907227 15.5600004196167,-25.089000701904297z"></path></g></g><g style="display: none;"><g><path></path></g></g><g style="display: none;"><g><path></path></g></g><g style="display: none;"><g><path></path></g></g><g style="display: none;"><g><path></path></g></g><g transform="matrix(1,0,0,1,56,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-4,-13.859000205993652 C0.7799999713897705,-11.08899974822998 4,-5.919000148773193 4,0.0010000000474974513 C4,5.921000003814697 0.7799999713897705,11.090999603271484 -4,13.861000061035156 C-4,13.861000061035156 -4,-13.859000205993652 -4,-13.859000205993652z"></path></g></g><g transform="matrix(1,0,0,1,64.01399993896484,44.00699996948242)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-6.236000061035156,-28.895999908447266 C4.803999900817871,-23.615999221801758 11.984000205993652,-12.456000328063965 11.984000205993652,-0.006000000052154064 C11.984000205993652,12.454000473022461 4.794000148773193,23.624000549316406 -6.265999794006348,28.893999099731445 C-8.255999565124512,29.8439998626709 -10.645999908447266,29.003999710083008 -11.595999717712402,27.003999710083008 C-12.545999526977539,25.013999938964844 -11.696000099182129,22.624000549316406 -9.706000328063965,21.673999786376953 C-1.406000018119812,17.724000930786133 3.9839999675750732,9.343999862670898 3.9839999675750732,-0.006000000052154064 C3.9839999675750732,-9.345999717712402 -1.3960000276565552,-17.715999603271484 -9.675999641418457,-21.676000595092773 C-11.675999641418457,-22.625999450683594 -12.515999794006348,-25.016000747680664 -11.565999984741211,-27.006000518798828 C-10.616000175476074,-29.006000518798828 -8.22599983215332,-29.84600067138672 -6.236000061035156,-28.895999908447266z"></path></g></g></g></g></svg></span></div>
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-muted-icon" style="display: none;"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_122"><rect width="88" height="88" x="0" y="0"></rect></clipPath><filter id="__lottie_element_127" filterUnits="objectBoundingBox" x="0%" y="0%" width="100%" height="100%"><feComponentTransfer in="SourceGraphic"><feFuncA type="table" tableValues="1.0 0.0"></feFuncA></feComponentTransfer></filter><mask id="__lottie_element_126" mask-type="alpha"><g filter="url(#__lottie_element_127)"><rect width="88" height="88" x="0" y="0" fill="#ffffff" opacity="0"></rect><g transform="matrix(1,0,0,1,47.422000885009766,41.702999114990234)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-0.5,-0.5)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-33.94157409667969,-28.281574249267578 C-35.50258255004883,-29.84258270263672 -35.50258255004883,-32.377418518066406 -33.94157409667969,-33.93842697143555 C-33.94157409667969,-33.93842697143555 -33.93842697143555,-33.94157409667969 -33.93842697143555,-33.94157409667969 C-32.377418518066406,-35.50258255004883 -29.84258270263672,-35.50258255004883 -28.281574249267578,-33.94157409667969 C-28.281574249267578,-33.94157409667969 33.94157409667969,28.281574249267578 33.94157409667969,28.281574249267578 C35.50258255004883,29.84258270263672 35.50258255004883,32.377418518066406 33.94157409667969,33.93842697143555 C33.94157409667969,33.93842697143555 33.93842697143555,33.94157409667969 33.93842697143555,33.94157409667969 C32.377418518066406,35.50258255004883 29.84258270263672,35.50258255004883 28.281574249267578,33.94157409667969 C28.281574249267578,33.94157409667969 -33.94157409667969,-28.281574249267578 -33.94157409667969,-28.281574249267578z"></path></g></g></g></mask></defs><g clip-path="url(#__lottie_element_122)"><g mask="url(#__lottie_element_126)" style="display: block;"><g transform="matrix(1,0,0,1,44,44)" opacity="1"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-0.4399999976158142,-25.09600067138672 C-0.15000000596046448,-24.736000061035156 0,-24.29599952697754 0,-23.84600067138672 C0,-23.84600067138672 0,23.833999633789062 0,23.833999633789062 C0,24.93400001525879 -0.8999999761581421,25.833999633789062 -2,25.833999633789062 C-2.450000047683716,25.833999633789062 -2.890000104904175,25.673999786376953 -3.25,25.393999099731445 C-3.25,25.393999099731445 -20,11.994000434875488 -20,11.994000434875488 C-20,11.994000434875488 -24,11.994000434875488 -24,11.994000434875488 C-28.420000076293945,11.994000434875488 -32,8.413999557495117 -32,3.99399995803833 C-32,3.99399995803833 -32,-4.00600004196167 -32,-4.00600004196167 C-32,-8.425999641418457 -28.420000076293945,-12.005999565124512 -24,-12.005999565124512 C-24,-12.005999565124512 -20,-12.005999565124512 -20,-12.005999565124512 C-20,-12.005999565124512 -3.25,-25.4060001373291 -3.25,-25.4060001373291 C-2.390000104904175,-26.09600067138672 -1.1299999952316284,-25.95599937438965 -0.4399999976158142,-25.09600067138672z M13.777999877929688,-28.895999908447266 C24.81800079345703,-23.615999221801758 31.99799919128418,-12.456000328063965 31.99799919128418,-0.006000000052154064 C31.99799919128418,12.454000473022461 24.808000564575195,23.624000549316406 13.748000144958496,28.893999099731445 C11.758000373840332,29.8439998626709 9.368000030517578,29.003999710083008 8.418000221252441,27.003999710083008 C7.4679999351501465,25.013999938964844 8.317999839782715,22.624000549316406 10.307999610900879,21.673999786376953 C18.607999801635742,17.724000930786133 23.99799919128418,9.343999862670898 23.99799919128418,-0.006000000052154064 C23.99799919128418,-9.345999717712402 18.618000030517578,-17.715999603271484 10.338000297546387,-21.676000595092773 C8.338000297546387,-22.625999450683594 7.498000144958496,-25.016000747680664 8.447999954223633,-27.006000518798828 C9.39799976348877,-29.006000518798828 11.788000106811523,-29.84600067138672 13.777999877929688,-28.895999908447266z M8,-13.866000175476074 C12.779999732971191,-11.095999717712402 16,-5.926000118255615 16,-0.006000000052154064 C16,5.914000034332275 12.779999732971191,11.083999633789062 8,13.854000091552734 C8,13.854000091552734 8,-13.866000175476074 8,-13.866000175476074z"></path></g></g></g><g transform="matrix(1,0,0,1,41.172000885009766,46.827999114990234)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,-0.5,-0.5)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-33.94157409667969,-28.281574249267578 C-35.50258255004883,-29.84258270263672 -35.50258255004883,-32.377418518066406 -33.94157409667969,-33.93842697143555 C-33.94157409667969,-33.93842697143555 -33.93842697143555,-33.94157409667969 -33.93842697143555,-33.94157409667969 C-32.377418518066406,-35.50258255004883 -29.84258270263672,-35.50258255004883 -28.281574249267578,-33.94157409667969 C-28.281574249267578,-33.94157409667969 33.94157409667969,28.281574249267578 33.94157409667969,28.281574249267578 C35.50258255004883,29.84258270263672 35.50258255004883,32.377418518066406 33.94157409667969,33.93842697143555 C33.94157409667969,33.93842697143555 33.93842697143555,33.94157409667969 33.93842697143555,33.94157409667969 C32.377418518066406,35.50258255004883 29.84258270263672,35.50258255004883 28.281574249267578,33.94157409667969 C28.281574249267578,33.94157409667969 -33.94157409667969,-28.281574249267578 -33.94157409667969,-28.281574249267578z"></path></g></g></g></svg></span></div>
+                <div class="bpx-player-ctrl-volume-box">
+                    <div class="bpx-player-ctrl-volume-number">97</div>
+                    <div class="bpx-player-ctrl-volume-progress bui bui-slider"><div class="bui-area"><div class="bui-track
+             bui-track-vertical
+            
+            " style="">
+    
+        <div class="bui-bar-wrap">
+            
+            
+            <div class="bui-bar bui-bar-normal" role="progressbar" style="transform: scaleY(0.97);"></div>
+            
+        </div>
+    
+    
+    <div class="bui-thumb" style="left: -5px; transform: translateY(-46.56px);">
+        
+        
+        <div class="bui-thumb-dot" style=""></div>
+        
+    </div>
+</div></div></div>
+                </div>
+            </div><div class="bpx-player-ctrl-btn bpx-player-ctrl-setting" role="button" aria-label="设置" tabindex="0">
+                <div class="bpx-player-ctrl-btn-icon"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_134"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_134)"><g transform="matrix(1,0,0,1,44,43.875)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M0,8.125 C-4.420000076293945,8.125 -8,4.545000076293945 -8,0.125 C-8,-4.295000076293945 -4.420000076293945,-7.875 0,-7.875 C4.420000076293945,-7.875 8,-4.295000076293945 8,0.125 C8,4.545000076293945 4.420000076293945,8.125 0,8.125z M0,16.125 C8.84000015258789,16.125 16,8.96500015258789 16,0.125 C16,-8.71500015258789 8.84000015258789,-15.875 0,-15.875 C-8.84000015258789,-15.875 -16,-8.71500015258789 -16,0.125 C-16,8.96500015258789 -8.84000015258789,16.125 0,16.125z M4.539999961853027,27.51099967956543 C3.059999942779541,27.750999450683594 1.5499999523162842,27.871000289916992 0,27.871000289916992 C-1.5499999523162842,27.871000289916992 -3.059999942779541,27.750999450683594 -4.539999961853027,27.51099967956543 C-4.539999961853027,27.51099967956543 -8.699999809265137,32.56100082397461 -8.699999809265137,32.56100082397461 C-9.9399995803833,34.07099914550781 -12.100000381469727,34.46099853515625 -13.789999961853027,33.48099899291992 C-13.789999961853027,33.48099899291992 -21.780000686645508,28.871000289916992 -21.780000686645508,28.871000289916992 C-23.469999313354492,27.891000747680664 -24.209999084472656,25.83099937438965 -23.520000457763672,24.000999450683594 C-23.520000457763672,24.000999450683594 -21.290000915527344,18.06100082397461 -21.290000915527344,18.06100082397461 C-23.3799991607666,15.621000289916992 -25.049999237060547,12.810999870300293 -26.209999084472656,9.76099967956543 C-26.209999084472656,9.76099967956543 -32.65999984741211,8.680999755859375 -32.65999984741211,8.680999755859375 C-34.59000015258789,8.361000061035156 -36,6.690999984741211 -36,4.741000175476074 C-36,4.741000175476074 -36,-4.488999843597412 -36,-4.488999843597412 C-36,-6.439000129699707 -34.59000015258789,-8.109000205993652 -32.65999984741211,-8.428999900817871 C-32.65999984741211,-8.428999900817871 -26.399999618530273,-9.479000091552734 -26.399999618530273,-9.479000091552734 C-25.309999465942383,-12.559000015258789 -23.690000534057617,-15.388999938964844 -21.65999984741211,-17.868999481201172 C-21.65999984741211,-17.868999481201172 -23.959999084472656,-23.999000549316406 -23.959999084472656,-23.999000549316406 C-24.639999389648438,-25.839000701904297 -23.899999618530273,-27.888999938964844 -22.209999084472656,-28.868999481201172 C-22.209999084472656,-28.868999481201172 -14.220000267028809,-33.479000091552734 -14.220000267028809,-33.479000091552734 C-12.529999732971191,-34.45899963378906 -10.380000114440918,-34.069000244140625 -9.130000114440918,-32.558998107910156 C-9.130000114440918,-32.558998107910156 -5.099999904632568,-27.659000396728516 -5.099999904632568,-27.659000396728516 C-3.450000047683716,-27.9689998626709 -1.7400000095367432,-28.128999710083008 0,-28.128999710083008 C1.7400000095367432,-28.128999710083008 3.450000047683716,-27.9689998626709 5.099999904632568,-27.659000396728516 C5.099999904632568,-27.659000396728516 9.130000114440918,-32.558998107910156 9.130000114440918,-32.558998107910156 C10.380000114440918,-34.069000244140625 12.529999732971191,-34.45899963378906 14.220000267028809,-33.479000091552734 C14.220000267028809,-33.479000091552734 22.209999084472656,-28.868999481201172 22.209999084472656,-28.868999481201172 C23.899999618530273,-27.888999938964844 24.639999389648438,-25.839000701904297 23.959999084472656,-23.999000549316406 C23.959999084472656,-23.999000549316406 21.65999984741211,-17.868999481201172 21.65999984741211,-17.868999481201172 C23.690000534057617,-15.388999938964844 25.309999465942383,-12.559000015258789 26.399999618530273,-9.479000091552734 C26.399999618530273,-9.479000091552734 32.65999984741211,-8.428999900817871 32.65999984741211,-8.428999900817871 C34.59000015258789,-8.109000205993652 36,-6.439000129699707 36,-4.488999843597412 C36,-4.488999843597412 36,4.741000175476074 36,4.741000175476074 C36,6.690999984741211 34.59000015258789,8.361000061035156 32.65999984741211,8.680999755859375 C32.65999984741211,8.680999755859375 26.209999084472656,9.76099967956543 26.209999084472656,9.76099967956543 C25.049999237060547,12.810999870300293 23.3799991607666,15.621000289916992 21.290000915527344,18.06100082397461 C21.290000915527344,18.06100082397461 23.520000457763672,24.000999450683594 23.520000457763672,24.000999450683594 C24.209999084472656,25.83099937438965 23.469999313354492,27.891000747680664 21.780000686645508,28.871000289916992 C21.780000686645508,28.871000289916992 13.789999961853027,33.48099899291992 13.789999961853027,33.48099899291992 C12.100000381469727,34.46099853515625 9.9399995803833,34.07099914550781 8.699999809265137,32.56100082397461 C8.699999809265137,32.56100082397461 4.539999961853027,27.51099967956543 4.539999961853027,27.51099967956543z"></path></g></g></g></svg></span></div>
+                <div class="bpx-player-ctrl-setting-box">
+                    <div class="bpx-player-ctrl-setting-menu bui bui-panel bui-dark"><div class="bui-area"><div class="bui-panel-wrap" style="width: 132px; height: 140px;">
+    <div class="bui-panel-move" style="width: 418px;">
+        
+        <div class="bui-panel-item bui-panel-item-active" style="width: 132px; height: 140px;"><div class="bpx-player-ctrl-setting-menu-left">
+                            <div class="bpx-player-ctrl-setting-mirror bui bui-switch"><div class="bui-area"><input class="bui-switch-input" type="checkbox" aria-label="镜像画面">
+<label class="bui-switch-label">
+    <span class="bui-switch-name">镜像画面</span>
+    <span class="bui-switch-body">
+        <span class="bui-switch-dot">
+            <span></span>
+        </span>
+    </span>
+</label>
+</div></div>
+                            <div class="bpx-player-ctrl-setting-loop bui bui-switch"><div class="bui-area"><input class="bui-switch-input" type="checkbox" aria-label="单集循环">
+<label class="bui-switch-label">
+    <span class="bui-switch-name">单集循环</span>
+    <span class="bui-switch-body">
+        <span class="bui-switch-dot">
+            <span></span>
+        </span>
+    </span>
+</label>
+</div></div>
+                            <div class="bpx-player-ctrl-setting-autoplay bui bui-switch"><div class="bui-area"><input class="bui-switch-input" type="checkbox" checked="" aria-label="自动开播">
+<label class="bui-switch-label">
+    <span class="bui-switch-name">自动开播</span>
+    <span class="bui-switch-body">
+        <span class="bui-switch-dot">
+            <span></span>
+        </span>
+    </span>
+</label>
+</div></div>
+                            <div class="bpx-player-ctrl-setting-oped" style="display: none;"></div>
+                            <div class="bpx-player-ctrl-setting-more">
+                                <span class="bpx-player-ctrl-setting-more-text">更多播放设置</span>
+                                <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z"></path></svg></span>
+                            </div>
+                        </div></div>
+        
+        <div class="bui-panel-item" style="width: 286px; height: px;"><div class="bpx-player-ctrl-setting-menu-right">
+                            <div class="bpx-player-ctrl-setting-handoff">
+                                <div class="bpx-player-ctrl-setting-handoff-title">播放方式</div>
+                                <div class="bpx-player-ctrl-setting-handoff-content bui bui-radio bui-dark"><div class="bui-area"><div class="bui-radio-wrap bui-radio-button">
+    <div class="bui-radio-group" style="margin: 0 -4px;">
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="0" name="bui-radio1">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">自动切集</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="2" name="bui-radio1" checked="">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">播完暂停</span>
+        </span>
+    </label>
+    
+    </div>
+</div></div></div>
+                            </div>
+                            <div class="bpx-player-ctrl-setting-aspect">
+                                <div class="bpx-player-ctrl-setting-aspect-title">视频比例</div>
+                                <div class="bpx-player-ctrl-setting-aspect-content bui bui-radio bui-dark"><div class="bui-area"><div class="bui-radio-wrap bui-radio-button">
+    <div class="bui-radio-group" style="margin: 0 -4px;">
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="0:0" name="bui-radio2" checked="">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">自动</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="4:3" name="bui-radio2">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">4:3</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="16:9" name="bui-radio2">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">16:9 </span>
+        </span>
+    </label>
+    
+    </div>
+</div></div></div>
+                            </div>
+                            
+                                <div class="bpx-player-ctrl-setting-codec">
+                                    <div class="bpx-player-ctrl-setting-codec-title">播放策略</div>
+                                    <div class="bpx-player-ctrl-setting-codec-content bui bui-radio bui-dark"><div class="bui-area"><div class="bui-radio-wrap bui-radio-button">
+    <div class="bui-radio-group" style="margin: 0 -4px;">
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="0" name="bui-radio3" checked="">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">默认</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="3" name="bui-radio3">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">AV1</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="1" name="bui-radio3">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">HEVC</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="2" name="bui-radio3">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">AVC</span>
+        </span>
+    </label>
+    
+    </div>
+</div></div></div>
+                                </div>
+                                
+                            <div class="bpx-player-ctrl-setting-loudness">
+                                <div class="bpx-player-ctrl-setting-loudness-title">音量均衡</div>
+                                <div class="bpx-player-ctrl-setting-loudness-content bui bui-radio bui-dark"><div class="bui-area"><div class="bui-radio-wrap bui-radio-button">
+    <div class="bui-radio-group" style="margin: 0 -4px;">
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="1" name="bui-radio4">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">标准</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="2" name="bui-radio4">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">高动态</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="0" name="bui-radio4" checked="">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">关闭</span>
+        </span>
+    </label>
+    
+    </div>
+</div></div></div>
+                            </div>
+                            <div class="bpx-player-ctrl-setting-others">
+                                <div class="bpx-player-ctrl-setting-others-title">其他设置</div>
+                                <div class="bpx-player-ctrl-setting-others-content">
+                                    <div class="bpx-player-ctrl-setting-checkbox bpx-player-ctrl-setting-blackgap bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" checked="" aria-label="隐藏黑边">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">隐藏黑边</span>
+</label></div></div>
+                                    <div class="bpx-player-ctrl-setting-checkbox bpx-player-ctrl-setting-lightoff bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" aria-label="关灯模式">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">关灯模式</span>
+</label></div></div>
+                                    <div class="bpx-player-ctrl-setting-checkbox bpx-player-ctrl-setting-widesave" style="display: none;"></div>
+                                    <div class="bpx-player-ctrl-setting-checkbox bpx-player-ctrl-setting-panoram" style="display: none;"></div>
+                                    <div class="bpx-player-ctrl-setting-checkbox bpx-player-ctrl-setting-highenergy" style="display: none;"></div>
+
+                                </div>
+                            </div>
+                        </div></div>
+        
+    </div>
+</div></div></div>
+                </div>
+            </div><div class="bpx-player-ctrl-btn bpx-player-ctrl-pip" role="button" aria-label="画中画" tabindex="0">
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-pip-enter"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_139"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_139)"><g transform="matrix(1,0,0,1,41,41)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M26,-28 C30.420000076293945,-28 34,-24.420000076293945 34,-20 C34,-20 34,4 34,4 C34,4 26,4 26,4 C26,4 26,-16.799999237060547 26,-16.799999237060547 C26,-18.56999969482422 24.56999969482422,-20 22.799999237060547,-20 C22.799999237060547,-20 -22.799999237060547,-20 -22.799999237060547,-20 C-24.510000228881836,-20 -25.899999618530273,-18.65999984741211 -25.989999771118164,-16.979999542236328 C-25.989999771118164,-16.979999542236328 -26,-16.799999237060547 -26,-16.799999237060547 C-26,-16.799999237060547 -26,16.799999237060547 -26,16.799999237060547 C-26,18.510000228881836 -24.65999984741211,19.899999618530273 -22.979999542236328,19.989999771118164 C-22.979999542236328,19.989999771118164 -22.799999237060547,20 -22.799999237060547,20 C-22.799999237060547,20 2,20 2,20 C2,20 2,28 2,28 C2,28 -26,28 -26,28 C-30.420000076293945,28 -34,24.420000076293945 -34,20 C-34,20 -34,-20 -34,-20 C-34,-24.420000076293945 -30.420000076293945,-28 -26,-28 C-26,-28 26,-28 26,-28z"></path></g></g><g transform="matrix(1,0,0,1,67,65)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M16,-8 C16,-8 16,8 16,8 C16,10.208999633789062 14.208999633789062,12 12,12 C12,12 -12,12 -12,12 C-14.208999633789062,12 -16,10.208999633789062 -16,8 C-16,8 -16,-8 -16,-8 C-16,-10.208999633789062 -14.208999633789062,-12 -12,-12 C-12,-12 12,-12 12,-12 C14.208999633789062,-12 16,-10.208999633789062 16,-8z"></path></g></g><g style="display: none;"><g><path></path></g></g></g></svg></span></div>
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-pip-leave"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_150"><rect width="88" height="88" x="0" y="0"></rect></clipPath><filter id="__lottie_element_155" filterUnits="objectBoundingBox" x="0%" y="0%" width="100%" height="100%"><feComponentTransfer in="SourceGraphic"><feFuncA type="table" tableValues="1.0 0.0"></feFuncA></feComponentTransfer></filter><mask id="__lottie_element_154" mask-type="alpha"><g filter="url(#__lottie_element_155)"><rect width="88" height="88" x="0" y="0" fill="#ffffff" opacity="0"></rect><g style="display: none;"><g><path></path></g></g></g></mask></defs><g clip-path="url(#__lottie_element_150)"><g mask="url(#__lottie_element_154)" style="display: block;"><g transform="matrix(1,0,0,1,68,68)" opacity="1"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M16,-8 C16,-8 16,8 16,8 C16,10.208999633789062 14.208999633789062,12 12,12 C12,12 -12,12 -12,12 C-14.208999633789062,12 -16,10.208999633789062 -16,8 C-16,8 -16,-8 -16,-8 C-16,-10.208999633789062 -14.208999633789062,-12 -12,-12 C-12,-12 12,-12 12,-12 C14.208999633789062,-12 16,-10.208999633789062 16,-8z"></path></g></g></g><g transform="matrix(1,0,0,1,42,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M26,-28 C30.420000076293945,-28 34,-24.420000076293945 34,-20 C34,-20 34,4 34,4 C34,4 26,4 26,4 C26,4 26,-16.799999237060547 26,-16.799999237060547 C26,-18.56999969482422 24.56999969482422,-20 22.799999237060547,-20 C22.799999237060547,-20 -22.799999237060547,-20 -22.799999237060547,-20 C-24.510000228881836,-20 -25.899999618530273,-18.65999984741211 -25.989999771118164,-16.979999542236328 C-25.989999771118164,-16.979999542236328 -26,-16.799999237060547 -26,-16.799999237060547 C-26,-16.799999237060547 -26,16.799999237060547 -26,16.799999237060547 C-26,18.510000228881836 -24.65999984741211,19.899999618530273 -22.979999542236328,19.989999771118164 C-22.979999542236328,19.989999771118164 -22.799999237060547,20 -22.799999237060547,20 C-22.799999237060547,20 2,20 2,20 C2,20 2,28 2,28 C2,28 -26,28 -26,28 C-30.420000076293945,28 -34,24.420000076293945 -34,20 C-34,20 -34,-20 -34,-20 C-34,-24.420000076293945 -30.420000076293945,-28 -26,-28 C-26,-28 26,-28 26,-28z"></path></g></g></g></svg></span></div>
+            </div><div class="bpx-player-ctrl-btn bpx-player-ctrl-wide" role="button" aria-label="宽屏" tabindex="0">
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-wide-enter"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_162"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_162)"><g transform="matrix(1,0,0,1,44,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M12.437999725341797,-12.70199966430664 C12.437999725341797,-12.70199966430664 9.618000030517578,-9.881999969482422 9.618000030517578,-9.881999969482422 C8.82800006866455,-9.092000007629395 8.82800006866455,-7.831999778747559 9.618000030517578,-7.052000045776367 C9.618000030517578,-7.052000045776367 16.687999725341797,0.017999999225139618 16.687999725341797,0.017999999225139618 C16.687999725341797,0.017999999225139618 9.618000030517578,7.0879998207092285 9.618000030517578,7.0879998207092285 C8.82800006866455,7.877999782562256 8.82800006866455,9.137999534606934 9.618000030517578,9.918000221252441 C9.618000030517578,9.918000221252441 12.437999725341797,12.748000144958496 12.437999725341797,12.748000144958496 C13.227999687194824,13.527999877929688 14.48799991607666,13.527999877929688 15.267999649047852,12.748000144958496 C15.267999649047852,12.748000144958496 26.58799934387207,1.437999963760376 26.58799934387207,1.437999963760376 C27.368000030517578,0.6579999923706055 27.368000030517578,-0.6119999885559082 26.58799934387207,-1.3919999599456787 C26.58799934387207,-1.3919999599456787 15.267999649047852,-12.70199966430664 15.267999649047852,-12.70199966430664 C14.48799991607666,-13.491999626159668 13.227999687194824,-13.491999626159668 12.437999725341797,-12.70199966430664z M-12.442000389099121,-12.70199966430664 C-13.182000160217285,-13.442000389099121 -14.362000465393066,-13.482000350952148 -15.142000198364258,-12.821999549865723 C-15.142000198364258,-12.821999549865723 -15.272000312805176,-12.70199966430664 -15.272000312805176,-12.70199966430664 C-15.272000312805176,-12.70199966430664 -26.582000732421875,-1.3919999599456787 -26.582000732421875,-1.3919999599456787 C-27.32200050354004,-0.6520000100135803 -27.36199951171875,0.5180000066757202 -26.70199966430664,1.3079999685287476 C-26.70199966430664,1.3079999685287476 -26.582000732421875,1.437999963760376 -26.582000732421875,1.437999963760376 C-26.582000732421875,1.437999963760376 -15.272000312805176,12.748000144958496 -15.272000312805176,12.748000144958496 C-14.531999588012695,13.48799991607666 -13.362000465393066,13.527999877929688 -12.571999549865723,12.868000030517578 C-12.571999549865723,12.868000030517578 -12.442000389099121,12.748000144958496 -12.442000389099121,12.748000144958496 C-12.442000389099121,12.748000144958496 -9.612000465393066,9.918000221252441 -9.612000465393066,9.918000221252441 C-8.871999740600586,9.178000450134277 -8.831999778747559,8.008000373840332 -9.501999855041504,7.2179999351501465 C-9.501999855041504,7.2179999351501465 -9.612000465393066,7.0879998207092285 -9.612000465393066,7.0879998207092285 C-9.612000465393066,7.0879998207092285 -16.68199920654297,0.017999999225139618 -16.68199920654297,0.017999999225139618 C-16.68199920654297,0.017999999225139618 -9.612000465393066,-7.052000045776367 -9.612000465393066,-7.052000045776367 C-8.871999740600586,-7.791999816894531 -8.831999778747559,-8.961999893188477 -9.501999855041504,-9.751999855041504 C-9.501999855041504,-9.751999855041504 -9.612000465393066,-9.881999969482422 -9.612000465393066,-9.881999969482422 C-9.612000465393066,-9.881999969482422 -12.442000389099121,-12.70199966430664 -12.442000389099121,-12.70199966430664z M28,-28 C32.41999816894531,-28 36,-24.420000076293945 36,-20 C36,-20 36,20 36,20 C36,24.420000076293945 32.41999816894531,28 28,28 C28,28 -28,28 -28,28 C-32.41999816894531,28 -36,24.420000076293945 -36,20 C-36,20 -36,-20 -36,-20 C-36,-24.420000076293945 -32.41999816894531,-28 -28,-28 C-28,-28 28,-28 28,-28z"></path></g></g></g></svg></span></div>
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-wide-leave"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_167"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_167)"><g transform="matrix(1,0,0,1,44,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M19.757999420166016,-12.70199966430664 C19.01799964904785,-13.442000389099121 17.83799934387207,-13.482000350952148 17.058000564575195,-12.821999549865723 C17.058000564575195,-12.821999549865723 16.92799949645996,-12.70199966430664 16.92799949645996,-12.70199966430664 C16.92799949645996,-12.70199966430664 5.618000030517578,-1.3919999599456787 5.618000030517578,-1.3919999599456787 C4.877999782562256,-0.6520000100135803 4.8379998207092285,0.5180000066757202 5.498000144958496,1.3079999685287476 C5.498000144958496,1.3079999685287476 5.618000030517578,1.437999963760376 5.618000030517578,1.437999963760376 C5.618000030517578,1.437999963760376 16.92799949645996,12.748000144958496 16.92799949645996,12.748000144958496 C17.667999267578125,13.48799991607666 18.83799934387207,13.527999877929688 19.628000259399414,12.868000030517578 C19.628000259399414,12.868000030517578 19.757999420166016,12.748000144958496 19.757999420166016,12.748000144958496 C19.757999420166016,12.748000144958496 22.58799934387207,9.918000221252441 22.58799934387207,9.918000221252441 C23.327999114990234,9.178000450134277 23.368000030517578,8.008000373840332 22.697999954223633,7.2179999351501465 C22.697999954223633,7.2179999351501465 22.58799934387207,7.0879998207092285 22.58799934387207,7.0879998207092285 C22.58799934387207,7.0879998207092285 15.517999649047852,0.017999999225139618 15.517999649047852,0.017999999225139618 C15.517999649047852,0.017999999225139618 22.58799934387207,-7.052000045776367 22.58799934387207,-7.052000045776367 C23.327999114990234,-7.791999816894531 23.368000030517578,-8.961999893188477 22.697999954223633,-9.751999855041504 C22.697999954223633,-9.751999855041504 22.58799934387207,-9.881999969482422 22.58799934387207,-9.881999969482422 C22.58799934387207,-9.881999969482422 19.757999420166016,-12.70199966430664 19.757999420166016,-12.70199966430664z M-19.761999130249023,-12.70199966430664 C-19.761999130249023,-12.70199966430664 -22.582000732421875,-9.881999969482422 -22.582000732421875,-9.881999969482422 C-23.371999740600586,-9.092000007629395 -23.371999740600586,-7.831999778747559 -22.582000732421875,-7.052000045776367 C-22.582000732421875,-7.052000045776367 -15.51200008392334,0.017999999225139618 -15.51200008392334,0.017999999225139618 C-15.51200008392334,0.017999999225139618 -22.582000732421875,7.0879998207092285 -22.582000732421875,7.0879998207092285 C-23.371999740600586,7.877999782562256 -23.371999740600586,9.137999534606934 -22.582000732421875,9.918000221252441 C-22.582000732421875,9.918000221252441 -19.761999130249023,12.748000144958496 -19.761999130249023,12.748000144958496 C-18.972000122070312,13.527999877929688 -17.711999893188477,13.527999877929688 -16.93199920654297,12.748000144958496 C-16.93199920654297,12.748000144958496 -5.611999988555908,1.437999963760376 -5.611999988555908,1.437999963760376 C-4.831999778747559,0.6579999923706055 -4.831999778747559,-0.6119999885559082 -5.611999988555908,-1.3919999599456787 C-5.611999988555908,-1.3919999599456787 -16.93199920654297,-12.70199966430664 -16.93199920654297,-12.70199966430664 C-17.711999893188477,-13.491999626159668 -18.972000122070312,-13.491999626159668 -19.761999130249023,-12.70199966430664z M28,-28 C32.41999816894531,-28 36,-24.420000076293945 36,-20 C36,-20 36,20 36,20 C36,24.420000076293945 32.41999816894531,28 28,28 C28,28 -28,28 -28,28 C-32.41999816894531,28 -36,24.420000076293945 -36,20 C-36,20 -36,-20 -36,-20 C-36,-24.420000076293945 -32.41999816894531,-28 -28,-28 C-28,-28 28,-28 28,-28z"></path></g></g></g></svg></span></div>
+            </div><div class="bpx-player-ctrl-btn bpx-player-ctrl-web" role="button" aria-label="网页全屏" tabindex="0">
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-web-enter"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_172"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_172)"><g transform="matrix(1,0,0,1,44,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-14,-20 C-14,-20 -26,-20 -26,-20 C-27.049999237060547,-20 -27.920000076293945,-19.18000030517578 -27.989999771118164,-18.149999618530273 C-27.989999771118164,-18.149999618530273 -28,-18 -28,-18 C-28,-18 -28,-6 -28,-6 C-28,-4.949999809265137 -27.18000030517578,-4.079999923706055 -26.149999618530273,-4.010000228881836 C-26.149999618530273,-4.010000228881836 -26,-4 -26,-4 C-26,-4 -22,-4 -22,-4 C-20.950000762939453,-4 -20.079999923706055,-4.820000171661377 -20.010000228881836,-5.849999904632568 C-20.010000228881836,-5.849999904632568 -20,-6 -20,-6 C-20,-6 -20,-12 -20,-12 C-20,-12 -14,-12 -14,-12 C-12.949999809265137,-12 -12.079999923706055,-12.819999694824219 -12.010000228881836,-13.850000381469727 C-12.010000228881836,-13.850000381469727 -12,-14 -12,-14 C-12,-14 -12,-18 -12,-18 C-12,-19.049999237060547 -12.819999694824219,-19.920000076293945 -13.850000381469727,-19.989999771118164 C-13.850000381469727,-19.989999771118164 -14,-20 -14,-20z M26,-20 C26,-20 14,-20 14,-20 C12.949999809265137,-20 12.079999923706055,-19.18000030517578 12.010000228881836,-18.149999618530273 C12.010000228881836,-18.149999618530273 12,-18 12,-18 C12,-18 12,-14 12,-14 C12,-12.949999809265137 12.819999694824219,-12.079999923706055 13.850000381469727,-12.010000228881836 C13.850000381469727,-12.010000228881836 14,-12 14,-12 C14,-12 20,-12 20,-12 C20,-12 20,-6 20,-6 C20,-4.949999809265137 20.81999969482422,-4.079999923706055 21.850000381469727,-4.010000228881836 C21.850000381469727,-4.010000228881836 22,-4 22,-4 C22,-4 26,-4 26,-4 C27.049999237060547,-4 27.920000076293945,-4.820000171661377 27.989999771118164,-5.849999904632568 C27.989999771118164,-5.849999904632568 28,-6 28,-6 C28,-6 28,-18 28,-18 C28,-19.049999237060547 27.18000030517578,-19.920000076293945 26.149999618530273,-19.989999771118164 C26.149999618530273,-19.989999771118164 26,-20 26,-20z M-22,4 C-22,4 -26,4 -26,4 C-27.049999237060547,4 -27.920000076293945,4.820000171661377 -27.989999771118164,5.849999904632568 C-27.989999771118164,5.849999904632568 -28,6 -28,6 C-28,6 -28,18 -28,18 C-28,19.049999237060547 -27.18000030517578,19.920000076293945 -26.149999618530273,19.989999771118164 C-26.149999618530273,19.989999771118164 -26,20 -26,20 C-26,20 -14,20 -14,20 C-12.949999809265137,20 -12.079999923706055,19.18000030517578 -12.010000228881836,18.149999618530273 C-12.010000228881836,18.149999618530273 -12,18 -12,18 C-12,18 -12,14 -12,14 C-12,12.949999809265137 -12.819999694824219,12.079999923706055 -13.850000381469727,12.010000228881836 C-13.850000381469727,12.010000228881836 -14,12 -14,12 C-14,12 -20,12 -20,12 C-20,12 -20,6 -20,6 C-20,4.949999809265137 -20.81999969482422,4.079999923706055 -21.850000381469727,4.010000228881836 C-21.850000381469727,4.010000228881836 -22,4 -22,4z M26,4 C26,4 22,4 22,4 C20.950000762939453,4 20.079999923706055,4.820000171661377 20.010000228881836,5.849999904632568 C20.010000228881836,5.849999904632568 20,6 20,6 C20,6 20,12 20,12 C20,12 14,12 14,12 C12.949999809265137,12 12.079999923706055,12.819999694824219 12.010000228881836,13.850000381469727 C12.010000228881836,13.850000381469727 12,14 12,14 C12,14 12,18 12,18 C12,19.049999237060547 12.819999694824219,19.920000076293945 13.850000381469727,19.989999771118164 C13.850000381469727,19.989999771118164 14,20 14,20 C14,20 26,20 26,20 C27.049999237060547,20 27.920000076293945,19.18000030517578 27.989999771118164,18.149999618530273 C27.989999771118164,18.149999618530273 28,18 28,18 C28,18 28,6 28,6 C28,4.949999809265137 27.18000030517578,4.079999923706055 26.149999618530273,4.010000228881836 C26.149999618530273,4.010000228881836 26,4 26,4z M28,-28 C32.41999816894531,-28 36,-24.420000076293945 36,-20 C36,-20 36,20 36,20 C36,24.420000076293945 32.41999816894531,28 28,28 C28,28 -28,28 -28,28 C-32.41999816894531,28 -36,24.420000076293945 -36,20 C-36,20 -36,-20 -36,-20 C-36,-24.420000076293945 -32.41999816894531,-28 -28,-28 C-28,-28 28,-28 28,-28z"></path></g></g></g></svg></span></div>
+                <div class="bpx-player-ctrl-btn-icon bpx-player-ctrl-web-leave"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_177"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_177)"><g transform="matrix(1,0,0,1,44,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-14,-20 C-14,-20 -18,-20 -18,-20 C-19.049999237060547,-20 -19.920000076293945,-19.18000030517578 -19.989999771118164,-18.149999618530273 C-19.989999771118164,-18.149999618530273 -20,-18 -20,-18 C-20,-18 -20,-12 -20,-12 C-20,-12 -26,-12 -26,-12 C-27.049999237060547,-12 -27.920000076293945,-11.180000305175781 -27.989999771118164,-10.149999618530273 C-27.989999771118164,-10.149999618530273 -28,-10 -28,-10 C-28,-10 -28,-6 -28,-6 C-28,-4.949999809265137 -27.18000030517578,-4.079999923706055 -26.149999618530273,-4.010000228881836 C-26.149999618530273,-4.010000228881836 -26,-4 -26,-4 C-26,-4 -14,-4 -14,-4 C-12.949999809265137,-4 -12.079999923706055,-4.820000171661377 -12.010000228881836,-5.849999904632568 C-12.010000228881836,-5.849999904632568 -12,-6 -12,-6 C-12,-6 -12,-18 -12,-18 C-12,-19.049999237060547 -12.819999694824219,-19.920000076293945 -13.850000381469727,-19.989999771118164 C-13.850000381469727,-19.989999771118164 -14,-20 -14,-20z M18,-20 C18,-20 14,-20 14,-20 C12.949999809265137,-20 12.079999923706055,-19.18000030517578 12.010000228881836,-18.149999618530273 C12.010000228881836,-18.149999618530273 12,-18 12,-18 C12,-18 12,-6 12,-6 C12,-4.949999809265137 12.819999694824219,-4.079999923706055 13.850000381469727,-4.010000228881836 C13.850000381469727,-4.010000228881836 14,-4 14,-4 C14,-4 26,-4 26,-4 C27.049999237060547,-4 27.920000076293945,-4.820000171661377 27.989999771118164,-5.849999904632568 C27.989999771118164,-5.849999904632568 28,-6 28,-6 C28,-6 28,-10 28,-10 C28,-11.050000190734863 27.18000030517578,-11.920000076293945 26.149999618530273,-11.989999771118164 C26.149999618530273,-11.989999771118164 26,-12 26,-12 C26,-12 20,-12 20,-12 C20,-12 20,-18 20,-18 C20,-19.049999237060547 19.18000030517578,-19.920000076293945 18.149999618530273,-19.989999771118164 C18.149999618530273,-19.989999771118164 18,-20 18,-20z M-14,4 C-14,4 -26,4 -26,4 C-27.049999237060547,4 -27.920000076293945,4.820000171661377 -27.989999771118164,5.849999904632568 C-27.989999771118164,5.849999904632568 -28,6 -28,6 C-28,6 -28,10 -28,10 C-28,11.050000190734863 -27.18000030517578,11.920000076293945 -26.149999618530273,11.989999771118164 C-26.149999618530273,11.989999771118164 -26,12 -26,12 C-26,12 -20,12 -20,12 C-20,12 -20,18 -20,18 C-20,19.049999237060547 -19.18000030517578,19.920000076293945 -18.149999618530273,19.989999771118164 C-18.149999618530273,19.989999771118164 -18,20 -18,20 C-18,20 -14,20 -14,20 C-12.949999809265137,20 -12.079999923706055,19.18000030517578 -12.010000228881836,18.149999618530273 C-12.010000228881836,18.149999618530273 -12,18 -12,18 C-12,18 -12,6 -12,6 C-12,4.949999809265137 -12.819999694824219,4.079999923706055 -13.850000381469727,4.010000228881836 C-13.850000381469727,4.010000228881836 -14,4 -14,4z M26,4 C26,4 14,4 14,4 C12.949999809265137,4 12.079999923706055,4.820000171661377 12.010000228881836,5.849999904632568 C12.010000228881836,5.849999904632568 12,6 12,6 C12,6 12,18 12,18 C12,19.049999237060547 12.819999694824219,19.920000076293945 13.850000381469727,19.989999771118164 C13.850000381469727,19.989999771118164 14,20 14,20 C14,20 18,20 18,20 C19.049999237060547,20 19.920000076293945,19.18000030517578 19.989999771118164,18.149999618530273 C19.989999771118164,18.149999618530273 20,18 20,18 C20,18 20,12 20,12 C20,12 26,12 26,12 C27.049999237060547,12 27.920000076293945,11.180000305175781 27.989999771118164,10.149999618530273 C27.989999771118164,10.149999618530273 28,10 28,10 C28,10 28,6 28,6 C28,4.949999809265137 27.18000030517578,4.079999923706055 26.149999618530273,4.010000228881836 C26.149999618530273,4.010000228881836 26,4 26,4z M28,-28 C32.41999816894531,-28 36,-24.420000076293945 36,-20 C36,-20 36,20 36,20 C36,24.420000076293945 32.41999816894531,28 28,28 C28,28 -28,28 -28,28 C-32.41999816894531,28 -36,24.420000076293945 -36,20 C-36,20 -36,-20 -36,-20 C-36,-24.420000076293945 -32.41999816894531,-28 -28,-28 C-28,-28 28,-28 28,-28z"></path></g></g></g></svg></span></div>
+            </div><div class="bpx-player-ctrl-btn bpx-player-ctrl-full" role="button" aria-label="全屏" tabindex="0">
+                <div class="bpx-player-ctrl-btn-icon"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; transform: translate3d(0px, 0px, 0px);"><defs><clipPath id="__lottie_element_182"><rect width="88" height="88" x="0" y="0"></rect></clipPath></defs><g clip-path="url(#__lottie_element_182)"><g transform="matrix(1,0,0,1,44,74.22000122070312)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M19.219999313354492,0.2199999988079071 C7.480000019073486,7.630000114440918 -7.480000019073486,7.630000114440918 -19.219999313354492,0.2199999988079071 C-19.219999313354492,0.2199999988079071 -16.219999313354492,-5.78000020980835 -16.219999313354492,-5.78000020980835 C-6.389999866485596,0.75 6.409999847412109,0.75 16.239999771118164,-5.78000020980835 C16.239999771118164,-5.78000020980835 19.219999313354492,0.2199999988079071 19.219999313354492,0.2199999988079071z"></path></g></g><g transform="matrix(1,0,0,1,68.58000183105469,27.895000457763672)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M11.420000076293945,16.104999542236328 C11.420000076293945,16.104999542236328 4.78000020980835,16.104999542236328 4.78000020980835,16.104999542236328 C4.78000020980835,16.104999542236328 4.78000020980835,14.635000228881836 4.78000020980835,14.635000228881836 C4.25,4.054999828338623 -1.940000057220459,-5.425000190734863 -11.420000076293945,-10.164999961853027 C-11.420000076293945,-10.164999961853027 -8.479999542236328,-16.104999542236328 -8.479999542236328,-16.104999542236328 C3.7200000286102295,-10.005000114440918 11.420000076293945,2.4649999141693115 11.420000076293945,16.104999542236328 C11.420000076293945,16.104999542236328 11.420000076293945,16.104999542236328 11.420000076293945,16.104999542236328z"></path></g></g><g transform="matrix(1,0,0,1,19.450000762939453,27.895000457763672)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-4.809999942779541,16.104999542236328 C-4.809999942779541,16.104999542236328 -11.449999809265137,16.104999542236328 -11.449999809265137,16.104999542236328 C-11.449999809265137,2.4649999141693115 -3.75,-10.005000114440918 8.449999809265137,-16.104999542236328 C8.449999809265137,-16.104999542236328 11.449999809265137,-10.164999961853027 11.449999809265137,-10.164999961853027 C1.4900000095367432,-5.204999923706055 -4.809999942779541,4.974999904632568 -4.809999942779541,16.104999542236328 C-4.809999942779541,16.104999542236328 -4.809999942779541,16.104999542236328 -4.809999942779541,16.104999542236328z"></path></g></g><g transform="matrix(1,0,0,1,44.0099983215332,65.96499633789062)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-0.009999999776482582,5.34499979019165 C-5.46999979019165,5.355000019073486 -10.800000190734863,3.7149999141693115 -15.319999694824219,0.6549999713897705 C-15.319999694824219,0.6549999713897705 -12.319999694824219,-5.34499979019165 -12.319999694824219,-5.34499979019165 C-5,0.08500000089406967 5,0.08500000089406967 12.319999694824219,-5.34499979019165 C12.319999694824219,-5.34499979019165 15.319999694824219,0.6549999713897705 15.319999694824219,0.6549999713897705 C10.800000190734863,3.7249999046325684 5.460000038146973,5.355000019073486 -0.009999999776482582,5.34499979019165z"></path></g></g><g transform="matrix(1,0,0,1,62.275001525878906,31.780000686645508)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M9.015000343322754,10.850000381469727 C9.015000343322754,10.850000381469727 9.015000343322754,12.220000267028809 9.015000343322754,12.220000267028809 C9.015000343322754,12.220000267028809 2.434999942779541,12.220000267028809 2.434999942779541,12.220000267028809 C2.434999942779541,12.220000267028809 2.434999942779541,11.220000267028809 2.434999942779541,11.220000267028809 C2.075000047683716,3.740000009536743 -2.305000066757202,-2.9700000286102295 -9.015000343322754,-6.309999942779541 C-9.015000343322754,-6.309999942779541 -6.014999866485596,-12.220000267028809 -6.014999866485596,-12.220000267028809 C-6.014999866485596,-12.220000267028809 -6.014999866485596,-12.220000267028809 -6.014999866485596,-12.220000267028809 C2.7850000858306885,-7.800000190734863 8.524999618530273,1.0099999904632568 9.015000343322754,10.850000381469727 C9.015000343322754,10.850000381469727 9.015000343322754,10.850000381469727 9.015000343322754,10.850000381469727z"></path></g></g><g transform="matrix(1,0,0,1,25.729999542236328,31.780000686645508)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M-2.440000057220459,12.220000267028809 C-2.440000057220459,12.220000267028809 -9.050000190734863,12.220000267028809 -9.050000190734863,12.220000267028809 C-9.050000190734863,1.8700000047683716 -3.2100000381469727,-7.590000152587891 6.050000190734863,-12.220000267028809 C6.050000190734863,-12.220000267028809 9.050000190734863,-6.309999942779541 9.050000190734863,-6.309999942779541 C2.0199999809265137,-2.809999942779541 -2.430000066757202,4.360000133514404 -2.440000057220459,12.220000267028809 C-2.440000057220459,12.220000267028809 -2.440000057220459,12.220000267028809 -2.440000057220459,12.220000267028809z"></path></g></g><g transform="matrix(1,0,0,1,44,57.654998779296875)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M0,4.974999904632568 C-4.110000133514404,4.994999885559082 -8.119999885559082,3.6449999809265137 -11.380000114440918,1.1349999904632568 C-11.380000114440918,1.1349999904632568 -8.319999694824219,-4.974999904632568 -8.319999694824219,-4.974999904632568 C-3.6700000762939453,-0.5049999952316284 3.6700000762939453,-0.5049999952316284 8.319999694824219,-4.974999904632568 C8.319999694824219,-4.974999904632568 11.380000114440918,1.1349999904632568 11.380000114440918,1.1349999904632568 C8.109999656677246,3.634999990463257 4.110000133514404,4.985000133514404 0,4.974999904632568 C0,4.974999904632568 0,4.974999904632568 0,4.974999904632568z"></path></g></g><g transform="matrix(1,0,0,1,55.9900016784668,35.665000915527344)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M6.619999885559082,7.40500020980835 C6.619999885559082,7.40500020980835 6.619999885559082,8.335000038146973 6.619999885559082,8.335000038146973 C6.619999885559082,8.335000038146973 0.009999999776482582,8.335000038146973 0.009999999776482582,8.335000038146973 C0.009999999776482582,3.7850000858306885 -2.549999952316284,-0.375 -6.619999885559082,-2.4049999713897705 C-6.619999885559082,-2.4049999713897705 -3.619999885559082,-8.335000038146973 -3.619999885559082,-8.335000038146973 C2.380000114440918,-5.324999809265137 6.300000190734863,0.6949999928474426 6.619999885559082,7.40500020980835 C6.619999885559082,7.40500020980835 6.619999885559082,7.40500020980835 6.619999885559082,7.40500020980835z"></path></g></g><g transform="matrix(1,0,0,1,31.9950008392334,35.665000915527344)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M6.635000228881836,-2.4049999713897705 C2.565000057220459,-0.375 0.004999999888241291,3.7850000858306885 0.004999999888241291,8.335000038146973 C0.004999999888241291,8.335000038146973 -6.635000228881836,8.335000038146973 -6.635000228881836,8.335000038146973 C-6.635000228881836,1.274999976158142 -2.6449999809265137,-5.184999942779541 3.674999952316284,-8.335000038146973 C3.674999952316284,-8.335000038146973 6.635000228881836,-2.4049999713897705 6.635000228881836,-2.4049999713897705z"></path></g></g><g transform="matrix(1,0,0,1,44,66.322998046875)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M8.319000244140625,-13.677000045776367 C8.319000244140625,-13.677000045776367 19.2189998626709,8.123000144958496 19.2189998626709,8.123000144958496 C13.659000396728516,11.642999649047852 7.068999767303467,13.67300033569336 -0.0010000000474974513,13.67300033569336 C-7.071000099182129,13.67300033569336 -13.66100025177002,11.642999649047852 -19.22100067138672,8.123000144958496 C-19.22100067138672,8.123000144958496 -8.321000099182129,-13.677000045776367 -8.321000099182129,-13.677000045776367 C-6.160999774932861,-11.597000122070312 -3.2309999465942383,-10.32699966430664 -0.0010000000474974513,-10.32699966430664 C3.2290000915527344,-10.32699966430664 6.169000148773193,-11.597000122070312 8.319000244140625,-13.677000045776367z"></path></g></g><g transform="matrix(1,0,0,1,64.68399810791016,27.89699935913086)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M15.314000129699707,16.10700035095215 C15.314000129699707,16.10700035095215 -8.685999870300293,16.10700035095215 -8.685999870300293,16.10700035095215 C-8.685999870300293,11.406999588012695 -11.38599967956543,7.336999893188477 -15.315999984741211,5.367000102996826 C-15.315999984741211,5.367000102996826 -4.576000213623047,-16.10300064086914 -4.576000213623047,-16.10300064086914 C7.214000225067139,-10.192999839782715 15.314000129699707,2.006999969482422 15.314000129699707,16.10700035095215z"></path></g></g><g transform="matrix(1,0,0,1,23.31599998474121,27.89699935913086)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M4.584000110626221,-16.10300064086914 C4.584000110626221,-16.10300064086914 15.314000129699707,5.367000102996826 15.314000129699707,5.367000102996826 C11.383999824523926,7.336999893188477 8.684000015258789,11.406999588012695 8.684000015258789,16.10700035095215 C8.684000015258789,16.10700035095215 -15.315999984741211,16.10700035095215 -15.315999984741211,16.10700035095215 C-15.315999984741211,2.006999969482422 -7.216000080108643,-10.192999839782715 4.584000110626221,-16.10300064086914z"></path></g></g><g transform="matrix(1,0,0,1,44,44)" opacity="1" style="display: block;"><g opacity="1" transform="matrix(1,0,0,1,0,0)"><path fill="rgb(255,255,255)" fill-opacity="1" d=" M0,-4 C2.140000104904175,-4 3.890000104904175,-2.319999933242798 4,-0.20000000298023224 C4,-0.20000000298023224 4,0 4,0 C4,0 4,0.20000000298023224 4,0.20000000298023224 C3.890000104904175,2.319999933242798 2.140000104904175,4 0,4 C-2.2100000381469727,4 -4,2.2100000381469727 -4,0 C-4,-2.2100000381469727 -2.2100000381469727,-4 0,-4z"></path></g></g></g></svg></span></div>
+            </div></div>
+                            </div>
+                        <div class="bpx-player-shadow-progress-area">
+                <div class="bpx-player-shadow-progress-schedule-wrap">
+                <div class="bpx-player-progress-schedule">
+                    <div class="bpx-player-progress-schedule-buffer" style="transform: scaleX(0.999705);"></div>
+                    <div class="bpx-player-progress-schedule-current" style="transform: scaleX(0.721703);"></div>
+                </div>
+            </div>
+            </div></div>
+                    </div>
+                    <div class="bpx-player-dialog-wrap"><div class="bpx-player-dm-tip">
+        <div class="bpx-player-dm-tip-svgm"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 162 48"><path fill="#000" fill-opacity=".703" fill-rule="evenodd" d="M1 27.075C1 16.07 9.92 7.149 20.925 7.149h55.91L81.522 1l4.741 6.15h54.812C152.079 7.15 161 16.07 161 27.074 161 38.079 152.079 47 141.075 47H20.925C9.921 47 1 38.08 1 27.075Z" clip-rule="evenodd"></path><path stroke="#fff" stroke-linejoin="round" stroke-opacity=".496" d="M81.918.695a.5.5 0 0 0-.794.002l-4.536 5.952H20.925C9.645 6.65.5 15.794.5 27.075.5 38.355 9.645 47.5 20.925 47.5h120.15c11.28 0 20.425-9.145 20.425-20.425 0-11.281-9.145-20.426-20.425-20.426H86.509L81.918.695Z"></path></svg></div>
+        <div class="bpx-player-dm-tip-svgl"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 145 42"><path fill="#000" fill-opacity=".703" fill-rule="evenodd" d="M1 23.562c0-9.63 7.807-17.438 17.438-17.438h4.372L26.65 1l3.887 5.124h96.025c9.631 0 17.438 7.808 17.438 17.438C144 33.192 136.193 41 126.562 41H18.438C8.808 41 1 33.193 1 23.562Z" clip-rule="evenodd"></path><path stroke="#fff" stroke-linejoin="round" stroke-opacity=".496" d="M27.05.698a.5.5 0 0 0-.8.002l-3.69 4.924h-4.122C8.53 5.624.5 13.655.5 23.562.5 33.47 8.531 41.5 18.438 41.5h108.124c9.907 0 17.938-8.031 17.938-17.938 0-9.907-8.031-17.938-17.938-17.938H30.785L27.05.698Z"></path></svg></div>
+        <div class="bpx-player-dm-tip-like"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 24 25"><path fill="#fff" d="M13.925 3.415a.798.798 0 0 0-.683.254c-.605.708-.744 1.748-1.198 2.553-.598 1.059-1.156 1.7-1.843 2.302-.565.496-1.138.828-1.701.983v10.587a107.173 107.173 0 0 0 7.937-.11c.91-.046 1.7-.496 2.113-1.229.577-1.028 1.29-2.535 1.721-4.31.402-1.654.586-3.014.668-3.973.038-.444-.313-.852-.859-.852h-4.982a.75.75 0 0 1-.623-.332c-.17-.255-.135-.544-.028-.813.229-.584.529-1.456.647-2.248.117-.783.088-1.411-.218-1.993-.33-.625-.704-.79-.95-.819ZM16.16 8.12h3.92c1.324 0 2.476 1.063 2.354 2.48a28.047 28.047 0 0 1-.705 4.2c-.473 1.946-1.25 3.583-1.872 4.69-.698 1.242-1.992 1.923-3.343 1.993-1.304.067-3.236.14-5.514.14-2.207 0-4.223-.069-5.652-.134-1.608-.073-2.957-1.267-3.13-2.904A38.233 38.233 0 0 1 2 14.622c0-1.369.087-2.61.19-3.595.179-1.722 1.656-2.907 3.318-2.907H7.75c.319 0 .814-.155 1.462-.724.563-.493 1.013-1.003 1.526-1.912.515-.913.668-1.976 1.364-2.79a2.297 2.297 0 0 1 1.997-.769c.826.097 1.588.632 2.103 1.61.521.987.514 1.988.376 2.913-.087.582-.265 1.2-.418 1.672ZM7 20.053V9.62H5.508c-.964 0-1.734.672-1.826 1.562a33.591 33.591 0 0 0-.182 3.44c0 1.428.1 2.766.21 3.805.091.864.803 1.523 1.706 1.564.468.021 1.001.043 1.584.062Z"></path></svg></div>
+        <div class="bpx-player-dm-tip-like-num"></div>
+        <div class="bpx-player-dm-tip-copy"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 24 25"><path fill="#fff" d="M3 6.87a4 4 0 0 1 4-4h6.75a.75.75 0 0 1 0 1.5H7a2.5 2.5 0 0 0-2.5 2.5v9.75a.75.75 0 0 1-1.5 0V6.87Z"></path><path fill="#fff" d="M6 8.87a3 3 0 0 1 3-3h8.5a3 3 0 0 1 3 3v7.11a3.5 3.5 0 0 1-1.025 2.476l-3.39 3.389a3.5 3.5 0 0 1-2.474 1.025H9a3 3 0 0 1-3-3v-11Zm3-1.5a1.5 1.5 0 0 0-1.5 1.5v11a1.5 1.5 0 0 0 1.5 1.5h4.61a2 2 0 0 0 1.415-.586l3.39-3.389A2 2 0 0 0 19 15.981V8.87a1.5 1.5 0 0 0-1.5-1.5H9Z"></path><path fill="#fff" d="M16.25 17.62a1 1 0 0 0-1 1v2.75a.75.75 0 0 1-1.5 0v-2.75a2.5 2.5 0 0 1 2.5-2.5H19a.75.75 0 0 1 0 1.5h-2.75ZM9.75 11.62a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1-.75-.75ZM9.75 15.12a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1-.75-.75Z"></path></svg></div>
+        <div class="bpx-player-dm-tip-recall"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 20 20"><path fill="#fff" d="M12.531 6.563H4.125l2.5-2.5a.604.604 0 0 0 0-.876.604.604 0 0 0-.875 0L2.187 6.72A.617.617 0 0 0 2 7.156c0 .157.062.313.187.438l3.532 3.531c.25.25.625.25.875 0a.604.604 0 0 0 0-.875L4.156 7.813h8.375a4.201 4.201 0 0 1 4.219 4.219 4.201 4.201 0 0 1-4.219 4.218H6.125a.627.627 0 0 0-.625.625c0 .344.281.625.625.625h6.406A5.455 5.455 0 0 0 18 12.031a5.455 5.455 0 0 0-5.469-5.468Z"></path></svg></div>
+        <div class="bpx-player-dm-tip-back"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 21 20"><path fill="#FFF" fill-rule="nonzero" d="m10.673 1.5.297.022c1.202.132 2.273.817 2.842 1.815l6.026 9.504c.385.587.594 1.259.612 2.008 0 2.011-1.676 3.482-3.792 3.482H4.542C2.417 18.33.75 16.851.75 14.784a3.666 3.666 0 0 1 .594-1.916l6.014-9.482a3.776 3.776 0 0 1 3.088-1.881l.081-.005h.146ZM10.6 2.748l-.081.005a2.53 2.53 0 0 0-2.076 1.254L2.4 13.537c-.251.383-.39.824-.4 1.277 0 1.317 1.083 2.266 2.542 2.267h12.116c1.46 0 2.542-.95 2.542-2.232a2.492 2.492 0 0 0-.407-1.323L12.66 3.853a2.54 2.54 0 0 0-1.98-1.1l-.081-.005Zm.026 10.73a1 1 0 1 1-.006 2 1 1 0 0 1 .006-2ZM10.6 5.815c.54 0 .977.436.977.972-.113 2.57-.177 4.037-.191 4.4-.022.542-.45.76-.786.76s-.774-.21-.794-.76c-.013-.368-.074-1.834-.183-4.399 0-.537.436-.973.977-.973Z"></path></svg></div>
+        </div></div>
+                    <div class="bpx-player-music-wrap"></div>
+                    <div class="bpx-player-business-wrap business-hide"></div>
+                    <div class="bpx-player-dm-report-wrap"></div>
+                <div class="bpx-player-error-sign" style="display: none;">
+                <div class="bpx-player-error-sign-content">
+                    <div class="bpx-player-error-sign-message">网络状况异常，请刷新后重试</div>
+                    <div class="bpx-player-error-sign-details">
+                        <div class="bpx-player-error-sign-code"></div>
+                        <div class="bpx-player-error-sign-displayid"></div>
+                        <div class="bpx-player-error-sign-host"></div>
+                    </div>
+                    <div class="bpx-player-error-sign-local-network-tip">
+                        <div class="bpx-player-error-sign-local-network-content">
+                            <div class="bpx-player-error-sign-local-network-title">您的浏览器还未开启本地网络访问权限，可能会影响视频内容的正常播放。</div>
+                            <div class="bpx-player-error-sign-local-network-steps">
+                                <p>1. 您可在浏览器通知中允许 bilibili.com 查找并连接本设备的请求；</p>
+                                <p>2. 您可进入浏览器在"设置"&gt;"隐私和安全"&gt;"网站设置"&gt;"查看各网站的权限及存储数据"找到 www.bilibili.com，在"权限"中开启"本地网络访问权限"，开启后刷新页面即可正常播放视频。</p>
+                            </div>
+                        </div>
+                        <div class="bpx-player-error-sign-local-network-image">
+                            <img src="https://i0.hdslb.com/bfs/activity-plat/static/20251218/38aa8c2cd2ba5ac4bb1c348540c179e9/69SYFkklcz.png" alt="本地网络权限开启示意图">
+                        </div>
+                    </div>
+                </div>
+                <button class="bpx-player-error-sign-retry-btn">刷新</button>
+            </div>
+        </div>
+                <div class="bpx-player-sending-area">
+                    
+                <div class="bpx-player-sending-bar"><div class="bpx-player-video-info bpx-player-video-info-ugc" style="width: auto;">
+            <div class="bpx-player-video-info-online"><span class="bpx-player-video-info-online-num">2</span>人正在看</div>
+            
+        </div>
+        <div class="bpx-player-dm-root">
+            <div class="bpx-player-dm-switch bui bui-danmaku-switch" aria-label="弹幕显示隐藏"><div class="bui-area"><input class="bui-danmaku-switch-input" type="checkbox" checked="">
+<label class="bui-danmaku-switch-label">
+    <span class="bui-danmaku-switch-on"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M11.989 4.828c-.47 0-.975.004-1.515.012l-1.71-2.566a1.008 1.008 0 0 0-1.678 1.118l.999 1.5c-.681.018-1.403.04-2.164.068a4.013 4.013 0 0 0-3.83 3.44c-.165 1.15-.245 2.545-.245 4.185 0 1.965.115 3.67.35 5.116a4.012 4.012 0 0 0 3.763 3.363l.906.046c1.205.063 1.808.095 3.607.095a.988.988 0 0 0 0-1.975c-1.758 0-2.339-.03-3.501-.092l-.915-.047a2.037 2.037 0 0 1-1.91-1.708c-.216-1.324-.325-2.924-.325-4.798 0-1.563.076-2.864.225-3.904.14-.977.96-1.713 1.945-1.747 2.444-.087 4.465-.13 6.063-.131 1.598 0 3.62.044 6.064.13.96.034 1.71.81 1.855 1.814.075.524.113 1.962.141 3.065v.002c.01.342.017.65.025.88a.987.987 0 1 0 1.974-.068c-.008-.226-.016-.523-.025-.856v-.027c-.03-1.118-.073-2.663-.16-3.276-.273-1.906-1.783-3.438-3.74-3.507-.9-.032-1.743-.058-2.531-.078l1.05-1.46a1.008 1.008 0 0 0-1.638-1.177l-1.862 2.59c-.38-.004-.744-.007-1.088-.007h-.13Zm.521 4.775h-1.32v4.631h2.222v.847h-2.618v1.078h2.618l.003.678c.36.026.714.163 1.01.407h.11v-1.085h2.694v-1.078h-2.695v-.847H16.8v-4.63h-1.276a8.59 8.59 0 0 0 .748-1.42L15.183 7.8a14.232 14.232 0 0 1-.814 1.804h-1.518l.693-.308a8.862 8.862 0 0 0-.814-1.408l-1.045.352c.297.396.572.847.825 1.364Zm-4.18 3.564.154-1.485h1.98V8.294h-3.2v.98H9.33v1.43H7.472l-.308 3.453h2.277c0 1.166-.044 1.925-.12 2.277-.078.352-.386.528-.936.528-.308 0-.616-.022-.902-.055l.297 1.067.062.005c.285.02.551.04.818.04 1.001-.067 1.562-.419 1.694-1.057.11-.638.176-1.903.176-3.795h-2.2Zm7.458.11v-.858h-1.254v.858h1.254Zm-2.376-.858v.858h-1.199v-.858h1.2Zm-1.199-.946h1.2v-.902h-1.2v.902Zm2.321 0v-.902h1.254v.902h-1.254Z" clip-rule="evenodd"></path><path fill-rule="evenodd" d="M22.846 14.627a1 1 0 0 0-1.412.075l-5.091 5.703-2.216-2.275-.097-.086-.008-.005a1 1 0 0 0-1.322 1.493l2.963 3.041.093.083.007.005c.407.315 1 .27 1.354-.124l5.81-6.505.08-.102.005-.008a1 1 0 0 0-.166-1.295Z" clip-rule="evenodd"></path></svg></span>
+    <span class="bui-danmaku-switch-off"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 24 24"><path fill-rule="evenodd" d="m8.085 4.891-.999-1.499a1.008 1.008 0 0 1 1.679-1.118l1.709 2.566c.54-.008 1.045-.012 1.515-.012h.13c.345 0 .707.003 1.088.007l1.862-2.59a1.008 1.008 0 0 1 1.637 1.177l-1.049 1.46c.788.02 1.631.046 2.53.078 1.958.069 3.468 1.6 3.74 3.507.088.613.13 2.158.16 3.276l.001.027c.01.333.017.63.025.856a.987.987 0 0 1-1.974.069c-.008-.23-.016-.539-.025-.881v-.002c-.028-1.103-.066-2.541-.142-3.065-.143-1.004-.895-1.78-1.854-1.813-2.444-.087-4.466-.13-6.064-.131-1.598 0-3.619.044-6.063.13a2.037 2.037 0 0 0-1.945 1.748c-.15 1.04-.225 2.341-.225 3.904 0 1.874.11 3.474.325 4.798.154.949.95 1.66 1.91 1.708a97.58 97.58 0 0 0 5.416.139.988.988 0 0 1 0 1.975c-2.196 0-3.61-.047-5.513-.141A4.012 4.012 0 0 1 2.197 17.7c-.236-1.446-.351-3.151-.351-5.116 0-1.64.08-3.035.245-4.184A4.013 4.013 0 0 1 5.92 4.96c.761-.027 1.483-.05 2.164-.069Zm4.436 4.707h-1.32v4.63h2.222v.848h-2.618v1.078h2.431a5.01 5.01 0 0 1 3.575-3.115V9.598h-1.276a8.59 8.59 0 0 0 .748-1.42l-1.089-.384a14.232 14.232 0 0 1-.814 1.804h-1.518l.693-.308a8.862 8.862 0 0 0-.814-1.408l-1.045.352c.297.396.572.847.825 1.364Zm-4.18 3.564.154-1.485h1.98V8.289h-3.2v.979h2.067v1.43H7.483l-.308 3.454h2.277c0 1.166-.044 1.925-.12 2.277-.078.352-.386.528-.936.528-.308 0-.616-.022-.902-.055l.297 1.067.062.004c.285.02.551.04.818.04 1.001-.066 1.562-.418 1.694-1.056.11-.638.176-1.903.176-3.795h-2.2Zm7.458.11v-.858h-1.254v.858H15.8Zm-2.376-.858v.858h-1.199v-.858h1.2Zm-1.199-.946h1.2v-.902h-1.2v.902Zm2.321 0v-.902H15.8v.902h-1.254Zm3.517 10.594a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-.002-1.502a2.5 2.5 0 0 1-2.217-3.657l3.326 3.398a2.49 2.49 0 0 1-1.109.259Zm2.5-2.5c0 .42-.103.815-.286 1.162l-3.328-3.401a2.5 2.5 0 0 1 3.614 2.239Z" clip-rule="evenodd"></path></svg></span>
+</label></div></div>
+            <div class="bpx-player-dm-setting"><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 24 24"><path fill-rule="evenodd" d="m15.645 4.881 1.06-1.473a.998.998 0 1 0-1.622-1.166L13.22 4.835a110.67 110.67 0 0 0-1.1-.007h-.131c-.47 0-.975.004-1.515.012L8.783 2.3A.998.998 0 0 0 7.12 3.408l.988 1.484c-.688.019-1.418.042-2.188.069a4.013 4.013 0 0 0-3.83 3.44c-.165 1.15-.245 2.545-.245 4.185 0 1.965.115 3.67.35 5.116a4.012 4.012 0 0 0 3.763 3.363c1.903.094 3.317.141 5.513.141a.988.988 0 0 0 0-1.975 97.58 97.58 0 0 1-5.416-.139 2.037 2.037 0 0 1-1.91-1.708c-.216-1.324-.325-2.924-.325-4.798 0-1.563.076-2.864.225-3.904.14-.977.96-1.713 1.945-1.747 2.444-.087 4.465-.13 6.063-.131 1.598 0 3.62.044 6.064.13.96.034 1.71.81 1.855 1.814.075.524.113 1.962.141 3.065v.002c.005.183.01.07.014-.038.004-.096.008-.189.011-.081a.987.987 0 1 0 1.974-.069c-.004-.105-.007-.009-.011.09-.002.056-.004.112-.007.135l-.002.01a.574.574 0 0 1-.005-.091v-.027c-.03-1.118-.073-2.663-.16-3.276-.273-1.906-1.783-3.438-3.74-3.507-.905-.032-1.752-.058-2.543-.079Zm-3.113 4.703h-1.307v4.643h2.2v.04l.651-1.234c.113-.215.281-.389.482-.509v-.11h.235c.137-.049.283-.074.433-.074h1.553V9.584h-1.264a8.5 8.5 0 0 0 .741-1.405l-1.078-.381c-.24.631-.501 1.23-.806 1.786h-1.503l.686-.305c-.228-.501-.5-.959-.806-1.394l-1.034.348c.294.392.566.839.817 1.35Zm-1.7 5.502h2.16l-.564 1.068h-1.595v-1.068Zm-2.498-1.863.152-1.561h1.96V8.289H7.277v.969h2.048v1.435h-1.84l-.306 3.51h2.254c0 1.155-.043 1.906-.12 2.255-.076.348-.38.523-.925.523-.305 0-.61-.022-.893-.055l.294 1.056.061.005c.282.02.546.039.81.039.991-.065 1.547-.414 1.677-1.046.11-.631.175-1.883.175-3.757H8.334Zm5.09-.8v.85h-1.188v-.85h1.187Zm-1.188-.955h1.187v-.893h-1.187v.893Zm2.322.007v-.893h1.241v.893h-1.241Zm.528 2.757a1.26 1.26 0 0 1 1.087-.627l4.003-.009a1.26 1.26 0 0 1 1.094.63l1.721 2.982c.226.39.225.872-.001 1.263l-1.743 3a1.26 1.26 0 0 1-1.086.628l-4.003.009a1.26 1.26 0 0 1-1.094-.63l-1.722-2.982a1.26 1.26 0 0 1 .002-1.263l1.742-3Zm1.967.858a1.26 1.26 0 0 0-1.08.614l-.903 1.513a1.26 1.26 0 0 0-.002 1.289l.885 1.492c.227.384.64.62 1.086.618l2.192-.005a1.26 1.26 0 0 0 1.08-.615l.904-1.518a1.26 1.26 0 0 0 .001-1.288l-.884-1.489a1.26 1.26 0 0 0-1.086-.616l-2.193.005Zm2.517 2.76a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0Z" clip-rule="evenodd"></path></svg></span><div class="bpx-player-dm-setting-wrap" style="display: none">
+        <div class="bpx-player-dm-setting-box bui bui-panel bui-dark"><div class="bui-area"><div class="bui-panel-wrap" style="width: 320px; height: 322px;">
+    <div class="bui-panel-move" style="width: 586px;">
+        
+        <div class="bui-panel-item bui-panel-item-active" style="width: 320px; height: 322px;"><div class="bpx-player-dm-setting-left">
+                <div class="bpx-player-dm-setting-left-block">
+                    <div class="bpx-player-dm-setting-left-block-title">按类型过滤</div>
+                    <div class="bpx-player-dm-setting-left-block-content">
+                <div class="bpx-player-block-filter-type bpx-player-block-typeScroll" data-type="typeScroll">
+                    <span class="bpx-player-block-filter-image"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM11 9h6a1 1 0 0 1 0 2h-6a1 1 0 0 1 0-2zm-3 2H6V9h2v2zm4 4h-2v-2h2v2zm9 0h-6a1 1 0 0 1 0-2h6a1 1 0 0 1 0 2z"></path></svg></span>
+                    <span class="bpx-player-block-filter-label">滚动</span>
+                </div>
+            
+                <div class="bpx-player-block-filter-type bpx-player-block-typeTopBottom" data-type="typeTopBottom">
+                    <span class="bpx-player-block-filter-image"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM9 9H7V7h2v2zm4 0h-2V7h2v2zm4 0h-2V7h2v2zm4 0h-2V7h2v2z"></path></svg></span>
+                    <span class="bpx-player-block-filter-label">固定</span>
+                </div>
+            
+                <div class="bpx-player-block-filter-type bpx-player-block-typeColor" data-type="typeColor">
+                    <span class="bpx-player-block-filter-image"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M17.365 11.118c0-.612-.535-1.147-1.147-1.147s-1.147.535-1.147 1.147c0 .611.535 1.147 1.147 1.147s1.147-.536 1.147-1.147zM12.93 9.665c-.764 0-1.376.611-1.376 1.3 0 .689.612 1.301 1.376 1.301s1.376-.612 1.376-1.301-.612-1.3-1.376-1.3zM9.794 11.883c-.764 0-1.376.612-1.376 1.3 0 .689.612 1.3 1.376 1.3s1.376-.611 1.376-1.3c.001-.688-.611-1.3-1.376-1.3zM10.023 15.171c-.612 0-1.147.536-1.147 1.148 0 .611.535 1.146 1.147 1.146s1.147-.535 1.147-1.146c.001-.612-.535-1.148-1.147-1.148zM17.823 12.953c-.611 0-1.147.535-1.147 1.147s.536 1.147 1.147 1.147c.612 0 1.148-.535 1.148-1.147s-.536-1.147-1.148-1.147z"></path><path d="M23.177 3H4.824C2.683 3 1 4.833 1 7.167v13.665C1 23.167 2.683 25 4.824 25h18.353C25.318 25 27 23.167 27 20.833V7.167C27 4.833 25.318 3 23.177 3zm-3.442 13.624c-1.987.612-4.129-.154-5.046.764-.918.918 1.529 1.606 0 2.219-1.988.84-7.341-.535-8.182-4.053-.841-3.441 2.905-6.5 5.888-7.035 2.906-.535 6.041.841 8.181 2.982 2.065 2.141.765 4.74-.841 5.123z"></path></svg></span>
+                    <span class="bpx-player-block-filter-label">彩色</span>
+                </div>
+            
+                <div class="bpx-player-block-filter-type bpx-player-block-typeSpecial" data-type="typeSpecial">
+                    <span class="bpx-player-block-filter-image"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM7.849 11.669l.447-.828.492.782.894.184-.536.736.134.966-.85-.321-.804.414.045-.967L7 11.946l.849-.277zm3.352 7.101-1.43-.506L8.43 19v-1.565L7.357 16.33l1.43-.506.67-1.381.894 1.289 1.475.23-.894 1.289.269 1.519zm7.95-3.9-2.816-.69-2.458 1.565-.223-2.946-2.145-1.933 2.637-1.151L15.263 7l1.877 2.255 2.86.23-1.52 2.531.671 2.854z"></path></svg></span>
+                    <span class="bpx-player-block-filter-label">高级<span class="bpx-player-block-advanced-more"><svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 14 14"><path fill="#9499A0" d="M7 2.041a4.958 4.958 0 1 0 0 9.917A4.958 4.958 0 0 0 7 2.04ZM1.167 7a5.833 5.833 0 1 1 11.666 0A5.833 5.833 0 0 1 1.166 7Z"></path><path fill="#9499A0" d="M7.51 9.296a.51.51 0 1 1-1.02 0 .51.51 0 0 1 1.02 0ZM7 5.177a.73.73 0 0 0-.729.729.437.437 0 1 1-.875 0 1.604 1.604 0 0 1 3.208 0 1.5 1.5 0 0 1-.36.991c-.096.118-.202.22-.297.307l-.081.074c-.067.061-.127.116-.187.177-.147.146-.199.25-.22.31a.5.5 0 0 0-.021.182.437.437 0 1 1-.875 0c0-.118.006-.284.07-.469.071-.206.204-.42.427-.642a6.966 6.966 0 0 1 .293-.274c.089-.083.159-.151.216-.22a.629.629 0 0 0 .16-.436.73.73 0 0 0-.729-.73Z"></path></svg></span></span>
+                </div>
+            </div>
+                </div>
+                <div class="bpx-player-dm-setting-left-radio">
+                    <span class="bpx-player-dm-setting-left-fs bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" checked="" aria-label="弹幕随屏幕缩放">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">弹幕随屏幕缩放</span>
+</label></div></span>
+                    <span class="bpx-player-dm-setting-left-ps bui bui-checkbox bui-dark" data-text="视频底部15%部分为空白保留区"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" aria-label="防挡字幕">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">防挡字幕</span>
+</label></div></span>
+                    <span class="bpx-player-dm-setting-left-mask bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" checked="" aria-label="智能防挡弹幕">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">智能防挡弹幕</span>
+</label></div></span>
+                </div>
+
+                <div class="bpx-player-dm-setting-left-preventshade">
+                    <span class="bpx-player-dm-setting-left-preventshade-box" data-tooltip="2" data-text="视频底部15%部分为空白保留区" data-position="top-left" data-change-mode="1"></span>
+                </div>
+                <div class="bpx-player-dm-setting-left-danmaku-mask" style="display: none">
+                    <span class="bpx-player-dm-setting-left-danmaku-mask-box"></span>
+                </div>
+                <div class="bpx-player-dm-setting-left-block-word">
+                            <div class="bpx-player-dm-setting-left-block-add">弹幕观看屏蔽词</div>
+                             <div class="bpx-player-dm-setting-left-block-sync">同步屏蔽列表</div>
+                        </div>
+                
+                <div class="bpx-player-dm-setting-left-area bui bui-progress"><div class="bpx-player-dm-setting-left-area-title">显示区域</div><div class="bpx-player-dm-setting-left-area-content">
+                        <div class="bpx-player-dm-setting-ui-area"></div>
+                    </div><div class="bui-area"><div class="bui-progress-wrap">
+    <div class="bui-progress-bar" style="width: 75%;">
+        <span class="bui-progress-dot"></span>
+    </div>
+    
+    <div class="bui-progress-step">
+        
+        <div class="bui-progress-item" style="left:0%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:25%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:50%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:75%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:100%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+    </div>
+    
+    </div>
+
+
+<div class="bui-progress-val" style="width:60px">75%</div>
+
+</div></div>
+                    <div class="bpx-player-dm-setting-left-dmDensity" style="display: none;">
+                        <div class="bpx-player-dm-setting-left-dmDensity-left-area">
+                            弹幕密度
+                        </div>
+                        <div class="bpx-player-dm-setting-left-dmDensity-right-area">
+                            <span class="bpx-player-dm-setting-density active" data-density="normal">正常</span>
+                            <span class="bpx-player-dm-setting-density" data-density="more">较多</span>
+                            <span class="bpx-player-dm-setting-density" data-density="most">重叠</span>
+                        </div>
+                    </div>
+                
+                <div class="bpx-player-dm-setting-left-opacity bui bui-progress"><div class="bpx-player-dm-setting-left-opacity-title">不透明度</div><div class="bpx-player-dm-setting-left-opacity-content">
+                        <div class="bpx-player-dm-setting-ui-opacity"></div>
+                    </div><div class="bui-area"><div class="bui-progress-wrap">
+    <div class="bui-progress-bar" style="width: 100%;">
+        <span class="bui-progress-dot"></span>
+    </div>
+    
+    </div>
+
+
+<div class="bui-progress-val" style="width:60px">100%</div>
+
+</div></div>
+                <div class="bpx-player-dm-setting-left-fontsize bui bui-progress"><div class="bpx-player-dm-setting-left-fontsize-title">弹幕字号</div><div class="bpx-player-dm-setting-left-fontsize-content">
+                        <div class="bpx-player-dm-setting-ui-fontsize"></div>
+                    </div><div class="bui-area"><div class="bui-progress-wrap">
+    <div class="bui-progress-bar" style="width: 42%;">
+        <span class="bui-progress-dot"></span>
+    </div>
+    
+    </div>
+
+
+<div class="bui-progress-val" style="width:60px">100%</div>
+
+</div></div>
+                <div class="bpx-player-dm-setting-left-speedplus bui bui-progress"><div class="bpx-player-dm-setting-left-speedplus-title">弹幕速度</div><div class="bpx-player-dm-setting-left-speedplus-content">
+                        <div class="bpx-player-dm-setting-ui-speedplus"></div>
+                    </div><div class="bui-area"><div class="bui-progress-wrap">
+    <div class="bui-progress-bar" style="width: 50%;">
+        <span class="bui-progress-dot"></span>
+    </div>
+    
+    <div class="bui-progress-step">
+        
+        <div class="bui-progress-item" style="left:0%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:25%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:50%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:75%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+        <div class="bui-progress-item" style="left:100%">
+            <div class="bui-progress-lab"></div>
+        </div>
+        
+    </div>
+    
+    </div>
+
+
+<div class="bui-progress-val" style="width:60px">适中</div>
+
+</div></div>
+                <div class="bpx-player-dm-setting-left-more"><span class="bpx-player-dm-setting-left-more-text">高级设置</span><span class="bpx-player-dm-setting-left-more-senior-text">全新【硬核会员弹幕模式】</span><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z"></path></svg></span>
+        </div>
+            </div></div>
+        
+        <div class="bui-panel-item" style="width: 266px; height: 250px;"><div class="bpx-player-dm-setting-right">
+                <div class="bpx-player-dm-setting-right-more">
+                    <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m6.811 8.001 3.359-3.359a.75.75 0 1 0-1.061-1.061L5.22 7.471a.75.75 0 0 0 0 1.061l3.889 3.888a.75.75 0 1 0 1.061-1.061L6.811 8.001z"></path></svg></span>
+                    <span class="bpx-player-dm-setting-right-more-text">更多弹幕设置</span>
+                </div>
+                <div class="bpx-player-dm-setting-right-separator"></div>
+                <div class="bpx-player-dm-setting-right-speedsync">
+                    <span class="bpx-player-dm-setting-right-speedsync-box bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" aria-label="弹幕速度同步播放倍数">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">弹幕速度同步播放倍数</span>
+</label></div></span>
+                </div>
+                <div class="bpx-player-dm-setting-right-font">
+                    <div class="bpx-player-dm-setting-right-font-title">弹幕字体</div>
+                    <div class="bpx-player-dm-setting-right-font-content">
+                        <div class="bpx-player-dm-setting-right-font-content-fontfamily bui bui-select bui-dark"><div class="bui-area bui-select-bscroll"><div class="bui-select-wrap">
+    <div class="bui-select-border">
+        <div class="bui-select-header">
+            <span class="bui-select-result">黑体</span>
+            <span class="bui-select-arrow">
+                <span class="bui-select-arrow-down"></span>
+            </span>
+        </div>
+        <div class="bui-select-list-wrap" style="max-height: 100px; touch-action: pan-x; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0);">
+            <ul class="bui-select-list" style="transition-timing-function: cubic-bezier(0.165, 0.84, 0.44, 1); transition-duration: 0ms; transform: translate(0px, 0px) scale(1) translateZ(0px); border-width: medium; border-style: none; border-color: currentcolor; border-image: initial;">
+                
+                <li class="bui-select-item
+                        
+                        
+                         bui-select-item-active" data-value="SimHei, 'Microsoft JhengHei'">黑体</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="SimSun">宋体</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="NSimSun">新宋体</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="FangSong">仿宋</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="'Microsoft YaHei'">微软雅黑</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="'Microsoft Yahei UI Light'">微软雅黑 Light</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="'Noto Sans CJK SC DemiLight'">Noto Sans DemiLight</li>
+                
+                <li class="bui-select-item
+                        
+                        
+                        " data-value="'Noto Sans CJK SC Regular'">Noto Sans Regular</li>
+                
+            </ul>
+        <div class="bscroll-vertical-scrollbar" style="position: absolute; z-index: 9999; width: 7px; bottom: 2px; top: 2px; right: 1px; overflow: hidden; opacity: 0; display: none; transition-duration: 500ms;"><div class="bscroll-indicator" style="box-sizing: border-box; position: absolute; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 3px; width: 100%; transition-timing-function: cubic-bezier(0.165, 0.84, 0.44, 1); transition-duration: 0ms; transform: translateY(0px) translateZ(0px);"></div></div></div>
+    </div>
+</div></div></div>
+                    </div>
+                    <div class="bpx-player-dm-setting-right-font-bold">
+                        <span class="bpx-player-dm-setting-right-font-bold-box bui bui-checkbox bui-dark"><div class="bui-area"><input class="bui-checkbox-input" type="checkbox" aria-label="粗体">
+<label class="bui-checkbox-label">
+    <span class="bui-checkbox-icon bui-checkbox-icon-default"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-icon bui-checkbox-icon-selected"><svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg></span>
+    <span class="bui-checkbox-name">粗体</span>
+</label></div></span>
+                    </div>
+                </div>
+                <div class="bpx-player-dm-setting-right-fontborder">
+                    <div class="bpx-player-dm-setting-right-fontborder-title">描边类型</div>
+                    <div class="bpx-player-dm-setting-right-fontborder-content bui bui-radio bui-dark"><div class="bui-area"><div class="bui-radio-wrap bui-radio-button">
+    <div class="bui-radio-group" style="margin: 0 -4px;">
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="0" name="bui-radio5" checked="">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">重墨</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="1" name="bui-radio5">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">描边</span>
+        </span>
+    </label>
+    
+    <label class="bui-radio-item" style="margin: 0 4px;">
+        <input type="radio" class="bui-radio-input" value="2" name="bui-radio5">
+        <span class="bui-radio-label">
+            
+            <span class="bui-radio-text">45°投影</span>
+        </span>
+    </label>
+    
+    </div>
+</div></div></div>
+                </div>
+                <div class="bpx-player-dm-setting-right-separator"></div>
+                <div class="bpx-player-dm-setting-right-reset bui bui-button"><div class="bui-area bui-button-transparent">恢复默认设置</div></div>
+            </div></div>
+        
+    </div>
+</div></div></div>
+        </div></div>
+            <div class="bpx-player-video-inputbar focus bpx-player-checkBox-hide">
+                <div class="bpx-player-video-inputbar-wrap" data-v-risk="fingerprint">
+                    <div class="bpx-player-video-preview-emoji-wrap">
+                        <img class="bpx-player-video-preview-emoji">
+                    </div>
+                    <div class="bpx-player-video-btn-dm" style="">
+                        <span class="bpx-player-iconfont bpx-player-iconfont-danmakutype">
+                            <span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 22 22" viewBox="0 0 22 22"><path d="M17 16H5c-.55 0-1 .45-1 1s.45 1 1 1h12c.55 0 1-.45 1-1s-.45-1-1-1zM6.96 15c.39 0 .74-.24.89-.6l.65-1.6h5l.66 1.6c.15.36.5.6.89.6.69 0 1.15-.71.88-1.34l-3.88-8.97C11.87 4.27 11.46 4 11 4s-.87.27-1.05.69l-3.88 8.97c-.27.63.2 1.34.89 1.34zM11 5.98 12.87 11H9.13L11 5.98z"></path></svg></span>
+                        </span>
+                    <div class="bpx-player-mode-selection-container">
+            <div class="bpx-player-mode-selection-panel"><div class="bpx-player-mode-selection-row fontsize">
+                <div class="row-title">字号</div>
+                <div class="row-selection "><div class="selection-span js-action " data-type="fontsize" data-value="18" name="fontsize_selector">
+                        <span class="selection-name" name="fontsize_selector">小</span>
+                    </div>
+                    <div class="selection-span js-action active " data-type="fontsize" data-value="25" name="fontsize_selector">
+                        <span class="selection-name" name="fontsize_selector">标准</span>
+                    </div>
+                    </div>
+            </div><div class="bpx-player-mode-selection-row mode">
+                <div class="row-title">模式</div>
+                <div class="row-selection "><div class="selection-span js-action active " data-type="mode" data-value="1" name="mode_selector">
+                        <span class="selection-icon" name="mode_selector"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM11 9h6a1 1 0 0 1 0 2h-6a1 1 0 0 1 0-2zm-3 2H6V9h2v2zm4 4h-2v-2h2v2zm9 0h-6a1 1 0 0 1 0-2h6a1 1 0 0 1 0 2z"></path></svg></span><span class="selection-name" name="mode_selector">滚动</span>
+                    </div>
+                    <div class="selection-span js-action " data-type="mode" data-value="5" name="mode_selector">
+                        <span class="selection-icon" name="mode_selector"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM9 9H7V7h2v2zm4 0h-2V7h2v2zm4 0h-2V7h2v2zm4 0h-2V7h2v2z"></path></svg></span><span class="selection-name" name="mode_selector">顶部</span>
+                    </div>
+                    <div class="selection-span js-action " data-type="mode" data-value="4" name="mode_selector">
+                        <span class="selection-icon" name="mode_selector"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" style="enable-background:new 0 0 28 28" viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM9 21H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"></path></svg></span><span class="selection-name" name="mode_selector">底部</span>
+                    </div>
+                    </div>
+            </div><div class="bpx-player-mode-selection-row color"><div class="row-title">颜色</div><div class="row-selection danmaku-color bui bui-color-picker bui-dark"><div class="bui-area"><div class="bui-color-picker-wrap" style="width: 176px;">
+    <div class="bui-color-picker-result">
+        <span class="bui-color-picker-input bui bui-input" style="width: auto; flex: 1;"><div class="bui-area"><div class="bui-input-wrap">
+    
+    <input class="bui-input-input" type="text" value="#FFFFFF">
+    
+    
+</div></div></span>
+        <span class="bui-color-picker-display" style="background: #FFFFFF"></span>
+    </div>
+    <ul class="bui-color-picker-options" style=" margin-right: -10.666666666666666px;">
+        
+        <li class="bui-color-picker-option" style="background: #FE0302; margin-right: 10.666666666666666px;" data-value="#FE0302"></li>
+        
+        <li class="bui-color-picker-option" style="background: #FF7204; margin-right: 10.666666666666666px;" data-value="#FF7204"></li>
+        
+        <li class="bui-color-picker-option" style="background: #FFAA02; margin-right: 10.666666666666666px;" data-value="#FFAA02"></li>
+        
+        <li class="bui-color-picker-option" style="background: #FFD302; margin-right: 10.666666666666666px;" data-value="#FFD302"></li>
+        
+        <li class="bui-color-picker-option" style="background: #FFFF00; margin-right: 10.666666666666666px;" data-value="#FFFF00"></li>
+        
+        <li class="bui-color-picker-option" style="background: #A0EE00; margin-right: 10.666666666666666px;" data-value="#A0EE00"></li>
+        
+        <li class="bui-color-picker-option" style="background: #00CD00; margin-right: 10.666666666666666px;" data-value="#00CD00"></li>
+        
+        <li class="bui-color-picker-option" style="background: #019899; margin-right: 10.666666666666666px;" data-value="#019899"></li>
+        
+        <li class="bui-color-picker-option" style="background: #4266BE; margin-right: 10.666666666666666px;" data-value="#4266BE"></li>
+        
+        <li class="bui-color-picker-option" style="background: #89D5FF; margin-right: 10.666666666666666px;" data-value="#89D5FF"></li>
+        
+        <li class="bui-color-picker-option" style="background: #CC0273; margin-right: 10.666666666666666px;" data-value="#CC0273"></li>
+        
+        <li class="bui-color-picker-option" style="background: #222222; margin-right: 10.666666666666666px;" data-value="#222222"></li>
+        
+        <li class="bui-color-picker-option" style="background: #9B9B9B; margin-right: 10.666666666666666px;" data-value="#9B9B9B"></li>
+        
+        <li class="bui-color-picker-option bui-color-picker-option-active" style="background: #FFFFFF; margin-right: 10.666666666666666px;" data-value="#FFFFFF"></li>
+        
+    </ul>
+</div></div></div></div></div>
+            <div class="bpx-player-mode-selection-mask">
+                <div class="bpx-player-mode-selection-mask-warning login-btn bui bui-button"><div class="bui-area bui-button-blue">请先登录</div></div>
+            </div>
+            </div>
+        </div>
+                    
+                    <div class="bpx-player-dm-wrap" style="display: none;">发个友善的弹幕见证当下</div>
+                    <input class="bpx-player-dm-input" placeholder="发个友善的弹幕见证当下" autocomplete="off" style="">
+                    <div class="bpx-player-dm-hint"><a href="//www.bilibili.com/blackboard/help.html#/?qid=359&amp;pid=357" target="_blank"><span>弹幕礼仪 </span><span class="bpx-common-svg-icon"><svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z"></path></svg></span></a></div>
+                </div>
+                <div class="bpx-player-dm-btn-send bui bui-button" data-v-risk="fingerprint"><div class="bui-area bui-button-blue">发送</div></div>
+            </div>
+            
+        </div></div></div>
+            </div>
+            <div class="bpx-player-dialog-area"></div>
+            <div class="bpx-player-tooltip-area"><div class="bpx-player-tooltip-item" data-name="ctrl:codec:0"><div class="bpx-player-tooltip-title">优先使用播放器内置策略播放</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:codec:1"><div class="bpx-player-tooltip-title">优先使用 AV1 编码视频播放</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:codec:2"><div class="bpx-player-tooltip-title">优先使用 HEVC/H.265 编码视频播放</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:codec:3"><div class="bpx-player-tooltip-title">优先使用 AVC/H.264 编码视频播放</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:loundness:0"><div class="bpx-player-tooltip-title">自动平衡不同视频间的音量大小</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:loundness:1"><div class="bpx-player-tooltip-title">平衡音量同时保留更多声音细节</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:loundness:2"><div class="bpx-player-tooltip-title">关闭音量均衡</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:widescreen" style="opacity: 0; visibility: hidden;"><div class="bpx-player-tooltip-title">宽屏模式</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:webscreen" style="opacity: 0; visibility: hidden;"><div class="bpx-player-tooltip-title">网页全屏</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:subtitle"><div class="bpx-player-tooltip-title">本视频开启原声翻译时不支持关闭字幕</div></div><div class="bpx-player-tooltip-item" data-name="danmaku_switch" style="left: 249px; top: 578px;"><div class="bpx-player-tooltip-title">关闭弹幕 (d)</div></div><div class="bpx-player-tooltip-item" data-name="preventshade"><div class="bpx-player-tooltip-title">视频底部15%部分为空白保留区</div></div><div class="bpx-player-tooltip-item" data-name="special-more"><div class="bpx-player-tooltip-title">特殊颜色、运动形式的弹幕</div></div><div class="bpx-player-tooltip-item" data-name="feedback-btn"><div class="bpx-player-tooltip-title">反馈</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:pip"><div class="bpx-player-tooltip-title">开启画中画</div></div><div class="bpx-player-tooltip-item" data-name="ctrl:fullscreen" style="left: 875px; top: 519px; visibility: hidden; opacity: 0; transform: translate(0px, 0px);"><div class="bpx-player-tooltip-title">进入全屏 (f)</div></div></div>
+            <div class="bpx-player-context-area"><ul class="bpx-player-contextmenu bpx-player-black"></ul></div>
+        </div></div></div>

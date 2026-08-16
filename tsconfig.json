@@ -14,11 +14,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    // "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["packages/player/src/*"],
       "@/types": ["types/index.ts"],
+      "@/types/*": ["types/*"],
       "@/core": ["core/index.ts"],
       "@/core/*": ["core/*"],
       "@/utils": ["utils/index.ts"],
@@ -30,18 +31,24 @@
       "@/error": ["error/index.ts"],
       "@/error/*": ["error/*"],
       "@/hili-player/*": ["packages/player/src/*"],
-      "@/hili-player/plugins/*": ["packages/plugins/src/*"]
+      "@/hili-player/plugins/*": ["packages/plugins/src/*"],
+      "@hili-player/player": ["packages/player/src/index.ts"],
+      "hls.js": ["packages/plugins/src/hls/vendor/hls"]
     }
   },
   "include": [
+    "vite-env.d.ts",
     "core/**/*",
     "types/**/*",
     "utils/**/*",
     "directives/**/*",
     "events/**/*",
     "error/**/*",
+    "plugins/**/*",
     "packages/player/src/**/*",
-    "packages/plugins/src/**/*"
+    "packages/plugins/src/**/*",
+    "packages/plugins/src/hls/vendor/hls/*",
+    "demo/**/*"
   ],
   "exclude": ["node_modules", "dist"]
 }

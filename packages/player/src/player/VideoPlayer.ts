@@ -7,31 +7,56 @@
 
 import type {
   PlayerConfig,
-  PlayerState,
   PlayerStateData,
   PlayerMethods,
   PlayerEvents,
   QualitySource,
   ComponentInstance,
   VNode,
-} from '@/types';
-// @ts-ignore - SCSS side-effect import
-import '@/hili-player/styles/index.scss'
+  EventListeners,
+} from "@/types";
+import { PlayerState, QualityLevel, PlayMode } from "@/types";
+import "../styles/index.scss";
 
-import { PlayerState as PlayerStateEnum, QualityLevel, PlayMode } from '@/types';
-import { h, mount, destroy, createStateManager, createEventBus } from '@/core';
-import type { StateManager, EventBus } from '@/core';
-import type { Plugin } from '@/hili-player/core/plugin';
-import { PlayerEventEnum, PlayerMethodEnum, PlayerStateKeyEnum } from '@/core/events';
-import { PluginManager } from '@/hili-player/core/pluginManager';
-import { createPlayerStore } from '@/hili-player/store';
-import type { PlayerStore } from '@/hili-player/store';
-import { formatTime, isServer, createSSRConfig, type SSRConfig } from '@/utils';
-import { createLogger, loggerManager, LogLevel } from '@/utils';
-import { EventEmitter, fullscreen, pip, clamp } from '../utils';
-import { PlayerDocker, type PlayerDockerProps } from '@/hili-player/components/PlayerDocker';
+import {
+  h,
+  mount,
+  destroy,
+  createTypedStateManager,
+  createTypedEventBus,
+} from "@/core";
+import type { TypedStateManager, TypedEventBus } from "@/core";
+import type { Plugin } from "@/hili-player/core/plugin";
+import { PlayerEventEnum, PlayerEventMap } from "@/core/events";
+import {
+  PlayerStateKeyEnum,
+  PlayerStateMap,
+  StateContext,
+  ConfigContext,
+  defaultControlConfig,
+} from "@/store/runtimeState";
+import { PluginManager } from "@/hili-player/core/pluginManager";
+import { createPlayerStore } from "@/hili-player/store";
+import type { PlayerStore } from "@/hili-player/store";
+import { createLogger, loggerManager, LogLevel } from "@/utils";
+import { EventEmitter, fullscreen, pip, clamp } from "../utils";
+import { PlayerDocker } from "@/hili-player/components/PlayerDocker";
+import { StreamMiddleware, PlayerMode } from "../utils/media/streamMiddleware";
+import { StreamFormatEnum } from "@/types/streamPlugin";
+import type { StreamPlugin } from "@/types/streamPlugin";
 
-const logger = createLogger('VideoPlayer');
+/**
+ * 类型守卫：判断插件是否为流媒体插件
+ * @param plugin - 插件实例
+ * @returns 是否为 StreamPlugin
+ */
+function isStreamPlugin(plugin: Plugin): plugin is Plugin & StreamPlugin {
+  return "load" in plugin && typeof plugin.load === "function";
+}
+import { BrowserCapabilityDetector } from "../utils/browserCapabilityDetector";
+import type { BrowserCapabilityResult } from "../utils/browserCapabilityDetector";
+
+const logger = createLogger("VideoPlayer");
 
 /**
  * 播放器实例映射表
@@ -48,8 +73,8 @@ const playerInstanceMap = new WeakMap<HTMLElement, VideoPlayer>();
  */
 export function getPlayerInstance(el: HTMLElement): VideoPlayer | undefined {
   // 如果是视频元素，向上查找容器
-  if (el.tagName === 'VIDEO') {
-    const container = el.closest('.hili-player-container');
+  if (el.tagName === "VIDEO") {
+    const container = el.closest(".hili-player-container");
     if (!(container instanceof HTMLElement)) return undefined;
     return playerInstanceMap.get(container);
   }
@@ -60,30 +85,33 @@ export function getPlayerInstance(el: HTMLElement): VideoPlayer | undefined {
  * 默认配置
  */
 const defaultConfig: PlayerConfig = {
-  src: '',
+  src: "",
   container: undefined,
   autoplay: false,
-  playerName: '嗨哩播放器',
+  playerName: "嗨哩播放器",
   muted: false,
   volume: 1,
   playbackRate: 1,
-  controls: true,
   loop: false,
-  preload: 'metadata',
-  poster: '',
+  poster: "",
   defaultQuality: QualityLevel.AUTO,
   playMode: PlayMode.ORDER,
   keyboard: true,
-  pip: true,
-  fullscreen: true,
   subtitles: [],
   danmaku: {
     enabled: false,
-    source: '',
+    source: "",
     opacity: 0.8,
     speed: 1,
     visible: true,
   },
+  progressSegments: [
+    {
+      startTime: 0,
+      endTime: 90,
+      pointText: "待填写",
+    },
+  ],
   ssr: {
     enabled: false,
     deferHydration: false,
@@ -96,7 +124,9 @@ const defaultConfig: PlayerConfig = {
  * 视频播放器类
  * 实现 ComponentInstance 接口，可作为组件使用
  */
-export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMethods {
+export class VideoPlayer
+  implements ComponentInstance<PlayerConfig>, PlayerMethods
+{
   /**
    * 播放器配置
    */
@@ -123,10 +153,16 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
   private emitter = new EventEmitter<PlayerEvents>();
 
   /**
+   * fullscreenchange 事件处理函数引用（用于清理）
+   */
+  private fullscreenChangeHandler: (() => void) | null = null;
+
+  /**
    * 状态管理器
    * 提供运行时状态存储（内存状态，不持久化）
+   * 类型安全：路径和值类型由 PlayerStateMap 约束
    */
-  state: StateManager;
+  state: TypedStateManager<PlayerStateMap>;
 
   /**
    * 持久化状态存储
@@ -136,9 +172,9 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
 
   /**
    * 事件总线
-   * 提供跨组件/插件的事件通信
+   * 提供跨组件/插件的事件通信（类型安全）
    */
-  events: EventBus;
+  events: TypedEventBus<PlayerEventMap>;
 
   /**
    * 视频源列表
@@ -166,14 +202,25 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
   private vnode: VNode | null = null;
 
   /**
-   * SSR 配置
-   */
-  private ssrConfig: SSRConfig;
-
-  /**
    * 插件管理器
    */
   private pluginManager: PluginManager | null = null;
+
+  /**
+   * 流媒体中间件
+   * 统一管理 Native 和 Streaming 两种播放模式
+   */
+  streamMiddleware: StreamMiddleware | null = null;
+
+  /**
+   * 浏览器能力检测结果
+   */
+  private browserCapability: BrowserCapabilityResult | null = null;
+
+  /**
+   * 用户回调函数
+   */
+  private callbacks: EventListeners;
 
   /**
    * 构造函数
@@ -194,11 +241,6 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     loggerManager.setLevel(this.props.debug ? LogLevel.DEBUG : LogLevel.SILENT);
 
     /**
-     * 初始化 SSR 配置
-     */
-    this.ssrConfig = createSSRConfig(this.props.ssr);
-
-    /**
      * 处理视频源
      */
     this.processSources();
@@ -209,7 +251,7 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
      */
     this.store = createPlayerStore({
       persist: true,
-      persistKey: 'hili_player_state',
+      persistKey: "hili_player_state",
     });
 
     /**
@@ -230,10 +272,11 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     /**
      * 初始化运行时状态管理器
      * 管理播放过程中的运行时状态（不持久化）
+     * 状态路径与 PlayerStateKeyEnum 枚举值一致（如 'player.volume'）
      */
-    this.state = createStateManager({
+    this.state = createTypedStateManager<PlayerStateMap>({
       player: {
-        state: PlayerStateEnum.IDLE,
+        state: PlayerState.IDLE,
         currentTime: 0,
         duration: 0,
         volume: this.props.volume,
@@ -245,23 +288,32 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
         isSeeking: false,
         quality: this.props.defaultQuality,
         playMode: this.props.playMode,
+        isLoading: false,
+        loadProgress: 0,
+        controlsVisible: true,
+        controlsHover: false,
+        danmakuVisible: true,
+        danmakuOpacity: 1,
+        danmakuSpeed: 1,
+        danmakuDensity: 0.5,
+        subtitleVisible: true,
+        subtitleLang: "zh-CN",
+        errorCode: 0,
+        errorMessage: "",
+        isWebFullscreen: false,
+        isWideScreen: false,
       },
       video: {
         width: 0,
         height: 0,
-        videoWidth: 0,
-        videoHeight: 0,
-      },
-      error: {
-        code: 0,
-        message: '',
+        aspectRatio: 0,
       },
     });
 
     /**
      * 初始化事件总线
      */
-    this.events = createEventBus();
+    this.events = createTypedEventBus<PlayerEventMap>();
 
     /**
      * 初始化插件管理器
@@ -269,9 +321,19 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     this.pluginManager = new PluginManager(this);
 
     /**
+     * 存储用户回调函数
+     */
+    this.callbacks = this.props.callbacks ?? {};
+
+    /**
      * 自动注册配置的插件
      */
     this.registerPlugins();
+
+    /**
+     * 检测浏览器能力
+     */
+    this.detectCapability();
   }
 
   /**
@@ -288,32 +350,95 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
   }
 
   /**
+   * 检测浏览器能力
+   * 在客户端环境下检测浏览器对流媒体的支持情况
+   */
+  private detectCapability(): void {
+    if (typeof window === "undefined") return;
+    this.browserCapability =
+      BrowserCapabilityDetector.getFullCapabilityResult();
+    this.state.set("browser", this.browserCapability);
+  }
+
+  /**
+   * SSR 水合
+   * 将服务端渲染的 DOM 与播放器实例关联
+   * 复用已有 DOM，绑定事件和 ref
+   *
+   * @param container - 服务端渲染的容器元素
+   */
+  hydrate(container: HTMLElement): void {
+    this.containerEl = container;
+    this.el = container;
+
+    /** 查找或创建 video 元素 */
+    const existingVideo = container.querySelector("video");
+    if (existingVideo instanceof HTMLVideoElement) {
+      this.videoEl = existingVideo;
+    } else {
+      this.videoEl = document.createElement("video");
+      const videoWrap = container.querySelector(".player-video-wrap");
+      if (videoWrap) {
+        videoWrap.appendChild(this.videoEl);
+      }
+    }
+
+    /** 注册到 WeakMap */
+    playerInstanceMap.set(container, this);
+
+    /** 创建流媒体中间件 */
+    if (this.videoEl) {
+      this.streamMiddleware = new StreamMiddleware(this.videoEl);
+    }
+
+    /** 绑定视频事件 */
+    this.bindVideoEvents();
+
+    /** 注册插件 */
+    this.registerPlugins();
+
+    /** 检测浏览器能力 */
+    this.detectCapability();
+
+    /** 触发 ready 事件 */
+    this.emitter.emit("ready");
+    this.events.emit(PlayerEventEnum.READY);
+  }
+
+  /**
    * 处理视频源配置
    * 支持字符串 URL、URL 数组（备用源）或多清晰度源数组
    */
   private processSources(): void {
     const src = this.props.src;
 
-    if (typeof src === 'string') {
+    if (typeof src === "string") {
       // 单个 URL
-      this.sources = [{
-        quality: QualityLevel.AUTO,
-        url: src,
-        name: '默认',
-      }];
+      this.sources = [
+        {
+          quality: QualityLevel.AUTO,
+          url: src,
+          name: "默认",
+        },
+      ];
     } else if (Array.isArray(src) && src.length > 0) {
       // 判断是字符串数组（备用源）还是 QualitySource 数组（多清晰度）
-      if (typeof src[0] === 'string') {
+      if (typeof src[0] === "string") {
         // URL 数组 - 第一个作为主源，其余作为备用源
-        const urlArray = src.filter((item): item is string => typeof item === 'string');
+        const urlArray = src.filter(
+          (item): item is string => typeof item === "string",
+        );
         this.sources = urlArray.map((url, index) => ({
           quality: index === 0 ? QualityLevel.AUTO : QualityLevel.P1080,
           url,
-          name: index === 0 ? '默认' : `备用${index}`,
+          name: index === 0 ? "默认" : `备用${index}`,
         }));
       } else {
         // QualitySource 数组 - 多清晰度源
-        const qualityArray = src.filter((item): item is QualitySource => typeof item === 'object' && 'url' in item && 'quality' in item);
+        const qualityArray = src.filter(
+          (item): item is QualitySource =>
+            typeof item === "object" && "url" in item && "quality" in item,
+        );
         this.sources = qualityArray;
       }
     } else {
@@ -332,18 +457,24 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
      * SSR 环境下渲染占位符
      * 避免在服务端创建视频元素
      */
-    // if (isServer() && this.ssrConfig.enabled) {
-    //   return 
-    // }
-
-    // 使用 PlayerDocker 组件渲染播放器 UI
     return h(PlayerDocker, {
       src: this.getCurrentSourceUrl(),
       playerName: this.props.playerName,
       autoplay: this.props.autoplay,
       volume: this.props.volume,
       muted: this.props.muted,
-      onMounted: (elements: NonNullable<PlayerDockerProps['onMounted']> extends (e: infer E) => void ? E : never) => {
+      events: this.events,
+      __providers: [
+        { contextId: StateContext.id, value: this.state },
+        {
+          contextId: ConfigContext.id,
+          value:
+            typeof this.props.controls === "object"
+              ? this.props.controls
+              : defaultControlConfig,
+        },
+      ],
+      onMounted: (elements) => {
         // 保存 video 元素引用
         this.videoEl = elements.video;
         this.containerEl = elements.container;
@@ -354,85 +485,54 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
           playerInstanceMap.set(this.containerEl, this);
         }
 
-        // 绑定视频事件 - 同步运行时状态到 Store
+        // 创建流媒体中间件
         if (this.videoEl) {
-          // 视频加载开始 → 设置加载中状态
-          this.videoEl.addEventListener('loadstart', () => {
-            this.store.setLoading(true);
-            this.state.set(PlayerStateKeyEnum.IS_LOADING, true);
-            this.setState(PlayerStateEnum.LOADING);
-          });
+          this.streamMiddleware = new StreamMiddleware(this.videoEl);
 
-          // 视频元数据加载完成 → 清除加载状态，更新时长
-          this.videoEl.addEventListener('loadedmetadata', () => {
-            this.store.setLoading(false);
-            this.store.setDuration(this.videoEl?.duration || 0);
-            this.state.set(PlayerStateKeyEnum.IS_LOADING, false);
-            this.state.set(PlayerStateKeyEnum.DURATION, this.videoEl?.duration || 0);
-            this.setState(PlayerStateEnum.IDLE);
-          });
-
-          // 视频可播放 → 清除等待状态
-          this.videoEl.addEventListener('canplay', () => {
-            this.store.setWaiting(false);
-            this.events.emit(PlayerEventEnum.CAN_PLAY, undefined);
-          });
-
-          // 视频缓冲中 → 设置等待状态
-          this.videoEl.addEventListener('waiting', () => {
-            this.store.setWaiting(true);
-            this.events.emit(PlayerEventEnum.WAITING, undefined);
-          });
-
-          // 视频播放结束 → 同步结束状态
-          this.videoEl.addEventListener('ended', () => {
-            this.store.setPlaying(false);
-            this.store.setEnded(true);
-            this.setState(PlayerStateEnum.ENDED);
-            this.events.emit(PlayerEventEnum.ENDED, undefined);
-          });
-
-          // 进度更新 → 同步缓冲进度
-          this.videoEl.addEventListener('progress', () => {
-            if (this.videoEl && this.videoEl.buffered.length > 0) {
-              const bufferedEnd = this.videoEl.buffered.end(this.videoEl.buffered.length - 1);
-              this.store.setBuffered(bufferedEnd);
-              this.state.set(PlayerStateKeyEnum.BUFFERED, bufferedEnd);
+          // 将已安装的流媒体插件注册到中间件
+          // （插件 install 在构造函数中执行，此时 streamMiddleware 尚未创建）
+          this.pluginManager?.forEachPlugin((plugin) => {
+            if (isStreamPlugin(plugin)) {
+              this.streamMiddleware!.registerStreamPlugin(plugin);
             }
           });
-
-          // 时间更新 → 同步当前播放时间（高频更新，仅更新运行时StateManager）
-          this.videoEl.addEventListener('timeupdate', () => {
-            const currentTime = this.videoEl?.currentTime || 0;
-            this.state.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
-            this.events.emit(PlayerEventEnum.TIME_UPDATE, { time: currentTime });
-          });
-
-          // 视频错误事件 - 用于备用源切换
-          this.videoEl.addEventListener('error', () => this.handleVideoError());
-
-          // 全屏变化监听（浏览器原生全屏事件）
-          document.addEventListener('fullscreenchange', () => {
-            const isFullscreen = !!document.fullscreenElement;
-            this.state.set(PlayerStateKeyEnum.IS_FULLSCREEN, isFullscreen);
-            this.store.setScreenMode(isFullscreen ? 'fullscreen' : 'normal');
-            this.events.emit(PlayerEventEnum.FULLSCREEN_CHANGE, { isFullscreen });
-          });
         }
+
+        // 绑定视频事件
+        this.bindVideoEvents();
 
         // 触发 ready 事件
-        this.emitter.emit('ready');
-        this.events.emit(PlayerEventEnum.READY, undefined);
-        const currentState = this.state.get<PlayerState>(PlayerStateKeyEnum.STATE);
-        if (currentState) {
-          this.emitter.emit('statechange', currentState);
+        this.emitter.emit("ready");
+        this.events.emit(PlayerEventEnum.READY);
+        const currentState = this.state.get(PlayerStateKeyEnum.STATE);
+        if (currentState !== undefined) {
+          this.emitter.emit("statechange", currentState);
         }
 
-        // 触发插件挂载事件
+        // 触发插件挂载事件（使用插件约定的 'player:mounted' 事件名）
+        this.events.emit("player:mounted", {
+          container: this.containerEl,
+          video: this.videoEl,
+          sendingArea: elements.sendingArea,
+        });
+        // 同时触发标准 MOUNTED 事件
         this.events.emit(PlayerEventEnum.MOUNTED, {
           container: this.containerEl,
           video: this.videoEl,
+          sendingArea: elements.sendingArea,
         });
+
+        // 如果有流媒体插件，通过中间件加载源
+        if (
+          this.streamMiddleware &&
+          this.streamMiddleware.getMode() !== PlayerMode.NATIVE
+        ) {
+          const sourceUrl = this.getCurrentSourceUrl();
+          if (sourceUrl) {
+            const format = this.detectStreamFormat(sourceUrl);
+            this.streamMiddleware.load({ url: sourceUrl, format });
+          }
+        }
 
         // 自动播放
         if (this.props.autoplay) {
@@ -443,22 +543,110 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
   }
 
   /**
+   * 绑定视频元素事件
+   * 同步运行时状态到 Store，并触发用户回调
+   */
+  private bindVideoEvents(): void {
+    if (!this.videoEl) return;
+
+    // 视频加载开始 → 设置加载中状态
+    this.videoEl.addEventListener("loadstart", () => {
+      this.store.setLoading(true);
+      this.state.set(PlayerStateKeyEnum.IS_LOADING, true);
+      this.setState(PlayerState.LOADING);
+    });
+
+    // 视频元数据加载完成 → 清除加载状态，更新时长
+    this.videoEl.addEventListener("loadedmetadata", () => {
+      this.store.setLoading(false);
+      this.store.setDuration(this.videoEl?.duration || 0);
+      this.state.set(PlayerStateKeyEnum.IS_LOADING, false);
+      this.state.set(PlayerStateKeyEnum.DURATION, this.videoEl?.duration || 0);
+      this.setState(PlayerState.IDLE);
+    });
+
+    // 视频可播放 → 清除等待状态
+    this.videoEl.addEventListener("canplay", () => {
+      this.store.setWaiting(false);
+      this.events.emit(PlayerEventEnum.CAN_PLAY);
+      this.callbacks.canplay?.();
+    });
+
+    // 视频缓冲中 → 设置等待状态
+    this.videoEl.addEventListener("waiting", () => {
+      this.store.setWaiting(true);
+      this.events.emit(PlayerEventEnum.WAITING);
+      this.callbacks.waiting?.();
+    });
+
+    // 视频播放结束 → 同步结束状态
+    this.videoEl.addEventListener("ended", () => {
+      this.store.setPlaying(false);
+      this.store.setEnded(true);
+      this.setState(PlayerState.ENDED);
+      this.events.emit(PlayerEventEnum.ENDED);
+      this.callbacks.ended?.();
+    });
+
+    // 进度更新 → 同步缓冲进度
+    this.videoEl.addEventListener("progress", () => {
+      if (this.videoEl && this.videoEl.buffered.length > 0) {
+        const bufferedEnd = this.videoEl.buffered.end(
+          this.videoEl.buffered.length - 1,
+        );
+        this.store.setBuffered(bufferedEnd);
+        this.state.set(PlayerStateKeyEnum.BUFFERED, bufferedEnd);
+        this.callbacks.progress?.(this.videoEl.buffered);
+      }
+    });
+
+    // 时间更新 → 同步当前播放时间（高频更新，仅更新运行时StateManager）
+    this.videoEl.addEventListener("timeupdate", () => {
+      const currentTime = this.videoEl?.currentTime || 0;
+      const duration = this.videoEl?.duration || 0;
+      this.state.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
+      this.events.emit(PlayerEventEnum.TIME_UPDATE, { time: currentTime });
+      this.callbacks.timeupdate?.(currentTime, duration);
+    });
+
+    // 视频错误事件 - 用于备用源切换
+    this.videoEl.addEventListener("error", () => this.handleVideoError());
+
+    // 全屏变化监听（浏览器原生全屏事件）
+    this.fullscreenChangeHandler = (): void => {
+      const isFullscreen = !!document.fullscreenElement;
+      this.state.set(PlayerStateKeyEnum.IS_FULLSCREEN, isFullscreen);
+      this.store.setScreenMode(isFullscreen ? "fullscreen" : "normal");
+      this.events.emit(PlayerEventEnum.FULLSCREEN_CHANGE, { isFullscreen });
+      this.callbacks.fullscreenchange?.(isFullscreen);
+    };
+    document.addEventListener("fullscreenchange", this.fullscreenChangeHandler);
+  }
+
+  /**
    * 获取当前视频源 URL
    */
   private getCurrentSourceUrl(): string {
-    if (this.sources.length === 0) return '';
+    if (this.sources.length === 0) return "";
     return this.sources[this.currentSourceIndex]?.url || this.sources[0].url;
   }
 
   /**
-   * 获取可用画质列表
+   * 根据源 URL 推断流媒体格式
+   * @param url - 视频/流媒体源 URL
+   * @returns 对应的 StreamFormatEnum 值
    */
-  private getAvailableQualities(): QualityLevel[] {
-    const qualities = this.sources.map(s => s.quality);
-    if (qualities.length > 1 && !qualities.includes(QualityLevel.AUTO)) {
-      return [QualityLevel.AUTO, ...qualities];
-    }
-    return qualities;
+  private detectStreamFormat(url: string): StreamFormatEnum {
+    const lower = url.split("?")[0].toLowerCase();
+    if (lower.endsWith(".m3u8") || /hls/i.test(url))
+      return StreamFormatEnum.HLS;
+    if (lower.endsWith(".mpd") || /dash/i.test(url))
+      return StreamFormatEnum.DASH;
+    if (lower.endsWith(".flv") || /flv/i.test(url)) return StreamFormatEnum.FLV;
+    // JSON manifest 默认按 DASH 处理（HLS manifest 文件名中含 hls）
+    if (lower.endsWith(".json"))
+      return /hls/i.test(url) ? StreamFormatEnum.HLS : StreamFormatEnum.DASH;
+    return StreamFormatEnum.MP4;
   }
 
   /**
@@ -469,10 +657,11 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
   private switchToNextBackupSource(): boolean {
     // 检查是否还有备用源可用
     if (this.currentBackupIndex >= this.sources.length - 1) {
-      logger.error('所有备用源都已尝试，无法播放');
+      logger.error("所有备用源都已尝试，无法播放");
       this.events.emit(PlayerEventEnum.ERROR, {
-        code: 'ALL_SOURCES_FAILED',
-        message: '所有视频源都无法播放',
+        error: "ALL_SOURCES_FAILED",
+        code: undefined,
+        message: "所有视频源都无法播放",
       });
       return false;
     }
@@ -530,6 +719,10 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     const error = this.videoEl.error;
     if (!error) return;
 
+    // 重置加载状态，防止播放按钮被永久禁用（pointer-events: none）
+    this.store.setLoading(false);
+    this.state.set(PlayerStateKeyEnum.IS_LOADING, false);
+
     // 错误码说明：
     // 1 = MEDIA_ERR_ABORTED - 获取过程被用户中止
     // 2 = MEDIA_ERR_NETWORK - 网络错误
@@ -544,15 +737,16 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
       if (!switched) {
         // 所有备用源都失败，触发错误事件
         this.events.emit(PlayerEventEnum.ERROR, {
+          error,
           code: error.code,
-          message: error.message || '视频加载失败',
+          message: error.message || "视频加载失败",
         });
       }
     } else {
-      // 其他错误直接触发错误事件
       this.events.emit(PlayerEventEnum.ERROR, {
+        error,
         code: error.code,
-        message: error.message || '视频播放错误',
+        message: error.message || "视频播放错误",
       });
     }
   }
@@ -576,7 +770,6 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     // 注意：初始化逻辑已移到 PlayerDocker 的 onMounted 回调中
   }
 
-
   /**
    * 设置播放器状态
    *
@@ -586,9 +779,10 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     const prevState = this.state.get(PlayerStateKeyEnum.STATE);
     if (prevState !== state) {
       this.state.set(PlayerStateKeyEnum.STATE, state);
-      this.emitter.emit('statechange', state);
+      this.emitter.emit("statechange", state);
       // 使用枚举替代字符串
       this.events.emit(PlayerEventEnum.STATE_CHANGE, state);
+      this.callbacks.statechange?.(state);
     }
   }
 
@@ -614,7 +808,7 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
    */
   use(plugin: Plugin): VideoPlayer {
     if (!this.pluginManager) {
-      logger.error('插件管理器未初始化');
+      logger.error("插件管理器未初始化");
       return this;
     }
     this.pluginManager.install(plugin);
@@ -628,6 +822,23 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
    * @returns 插件实例，未安装则返回 undefined
    */
   getPlugin<T extends Plugin>(name: string): T | undefined {
+    return this.pluginManager?.get<T>(name);
+  }
+
+  /**
+   * 获取已安装插件的完整 API
+   * 与 getPlugin 不同，此方法返回插件的完整 API 接口
+   * 例如：player.getPluginAPI<DanmakuPluginAPI>('danmaku') 可获取弹幕插件的全部方法
+   *
+   * @param name - 插件名称
+   * @returns 插件 API 实例，未安装则返回 undefined
+   *
+   * @example
+   * const danmaku = player.getPluginAPI<DanmakuPluginAPI>('danmaku');
+   * danmaku?.send({ text: '你好', time: 0, type: 1, id: 1 });
+   * danmaku?.setOpacity(0.8);
+   */
+  getPluginAPI<T extends Plugin>(name: string): T | undefined {
     return this.pluginManager?.get<T>(name);
   }
 
@@ -647,16 +858,17 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
   async play(): Promise<void> {
     if (!this.videoEl) return;
     try {
-      this.events.emit(PlayerEventEnum.PLAY, undefined);
       await this.videoEl.play();
 
-      // 同步运行时状态到 Store：播放中
+      // 播放成功后再发事件和更新状态
       this.store.setPlaying(true);
       this.store.setPaused(false);
       this.store.setEnded(false);
-      this.setState(PlayerStateEnum.PLAYING);
+      this.setState(PlayerState.PLAYING);
+      this.events.emit(PlayerEventEnum.PLAY);
+      this.callbacks.play?.();
     } catch (error) {
-      logger.error('播放失败:', error);
+      logger.error("播放失败:", error);
       this.events.emit(PlayerEventEnum.ERROR, { error });
     }
   }
@@ -672,8 +884,9 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     // 同步运行时状态到 Store：已暂停
     this.store.setPlaying(false);
     this.store.setPaused(true);
-    this.setState(PlayerStateEnum.PAUSED);
-    this.events.emit(PlayerEventEnum.PAUSE, undefined);
+    this.setState(PlayerState.PAUSED);
+    this.events.emit(PlayerEventEnum.PAUSE);
+    this.callbacks.pause?.();
   }
 
   /**
@@ -681,7 +894,7 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
    */
   toggle(): void {
     const currentState = this.state.get(PlayerStateKeyEnum.STATE);
-    if (currentState === PlayerStateEnum.PLAYING) {
+    if (currentState === PlayerState.PLAYING) {
       this.pause();
     } else {
       void this.play();
@@ -695,18 +908,24 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
    */
   seek(time: number): void {
     if (!this.videoEl) return;
-    const duration = this.state.get<number>(PlayerStateKeyEnum.DURATION);
+    const duration = this.state.get(PlayerStateKeyEnum.DURATION);
     if (!duration || !isFinite(duration)) return;
 
     const clampedTime = clamp(time, 0, duration);
-    const prevTime = this.state.get<number>(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
+    const prevTime = this.state.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
 
-    // 使用枚举替代字符串
-    this.events.emit(PlayerEventEnum.TIME_UPDATE, {
+    // 发出 SEEK_START 事件
+    this.events.emit(PlayerEventEnum.SEEK_START, {
       time: clampedTime,
       previousTime: prevTime,
     });
     this.videoEl.currentTime = clampedTime;
+
+    // 发出 SEEK_END 事件（video seeking 事件会在实际 seek 完成后触发，这里发出主动 seek 的通知）
+    this.events.emit(PlayerEventEnum.SEEK_END, {
+      time: clampedTime,
+      previousTime: prevTime,
+    });
   }
 
   /**
@@ -732,15 +951,19 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     }
 
     // 使用枚举替代字符串
-    this.events.emit(PlayerEventEnum.VOLUME_CHANGE, { volume: clampedVolume, muted: isMuted });
+    this.events.emit(PlayerEventEnum.VOLUME_CHANGE, {
+      volume: clampedVolume,
+      muted: isMuted,
+    });
+    this.callbacks.volumechange?.(clampedVolume, isMuted);
   }
 
   /**
    * 切换静音
    */
   toggleMute(): void {
-    const currentVolume = this.state.get<number>(PlayerStateKeyEnum.VOLUME) ?? 1;
-    const currentMuted = this.state.get<boolean>(PlayerStateKeyEnum.MUTED) ?? false;
+    const currentVolume = this.state.get(PlayerStateKeyEnum.VOLUME) ?? 1;
+    const currentMuted = this.state.get(PlayerStateKeyEnum.MUTED) ?? false;
     this.setVolume(currentVolume);
     this.setMuted(!currentMuted);
   }
@@ -783,6 +1006,7 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
 
     // 使用枚举替代字符串
     this.events.emit(PlayerEventEnum.RATE_CHANGE, rate);
+    this.callbacks.ratechange?.(rate);
   }
 
   /**
@@ -796,9 +1020,11 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     const isNowFullscreen = !wasFullscreen;
 
     // 同步屏幕模式到 Store
-    this.store.setScreenMode(isNowFullscreen ? 'fullscreen' : 'normal');
+    this.store.setScreenMode(isNowFullscreen ? "fullscreen" : "normal");
     this.state.set(PlayerStateKeyEnum.IS_FULLSCREEN, isNowFullscreen);
-    this.events.emit(PlayerEventEnum.FULLSCREEN_CHANGE, { isFullscreen: isNowFullscreen });
+    this.events.emit(PlayerEventEnum.FULLSCREEN_CHANGE, {
+      isFullscreen: isNowFullscreen,
+    });
   }
 
   /**
@@ -823,30 +1049,24 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
    * @param quality - 目标画质
    */
   setQuality(quality: QualityLevel): void {
-    const currentQuality = this.state.get<QualityLevel>(PlayerStateKeyEnum.QUALITY);
+    const currentQuality = this.state.get(PlayerStateKeyEnum.QUALITY);
     if (quality === currentQuality) return;
 
-    const wasPlaying = this.state.get(PlayerStateKeyEnum.STATE) === PlayerStateEnum.PLAYING;
-    const currentTime = this.state.get<number>(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
+    const wasPlaying =
+      this.state.get(PlayerStateKeyEnum.STATE) === PlayerState.PLAYING;
+    const currentTime = this.state.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
 
-    // 更新运行时状态
     this.state.set(PlayerStateKeyEnum.QUALITY, quality);
 
-    /**
-     * 找到对应画质的视频源
-     */
     if (quality === QualityLevel.AUTO) {
       this.currentSourceIndex = 0;
     } else {
-      const index = this.sources.findIndex(s => s.quality === quality);
+      const index = this.sources.findIndex((s) => s.quality === quality);
       if (index !== -1) {
         this.currentSourceIndex = index;
       }
     }
 
-    /**
-     * 切换视频源
-     */
     if (this.videoEl) {
       this.videoEl.src = this.getCurrentSourceUrl();
       this.videoEl.currentTime = currentTime;
@@ -856,8 +1076,18 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
       }
     }
 
-    // 使用枚举替代字符串
     this.events.emit(PlayerEventEnum.QUALITY_CHANGE, quality);
+    this.callbacks.qualitychange?.(quality);
+
+    const currentSource = this.sources[this.currentSourceIndex];
+    if (currentSource && currentSource.width && currentSource.height) {
+      this.events.emit(PlayerEventEnum.STREAM_QUALITY_CHANGE, {
+        width: currentSource.width,
+        height: currentSource.height,
+        bitrate: currentSource.bitrate,
+        isAuto: false,
+      });
+    }
   }
 
   /**
@@ -868,12 +1098,12 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
     if (!this.videoEl) return;
     // 重置错误状态
     this.state.set(PlayerStateKeyEnum.ERROR_CODE, 0);
-    this.state.set(PlayerStateKeyEnum.ERROR_MESSAGE, '');
+    this.state.set(PlayerStateKeyEnum.ERROR_MESSAGE, "");
     // 同步 Store：进入加载状态
     this.store.setLoading(true);
     this.store.setEnded(false);
     this.videoEl.load();
-    this.setState(PlayerStateEnum.IDLE);
+    this.setState(PlayerState.IDLE);
   }
 
   /**
@@ -898,6 +1128,15 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
 
     // 移除事件监听
     this.emitter.removeAllListeners();
+
+    // 移除全屏变化监听
+    if (this.fullscreenChangeHandler) {
+      document.removeEventListener(
+        "fullscreenchange",
+        this.fullscreenChangeHandler,
+      );
+      this.fullscreenChangeHandler = null;
+    }
 
     /**
      * 销毁虚拟节点
@@ -928,42 +1167,65 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
    * @returns 播放器状态数据
    */
   getState(): PlayerStateData {
-    const playerState = this.state.get<Record<string, unknown>>('player') ?? {};
-    const videoState = this.state.get<Record<string, unknown>>('video') ?? {};
+    const fullState = this.state.getState();
+    const isRecord = (val: unknown): val is Record<string, unknown> =>
+      typeof val === "object" && val !== null && !Array.isArray(val);
+    const playerState: Record<string, unknown> = isRecord(fullState.player)
+      ? fullState.player
+      : {};
+    const videoState: Record<string, unknown> = isRecord(fullState.video)
+      ? fullState.video
+      : {};
 
     // 类型谓词
-    const isNumber = (v: unknown): v is number => typeof v === 'number';
-    const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean';
-    const isQualityLevel = (v: unknown): v is QualityLevel => typeof v === 'string' && (Object.values(QualityLevel) as string[]).includes(v);
+    const isNumber = (v: unknown): v is number => typeof v === "number";
+    const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
+    const qualityLevelValues: ReadonlySet<string> = new Set(
+      Object.values(QualityLevel),
+    );
+    const isQualityLevel = (v: unknown): v is QualityLevel =>
+      typeof v === "string" && qualityLevelValues.has(v);
 
     // 计算宽高比
     const videoWidth = videoState.videoWidth;
     const videoHeight = videoState.videoHeight;
-    const aspectRatio = isNumber(videoWidth) && isNumber(videoHeight)
-      ? videoWidth / videoHeight
-      : 16 / 9;
+    const aspectRatio =
+      isNumber(videoWidth) && isNumber(videoHeight)
+        ? videoWidth / videoHeight
+        : 16 / 9;
 
     // 安全获取 PlayerState
     const getPlayerState = (value: unknown): PlayerState => {
-      if (value === PlayerStateEnum.PLAYING) return PlayerStateEnum.PLAYING;
-      if (value === PlayerStateEnum.PAUSED) return PlayerStateEnum.PAUSED;
-      if (value === PlayerStateEnum.ENDED) return PlayerStateEnum.ENDED;
-      if (value === PlayerStateEnum.ERROR) return PlayerStateEnum.ERROR;
-      if (value === PlayerStateEnum.LOADING) return PlayerStateEnum.LOADING;
-      return PlayerStateEnum.IDLE;
+      if (value === PlayerState.PLAYING) return PlayerState.PLAYING;
+      if (value === PlayerState.PAUSED) return PlayerState.PAUSED;
+      if (value === PlayerState.ENDED) return PlayerState.ENDED;
+      if (value === PlayerState.ERROR) return PlayerState.ERROR;
+      if (value === PlayerState.LOADING) return PlayerState.LOADING;
+      return PlayerState.IDLE;
     };
 
     return {
       state: getPlayerState(playerState.state),
-      currentTime: isNumber(playerState.currentTime) ? playerState.currentTime : 0,
+      currentTime: isNumber(playerState.currentTime)
+        ? playerState.currentTime
+        : 0,
       duration: isNumber(playerState.duration) ? playerState.duration : 0,
       volume: isNumber(playerState.volume) ? playerState.volume : 1,
       muted: isBoolean(playerState.muted) ? playerState.muted : false,
-      playbackRate: isNumber(playerState.playbackRate) ? playerState.playbackRate : 1,
-      quality: isQualityLevel(playerState.quality) ? playerState.quality : QualityLevel.AUTO,
-      isFullscreen: isBoolean(playerState.isFullscreen) ? playerState.isFullscreen : false,
+      playbackRate: isNumber(playerState.playbackRate)
+        ? playerState.playbackRate
+        : 1,
+      quality: isQualityLevel(playerState.quality)
+        ? playerState.quality
+        : QualityLevel.AUTO,
+      isFullscreen: isBoolean(playerState.isFullscreen)
+        ? playerState.isFullscreen
+        : false,
       isPip: isBoolean(playerState.isPip) ? playerState.isPip : false,
-      buffered: playerState.buffered instanceof TimeRanges ? playerState.buffered : null,
+      buffered:
+        playerState.buffered instanceof TimeRanges
+          ? playerState.buffered
+          : null,
       aspectRatio,
     };
   }

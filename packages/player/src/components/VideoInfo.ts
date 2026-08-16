@@ -2,18 +2,19 @@
  * ============================================
  * 视频信息组件
  * ============================================
- * 使用 h 函数实现的视频信息组件
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
+import type { ComponentLifecycle } from '@/types';
 
 /**
  * 视频信息项接口
+ * 描述单条视频统计信息的标题和数据
  */
 export interface VideoInfoItem {
-  /** 标题 */
+  /** 信息项标题 */
   title: string;
-  /** 数据 */
+  /** 信息项数据内容 */
   data: string;
 }
 
@@ -21,16 +22,17 @@ export interface VideoInfoItem {
  * 视频信息组件 Props 接口
  */
 export interface VideoInfoProps {
-  /** 是否显示 */
+  /** 是否显示面板 */
   visible?: boolean;
-  /** 信息项数组 */
+  /** 信息项数组，未提供时使用默认信息项 */
   items?: VideoInfoItem[];
-  /** 关闭回调 */
+  /** 关闭面板的回调函数 */
   onClose?: () => void;
 }
 
 /**
- * 默认信息项
+ * 默认信息项列表
+ * 包含视频播放的默认统计信息
  */
 const DEFAULT_INFO_ITEMS: VideoInfoItem[] = [
   { title: '媒体类型:', data: 'video/mp4;codecs="av01.0.00M.10.0.110.01.01.01.0",audio/mp4;codecs="mp4a.40.2"' },
@@ -46,29 +48,95 @@ const DEFAULT_INFO_ITEMS: VideoInfoItem[] = [
 
 /**
  * 视频信息组件
- * 使用 h 函数实现，保持与原组件相同的 DOM 结构和类名
+ * 展示视频播放的统计信息，如媒体类型、分辨率、码率等
  */
-export const VideoInfo = defineComponent<VideoInfoProps>((props) => {
-  /**
-   * 信息容器元素引用
-   */
-  const infoContainerRef: { current: HTMLDivElement | null } = { current: null };
+export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: ComponentLifecycle) => {
+  // ============================================
+  // DOM 引用
+  // ============================================
+
+  /** 信息面板外层容器 DOM 引用 */
+  const infoContainerRef = ref<HTMLDivElement>();
+
+  /** 信息面板内容区域 DOM 引用 */
+  const panelRef = ref<HTMLDivElement>();
 
   /**
-   * 处理关闭
+   * 处理关闭面板操作
    */
   const handleClose = (): void => {
     props.onClose?.();
   };
 
   /**
-   * 渲染信息项
+   * 获取要渲染的信息项列表
+   * @returns 信息项数组
    */
   const renderInfoItems = (): VideoInfoItem[] => {
     return props.items ?? DEFAULT_INFO_ITEMS;
   };
 
+  /** 实际渲染的信息项列表 */
   const infoItems = renderInfoItems();
+
+  // ============================================
+  // DOM 更新方法
+  // ============================================
+
+  /**
+   * 更新指定标题的信息项数据
+   * @param title - 要更新的信息项标题
+   * @param data - 新的数据内容
+   */
+  const updateItem = (title: string, data: string): void => {
+    if (panelRef.current) {
+      const lines = panelRef.current.querySelectorAll('.info-line');
+      lines.forEach((line) => {
+        const titleEl = line.querySelector('.info-title');
+        if (titleEl && titleEl.textContent === title) {
+          const dataEl = line.querySelector('.info-data');
+          if (dataEl) {
+            dataEl.textContent = data;
+          }
+        }
+      });
+    }
+  };
+
+  /**
+   * 显示信息面板
+   */
+  const show = (): void => {
+    if (infoContainerRef.current) {
+      infoContainerRef.current.style.display = '';
+    }
+  };
+
+  /**
+   * 隐藏信息面板
+   */
+  const hide = (): void => {
+    if (infoContainerRef.current) {
+      infoContainerRef.current.style.display = 'none';
+    }
+  };
+
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
+  /**
+   * 组件挂载后，通过事件向外暴露控制方法
+   */
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('videoInfoMounted', { updateItem, show, hide });
+  };
+
+  /**
+   * 组件销毁前，清空 DOM 引用以防止内存泄漏
+   */
+  lifecycle.onBeforeDestroy = (): void => {
+  };
 
   return h(
     'div',
@@ -88,7 +156,7 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props) => {
     ),
     h(
       'div',
-      { class: 'player-info-panel' },
+      { class: 'player-info-panel', ref: panelRef },
       ...infoItems.map((item) =>
         h(
           'div',

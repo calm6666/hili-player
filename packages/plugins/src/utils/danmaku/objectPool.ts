@@ -3,7 +3,8 @@
  * 用于复用弹幕DOM元素和Canvas对象，减少GC压力
  */
 
-import { type DanmakuRenderItem, DanmakuType } from './types';
+import { DanmakuType } from '@/types/danmaku';
+import type { DanmakuRenderItem } from './types';
 
 /** 对象池配置 */
 interface ObjectPoolConfig {

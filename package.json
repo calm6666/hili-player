@@ -4,10 +4,13 @@
   "description": "极简 TypeScript 视频播放器 - hili-player",
   "type": "module",
   "scripts": {
-    "dev": "cd packages/player && pnpm dev",
+    "dev": "vite",
+    "preview": "vite preview",
     "build": "cd packages/player && pnpm build && cd ../plugins && pnpm build",
     "build:player": "cd packages/player && pnpm build",
     "build:plugins": "cd packages/plugins && pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint packages --ext .ts",
     "lint:fix": "eslint packages --ext .ts --fix"
@@ -20,12 +23,26 @@
   ],
   "author": "",
   "license": "MIT",
+  "sideEffects": false,
   "packageManager": "pnpm@9.0.0",
   "devDependencies": {
+    "@babel/parser": "^8.0.0",
+    "@babel/traverse": "^8.0.0",
+    "@babel/types": "^8.0.0",
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__traverse": "^7.28.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
-    "typescript": "^6.0.3"
+    "express": "^5.2.1",
+    "happy-dom": "^20.9.0",
+    "jsdom": "^29.1.1",
+    "magic-string": "^0.30.21",
+    "sass": "^1.99.0",
+    "typescript": "^6.0.3",
+    "vite": "^5.2.0",
+    "vitest": "^2.1.9"
   }
 }

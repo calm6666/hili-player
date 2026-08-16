@@ -2,20 +2,21 @@
  * ============================================
  * 弹幕选择面板组件 (Selection)
  * ============================================
- * 使用 h 函数框架实现的弹幕选择面板组件
- * 保持与老播放器完全相同的 DOM 结构和类名
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
+import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
 /**
- * 弹幕模式
+ * 弹幕模式类型
+ * 1: 滚动弹幕, 4: 底部弹幕, 5: 顶部弹幕
  */
-export type DanmakuMode = 1 | 4 | 5; // 1:滚动 4:底部 5:顶部
+export type DanmakuMode = 1 | 4 | 5;
 
 /**
- * 弹幕字号
+ * 弹幕字号类型
+ * small: 小字号, normal: 标准字号
  */
 export type DanmakuSize = 'small' | 'normal';
 
@@ -23,22 +24,22 @@ export type DanmakuSize = 'small' | 'normal';
  * Selection 组件 Props 接口
  */
 export interface SelectionProps {
-  /** 初始颜色 */
+  /** 初始弹幕颜色值 */
   initialColor?: string;
-  /** 初始模式 */
+  /** 初始弹幕模式 */
   initialMode?: DanmakuMode;
-  /** 初始字号 */
+  /** 初始弹幕字号 */
   initialSize?: DanmakuSize;
-  /** 颜色变化回调 */
+  /** 弹幕颜色变化时的回调函数 */
   onColorChange?: (color: string) => void;
-  /** 模式变化回调 */
+  /** 弹幕模式变化时的回调函数 */
   onModeChange?: (mode: DanmakuMode) => void;
-  /** 字号变化回调 */
+  /** 弹幕字号变化时的回调函数 */
   onSizeChange?: (size: DanmakuSize) => void;
 }
 
 /**
- * 预设颜色列表
+ * 预设弹幕颜色列表
  */
 const COLOR_LIST: string[] = [
   '#FE0302', '#FF7204', '#FFAA02', '#FFD302', '#FFFF00',
@@ -48,48 +49,40 @@ const COLOR_LIST: string[] = [
 
 /**
  * 弹幕选择面板组件
- * 使用 h 函数实现，保持与老播放器完全相同的 DOM 结构和类名
  */
-export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
+export const Selection = defineComponent<SelectionProps>((props, lifecycle: ComponentLifecycle) => {
   // ============================================
   // 状态数据
   // ============================================
-  let currentColor = props.initialColor || '#FFFFFF';
+
+  /** 当前选中的弹幕模式 */
   let currentMode = props.initialMode || 1;
+
+  /** 当前选中的弹幕字号 */
   let currentSize = props.initialSize || 'normal';
 
   // ============================================
   // DOM 元素引用
   // ============================================
-  const inputRef: { current: HTMLInputElement | null } = { current: null };
-  const colorBoxRef: { current: HTMLDivElement | null } = { current: null };
-  const colorPickerRef: { current: HTMLUListElement | null } = { current: null };
+
+  /** 颜色输入框元素引用 */
+  const inputRef = ref<HTMLInputElement>();
+
+  /** 颜色预览方块元素引用 */
+  const colorBoxRef = ref<HTMLDivElement>();
+
+  /** 颜色选择器列表元素引用 */
+  const colorPickerRef = ref<HTMLUListElement>();
 
   // ============================================
   // 事件处理
   // ============================================
 
   /**
-   * 处理颜色输入
-   */
-  const handleInput = (event: Event): void => {
-    if (!(event.target instanceof HTMLInputElement)) return;
-    const value = event.target.value;
-    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-      currentColor = value;
-      if (colorBoxRef.current) {
-        colorBoxRef.current.style.background = value;
-      }
-      props.onColorChange?.(value);
-      lifecycle.emit?.('colorChange', value);
-    }
-  };
-
-  /**
-   * 处理颜色选择
+   * 处理颜色选择事件
+   * @param color - 选中的颜色值
    */
   const handleColorSelect = (color: string): void => {
-    currentColor = color;
     if (inputRef.current) {
       inputRef.current.value = color;
     }
@@ -101,7 +94,8 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
   };
 
   /**
-   * 处理模式选择
+   * 处理弹幕模式选择事件
+   * @param mode - 选中的弹幕模式
    */
   const handleModeSelect = (mode: DanmakuMode): void => {
     currentMode = mode;
@@ -110,7 +104,8 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
   };
 
   /**
-   * 处理字号选择
+   * 处理弹幕字号选择事件
+   * @param size - 选中的弹幕字号
    */
   const handleSizeSelect = (size: DanmakuSize): void => {
     currentSize = size;
@@ -119,11 +114,45 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
   };
 
   // ============================================
+  // DOM 更新方法
+  // ============================================
+
+  /**
+   * 外部设置弹幕颜色
+   * @param color - 颜色值
+   */
+  const setColor = (color: string): void => {
+    if (inputRef.current) {
+      inputRef.current.value = color;
+    }
+    if (colorBoxRef.current) {
+      colorBoxRef.current.style.background = color;
+    }
+  };
+
+  /**
+   * 外部设置弹幕模式
+   * @param mode - 弹幕模式
+   */
+  const setMode = (mode: DanmakuMode): void => {
+    currentMode = mode;
+  };
+
+  /**
+   * 外部设置弹幕字号
+   * @param size - 弹幕字号
+   */
+  const setSize = (size: DanmakuSize): void => {
+    currentSize = size;
+  };
+
+  // ============================================
   // 渲染函数
   // ============================================
 
   /**
-   * 渲染颜色选项
+   * 渲染颜色选项列表
+   * @returns 颜色选项 VNode 数组
    */
   const renderColorOptions = (): VNode[] => {
     return COLOR_LIST.map((color) =>
@@ -137,7 +166,8 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
   };
 
   /**
-   * 渲染字号选择
+   * 渲染字号选择行
+   * @returns 字号选择 VNode
    */
   const renderSizeSelection = (): VNode => {
     return h('div', { class: 'player-mode-selection-row fontsize' },
@@ -145,11 +175,11 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
       h('div', { class: 'row-selection' },
         h('div', { class: 'hui-radio-wrap-button' },
           h('div', {
-            class: ['radio-button', { active: currentSize === 'small' }],
+            class: ['radio-button', currentSize === 'small' ? 'active' : ''].filter(Boolean).join(' '),
             onClick: () => handleSizeSelect('small'),
           }, h('span', {}, '小')),
           h('div', {
-            class: ['radio-button', { active: currentSize === 'normal' }],
+            class: ['radio-button', currentSize === 'normal' ? 'active' : ''].filter(Boolean).join(' '),
             onClick: () => handleSizeSelect('normal'),
           }, h('span', {}, '标准'))
         )
@@ -158,9 +188,11 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
   };
 
   /**
-   * 渲染模式选择
+   * 渲染模式选择行
+   * @returns 模式选择 VNode
    */
   const renderModeSelection = (): VNode => {
+    /** 弹幕模式选项列表，包含模式值、显示标签和图标路径 */
     const modes: { value: DanmakuMode; label: string; icon: string }[] = [
       { value: 1, label: '滚动', icon: 'M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM11 9h6a1 1 0 0 1 0 2h-6a1 1 0 0 1 0-2zm-3 2H6V9h2v2zm4 4h-2v-2h2v2zm9 0h-6a1 1 0 0 1 0-2h6a1 1 0 0 1 0 2z' },
       { value: 5, label: '顶部', icon: 'M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4zM9 9H7V7h2v2zm4 0h-2V7h2v2zm4 0h-2V7h2v2zm4 0h-2V7h2v2z' },
@@ -172,7 +204,7 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
       h('div', { class: 'row-selection' },
         ...modes.map((mode) =>
           h('div', {
-            class: ['selection-span', 'js-action', { active: currentMode === mode.value }],
+            class: ['selection-span', 'js-action', currentMode === mode.value ? 'active' : ''].filter(Boolean).join(' '),
             'data-type': 'mode',
             'data-value': mode.value.toString(),
             name: 'mode_selector',
@@ -191,7 +223,8 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
   };
 
   /**
-   * 渲染颜色选择
+   * 渲染颜色选择行
+   * @returns 颜色选择 VNode
    */
   const renderColorSelection = (): VNode => {
     return h('div', { class: 'player-mode-selection-row color' },
@@ -204,6 +237,23 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle) => {
       ),
       h('ul', { class: 'color-picker-options', ref: colorPickerRef }, ...renderColorOptions())
     );
+  };
+
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
+  /**
+   * 组件挂载后的回调，向外暴露设置方法
+   */
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('selectionMounted', { setColor, setMode, setSize });
+  };
+
+  /**
+   * 组件销毁前的回调，清理所有 DOM 引用
+   */
+  lifecycle.onBeforeDestroy = (): void => {
   };
 
   // ============================================

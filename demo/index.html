@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hili Framework · SSR + Hydrate 测试</title>
+  <!-- SSR 元信息占位符：服务端注入 ssr-start-time / ssr-render-duration meta 标签 -->
+  <!--ssr-meta-outlet-->
+  <!-- SSR CSS 占位符：服务端注入收集到的 CSS（播放器 SCSS 等），确保首屏无 FOUC -->
+  <!--ssr-css-outlet-->
+  <style>
+    /* ============================================
+       全局基础样式（暗色主题，参考 root index.html）
+       ============================================ */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* 自定义滚动条（暗色适配） */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+    /* ============================================
+       SSR 状态徽章（右上角固定）
+       ============================================ */
+    .ssr-badge {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      z-index: 9999;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+    }
+    .ssr-badge.ssr {
+      background: rgba(33, 150, 243, 0.15);
+      color: #64b5f6;
+      border-color: rgba(33, 150, 243, 0.4);
+    }
+    .ssr-badge.hydrated {
+      background: rgba(76, 175, 80, 0.15);
+      color: #81c784;
+      border-color: rgba(76, 175, 80, 0.4);
+    }
+    .ssr-badge.failed {
+      background: rgba(244, 67, 54, 0.15);
+      color: #e57373;
+      border-color: rgba(244, 67, 54, 0.4);
+    }
+    .ssr-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .ssr-badge.hydrated .dot { animation: none; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    /* ============================================
+       SSR 加载骨架（水合前可见，水合后由 demo 隐藏）
+       ============================================ */
+    .ssr-skeleton {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      background: #1a1a2e;
+      z-index: 9998;
+      transition: opacity 0.4s ease;
+    }
+    .ssr-skeleton.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ssr-skeleton .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(0, 180, 216, 0.15);
+      border-top-color: #00b4d8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .ssr-skeleton .label {
+      color: rgba(255,255,255,0.5);
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ============================================
+       全局工具按钮样式（覆盖组件 inline 样式增强）
+       ============================================ */
+    button {
+      font-family: inherit;
+    }
+    button:hover {
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    input {
+      font-family: inherit;
+    }
+    input:focus {
+      border-color: #00b4d8 !important;
+    }
+    input::placeholder {
+      color: rgba(255,255,255,0.3);
+    }
+
+    /* ============================================
+       日志条目样式（entry-client 动态注入）
+       ============================================ */
+    .log-entry {
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      word-break: break-word;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry .time {
+      color: #00b4d8;
+      flex-shrink: 0;
+      font-size: 10px;
+      padding-top: 1px;
+    }
+    .log-entry .msg {
+      color: rgba(255,255,255,0.7);
+      flex: 1;
+    }
+
+    /* ============================================
+       水合检测项样式（entry-client 动态注入）
+       ============================================ */
+    .hydration-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 6px;
+      font-size: 12px;
+      border-left: 2px solid transparent;
+    }
+    .hydration-item.pass {
+      border-left-color: #4ade80;
+      color: rgba(255,255,255,0.8);
+    }
+    .hydration-item.fail {
+      border-left-color: #f87171;
+      color: rgba(255,255,255,0.8);
+      background: rgba(248,113,113,0.06);
+    }
+    .hydration-item .icon-wrap {
+      display: inline-flex;
+      flex-shrink: 0;
+    }
+    .hydration-item .label {
+      flex: 1;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+    }
+    .hydration-item .detail {
+      color: rgba(255,255,255,0.4);
+      font-size: 10px;
+      margin-top: 2px;
+    }
+
+    /* ============================================
+       错误覆盖层（SSR 出错时显示）
+       ============================================ */
+    .ssr-error-overlay {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      max-width: 480px;
+      padding: 14px 16px;
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid rgba(244, 67, 54, 0.4);
+      backdrop-filter: blur(8px);
+      border-radius: 10px;
+      color: #ef9a9a;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      z-index: 9999;
+      display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .ssr-error-overlay.show { display: block; }
+    .ssr-error-overlay .title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #f87171;
+    }
+  </style>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!--
+    ============================================
+    SSR 渲染出口
+    ============================================
+    ssr-outlet 占位符：服务端渲染时，
+    renderToString 生成的 HTML 会替换此占位符。
+    hydrate 时，VNode 树会与已有 DOM 节点匹配。
+  -->
+  <div id="root"><!--ssr-outlet--></div>
+
+  <!--
+    ============================================
+    SSR 状态徽章
+    ============================================
+    SSR 渲染时显示 "SSR 渲染中..."，水合成功后由
+    entry-client.ts 更新为 "Hydrated"。
+  -->
+  <div id="ssr-badge" class="ssr-badge ssr">
+    <span class="dot"></span>
+    <span class="text">SSR 渲染中...</span>
+  </div>
+
+  <!--
+    ============================================
+    SSR 出错提示（默认隐藏）
+    ============================================
+  -->
+  <div id="ssr-error" class="ssr-error-overlay">
+    <div class="title">SSR / Hydration Error</div>
+    <div id="ssr-error-msg"></div>
+  </div>
+
+  <!--
+    ============================================
+    客户端水合入口
+    ============================================
+    加载 entry-client.ts：
+    1. 创建与服务端相同的 VNode 树
+    2. 调用 hydrate() 绑定事件、ref、生命周期
+    3. 设置事件总线监听
+    4. 更新 SSR 徽章状态为 "Hydrated"
+    5. 实例化 VideoPlayer 并挂载到 #player-container
+  -->
+  <script type="module" src="./entry-client.ts"></script>
+</body>
+</html>

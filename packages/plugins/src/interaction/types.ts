@@ -9,6 +9,18 @@ export type InteractionType = 1 | 2 | 3;
 /** 互动卡片类型 */
 export type CardType = 'guideThree' | 'link' | 'vote' | 'score';
 
+/** 互动模式 */
+export type InteractionMode = 'guide' | 'link' | 'vote' | 'score';
+
+/** 互动子插件接口 */
+export interface InteractionSubPlugin {
+  readonly name: string;
+  readonly type: InteractionMode;
+  render(container: HTMLElement): void;
+  updateTime(currentTime: number): void;
+  destroy(): void;
+}
+
 /** 位置事件 */
 export interface PositionEvent {
   type: CardType;
@@ -33,6 +45,9 @@ export interface InteractionGuideThree {
   element?: HTMLDivElement;
 }
 
+/** 关闭按钮配置 */
+export type CloseBtn = HTMLElement | { element: HTMLElement; onClick?: () => void };
+
 /** 外链视频配置 */
 export interface InteractionLink {
   top: number;
@@ -43,7 +58,7 @@ export interface InteractionLink {
   closeTime?: number;
   isClose?: boolean;
   element?: HTMLDivElement;
-  closeBtn?: unknown;
+  closeBtn?: CloseBtn;
 }
 
 /** 投票配置 */
@@ -57,7 +72,7 @@ export interface InteractionVote {
   closeTime?: number;
   isClose?: boolean;
   element?: HTMLDivElement;
-  closeBtn?: unknown;
+  closeBtn?: CloseBtn;
 }
 
 /** 评分配置 */
@@ -71,7 +86,7 @@ export interface InteractionScore {
   closeTime?: number;
   isClose?: boolean;
   element?: HTMLDivElement;
-  closeBtn?: unknown;
+  closeBtn?: CloseBtn;
 }
 
 /** 互动卡片集合 */

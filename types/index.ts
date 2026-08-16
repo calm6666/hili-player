@@ -39,21 +39,115 @@ export interface ComponentCallbacks {
 }
 
 /**
- * 扩展的生命周期接口，包含内部回调支持
+ * 类型安全的 emit 函数
+ * 根据事件映射 E 约束事件名和 payload 类型
+ * E 中值为 undefined 的事件不需要 payload，其他事件需要对应类型的 payload
+ * 当 E 为默认 Record<string, unknown> 时，payload 可选（向后兼容）
+ */
+export type TypedEmit<
+  E extends Record<string, unknown> = Record<string, unknown>,
+> = <K extends string & keyof E>(
+  event: K,
+  ...args: E[K] extends undefined ? [] : [payload: E[K]]
+) => void;
+
+/**
+ * 类型安全的 on 函数
+ * 根据事件映射 E 约束事件名和回调参数类型
+ */
+export type TypedOn<
+  E extends Record<string, unknown> = Record<string, unknown>,
+> = <K extends string & keyof E>(
+  event: K,
+  callback: E[K] extends undefined ? () => void : (payload: E[K]) => void,
+) => void;
+
+/**
+ * 无类型约束的 emit 函数（向后兼容）
+ * 事件名为 string，payload 可选
+ */
+export type UntypedEmit = (event: string, ...args: unknown[]) => void;
+
+/**
+ * 无类型约束的 on 函数（向后兼容）
+ */
+export type UntypedOn = (event: string, callback: CallbackFunction) => void;
+
+/**
+ * 扩展的生命周期接口，包含内部回调支持和 API 暴露机制
+ * VNode 上存储的无类型版本，组件内部通过 defineComponent 泛型获得类型安全版本
+ *
+ * el 属性说明：
+ *   组件挂载/水合后，框架自动将组件根 DOM 元素赋值给 lifecycle.el
+ *   这样组件在 onMounted 钩子中可以通过 lifecycle.el 访问自己的根元素
+ *   用于手动 DOM 更新（框架没有响应式，状态变化后需要手动操作 DOM）
+ *
+ *   与 Vue3 的区别：
+ *   - Vue3 有响应式系统，状态变化自动更新 DOM，不需要手动操作
+ *   - 本框架没有响应式，状态变化后必须手动更新 DOM
+ *   - lifecycle.el 提供了访问组件根元素的能力，使组件能自行处理 DOM 更新
  */
 export interface ComponentLifecycle extends Lifecycle {
+  /** 组件根 DOM 元素引用，挂载/水合后由框架自动设置 */
+  el?: Element;
   /** 内部回调函数映射表 */
   _callbacks?: ComponentCallbacks;
+  /** 父组件传入的 ref 引用，挂载后赋值为 _exposed */
+  _ref?: Ref<unknown>;
+  /** 组件通过 expose() 暴露的 API 对象 */
+  _exposed?: unknown;
+  /** useState 订阅的取消订阅函数数组，销毁时统一调用 */
+  _stateCleanups?: Array<() => void>;
   /** 注册回调函数 */
-  on?: (event: string, callback: CallbackFunction) => void;
+  on?: UntypedOn;
   /** 触发回调函数 */
-  emit?: (event: string, ...args: unknown[]) => void;
+  emit?: UntypedEmit;
+  /** 暴露组件 API，供父组件通过 ref.current 访问 */
+  expose?: (api: unknown) => void;
+}
+
+/**
+ * 类型安全的生命周期接口
+ * 泛型参数 E 为组件事件映射，约束 emit/on 的事件名和 payload 类型
+ * 仅在 defineComponent<P, E> 的 setup 函数参数中使用
+ */
+export interface TypedComponentLifecycle<
+  E extends Record<string, unknown>,
+> extends Lifecycle {
+  /** 组件根 DOM 元素引用，挂载/水合后由框架自动设置 */
+  el?: Element;
+  _callbacks?: ComponentCallbacks;
+  _ref?: Ref<unknown>;
+  _exposed?: unknown;
+  _stateCleanups?: Array<() => void>;
+  on?: TypedOn<E>;
+  emit?: TypedEmit<E>;
+  expose?: (api: unknown) => void;
+}
+
+/**
+ * 元素引用接口
+ * 用于获取组件渲染后的 DOM 元素实例
+ *
+ * @typeParam T - 引用的元素类型，默认为 Element
+ */
+export interface Ref<T = Element> {
+  /** 当前引用的 DOM 元素，挂载前为 null */
+  current: T | null;
 }
 
 /**
  * 虚拟节点属性类型
+ * 支持 ref 绑定、class、style 及其他 HTML 属性
  */
-export type VNodeAttrs = Record<string, unknown>;
+export interface VNodeAttrs extends Record<string, unknown> {
+  /** 元素引用，挂载后自动赋值为对应 DOM 元素 */
+  ref?: Ref<Element>;
+  /** CSS 类名 */
+  class?: string;
+  /** 内联样式 */
+  style?: Record<string, string | number>;
+}
 
 /**
  * 虚拟节点子元素类型
@@ -71,14 +165,20 @@ export interface VNode {
   attrs: VNodeAttrs;
   /** 子节点数组，可以是 VNode 或字符串 */
   children: VNodeChild[];
-  /** 挂载后对应的真实 DOM 节点引用 */
-  el?: HTMLElement | Text;
+  /** 挂载后对应的真实 DOM 节点引用（HTMLElement / SVGElement / Text） */
+  el?: Element | Text;
   /** 生命周期对象引用（扩展版本，支持内部回调） */
   lifecycle?: ComponentLifecycle;
   /** 清理函数数组，用于移除事件监听和指令 */
   _cleanups?: (() => void)[];
   /** 内部使用的命名空间标记（用于 SVG） */
   __ns?: string;
+  /** Context Provider 注入的上下文值列表（由 h() 设置） */
+  __providers?: Array<{ contextId: symbol; value: unknown }>;
+  /** 父 VNode 引用（由 mount() 设置，用于 useContext 向上查找） */
+  __parent?: VNode;
+  /** 内部标记：是否已挂载（开发环境检测重复挂载） */
+  _mounted?: boolean;
 }
 
 // ============================================
@@ -90,6 +190,46 @@ export interface VNode {
  * 接收 props 返回 VNode 的纯函数
  */
 export type FnComponent<P = unknown> = (props: P) => VNode;
+
+/**
+ * 从事件映射 E 生成 props 回调类型
+ * E 中每个事件 key 'xxx' 生成 'onXxx' 回调属性
+ */
+export type EventCallbacks<E> = {
+  [K in string & keyof E as `on${Capitalize<K>}`]?: E[K] extends undefined
+    ? () => void
+    : (payload: E[K]) => void;
+};
+
+/**
+ * 携带暴露 API 和事件类型信息的组件类型
+ * P 为 props 类型，E 为事件映射类型
+ * __exposed 为编译期类型标记，运行时不存在
+ * __events 为编译期事件映射标记，运行时不存在
+ */
+export type VNodeInternalAttrs = {
+  ref?: Ref<unknown>;
+  __providers?: Array<{ contextId: symbol; value: unknown }>;
+};
+
+export type ComponentAttrs<P, E> = E extends void
+  ? P & VNodeInternalAttrs
+  : P & EventCallbacks<E> & VNodeInternalAttrs;
+
+export type ExposedComponent<P = unknown, E = void> = FnComponent<P> & {
+  __exposed?: E;
+  __events?: E;
+};
+
+/**
+ * 从组件类型提取暴露的 API 类型
+ * 用于父组件创建 ref 时获取正确的类型提示
+ *
+ * @example
+ * const myRef = ref<ExposedApi<typeof LottieIcon>>();
+ */
+export type ExposedApi<C> =
+  C extends ExposedComponent<unknown, infer E> ? E : never;
 
 /**
  * 类组件构造函数类型
@@ -140,7 +280,10 @@ export type GenericComponent = FnComponent<unknown> | ClassComponent<unknown>;
  * 指令函数类型
  * 接收元素和值，可选返回清理函数
  */
-export type Directive<T = unknown> = (el: HTMLElement, value: T) => (() => void) | void;
+export type Directive<T = unknown> = (
+  el: HTMLElement,
+  value: T,
+) => (() => void) | void;
 
 /**
  * 指令元组类型
@@ -158,21 +301,40 @@ export type DirectiveTuple<T = unknown> = [Directive<T>, T];
  */
 export enum PlayerState {
   /** 初始状态，尚未加载 */
-  IDLE = 'idle',
+  IDLE = "idle",
   /** 正在加载视频 */
-  LOADING = 'loading',
+  LOADING = "loading",
   /** 已加载，准备播放 */
-  READY = 'ready',
+  READY = "ready",
   /** 正在播放 */
-  PLAYING = 'playing',
+  PLAYING = "playing",
   /** 暂停状态 */
-  PAUSED = 'paused',
+  PAUSED = "paused",
   /** 播放结束 */
-  ENDED = 'ended',
+  ENDED = "ended",
   /** 发生错误 */
-  ERROR = 'error',
+  ERROR = "error",
   /** 正在缓冲 */
-  BUFFERING = 'buffering',
+  BUFFERING = "buffering",
+}
+
+/**
+ * 播放器倍速枚举
+ * 表示视频播放速度
+ */
+export enum PlaybackRate {
+  /** 两倍速 */
+  DOUBLE_SPEED = 2,
+  /** 1.5 倍速 */
+  ONE_POINT_FIVE_SPEED = 1.5,
+  /** 1.25 倍速 */
+  ONE_POINT_TWO_FIVE_SPEED = 1.25,
+  /** 正常倍速 */
+  NORMAL_SPEED = 1,
+  /** 0.75 倍速 */
+  ZERO_POINT_SEVEN_FIVE_SPEED = 0.75,
+  /** 0.5 倍速 */
+  HALF_SPEED = 0.5,
 }
 
 /**
@@ -180,13 +342,13 @@ export enum PlayerState {
  */
 export enum PlayMode {
   /** 顺序播放 */
-  ORDER = 'order',
+  ORDER = "order",
   /** 列表循环 */
-  LOOP = 'loop',
+  LOOP = "loop",
   /** 单曲循环 */
-  SINGLE_LOOP = 'singleLoop',
+  SINGLE_LOOP = "singleLoop",
   /** 随机播放 */
-  RANDOM = 'random',
+  RANDOM = "random",
 }
 
 /**
@@ -194,20 +356,20 @@ export enum PlayMode {
  */
 export enum QualityLevel {
   /** 自动选择 */
-  AUTO = 'auto',
+  AUTO = "auto",
   /** 4K 超清 */
-  P4K = '4k',
+  P4K = "4k",
   /** 1080P 高清 */
-  P1080 = '1080p',
+  P1080 = "1080p",
   /** 720P 标清 */
-  P720 = '720p',
+  P720 = "720p",
   /** 480P 流畅 */
-  P480 = '480p',
+  P480 = "480p",
   /** 360P 省流 */
-  P360 = '360p',
+  P360 = "360p",
 }
 
-import type { Plugin } from '@/hili-player/core/plugin';
+import type { Plugin } from "@/hili-player/core/plugin";
 
 // ============================================
 // 播放器配置接口
@@ -229,13 +391,11 @@ export interface PlayerConfig {
   /** 默认音量 (0-1) */
   volume?: number;
   /** 默认播放速度 */
-  playbackRate?: number;
-  /** 是否显示控制条 */
-  controls?: boolean;
+  playbackRate?: PlaybackRate;
   /** 是否循环播放 */
   loop?: boolean;
-  /** 是否预加载 */
-  preload?: 'none' | 'metadata' | 'auto';
+  /** 控制条配置 */
+  controlBtns?: ControlBtnConfig;
   /** 封面图 URL */
   poster?: string;
   /** 默认画质 */
@@ -244,11 +404,8 @@ export interface PlayerConfig {
   playMode?: PlayMode;
   /** 是否启用键盘快捷键 */
   keyboard?: boolean;
-  /** 是否启用画中画 */
-  pip?: boolean;
-  /** 是否启用全屏 */
-  fullscreen?: boolean;
-
+  /** 视频进度条分段 */
+  progressSegments?: ProgressSegment[];
   /** 播放器名称 */
   playerName?: string;
   /** 字幕配置 */
@@ -262,6 +419,46 @@ export interface PlayerConfig {
   plugins?: Plugin[];
   /** 是否开启调试模式（开启后输出详细日志，关闭则静默） */
   debug?: boolean;
+  /** 事件回调函数 */
+  callbacks?: EventListeners;
+}
+
+/**
+ * 控制配置
+ */
+export interface ControlBtnConfig {
+  prev?: boolean;
+  next?: boolean;
+  setting?: boolean;
+  pip?: boolean;
+  wide?: boolean;
+  web?: boolean;
+}
+
+/**
+ * 进度条分段数据
+ */
+export interface ProgressSegment {
+  /** 分段起始时间（秒） */
+  startTime: number;
+  /** 分段结束时间（秒） */
+  endTime: number;
+  /**分段DOM元素 */
+  element?: HTMLDivElement;
+  /** 缓冲进度条DOM元素*/
+  bufferElement?: HTMLDivElement;
+  /** 视频播放进度条DOM元素 */
+  currentElement?: HTMLDivElement;
+  /** 分段阴影元素（用于显示预览图等） */
+  shadowElement?: HTMLDivElement;
+  /** 阴影缓冲进度条DOM元素 */
+  shadowBufferElement?: HTMLDivElement;
+  /** 阴影视频播放进度条DOM元素 */
+  shadowCurrentElement?: HTMLDivElement;
+  /** 阴影文本元素（用于显示时间预览等） */
+  shadowTextElement?: HTMLDivElement;
+  /** 分段文本描述 */
+  pointText: string;
 }
 
 /**
@@ -271,7 +468,9 @@ export interface PlayerConfig {
 export interface SSRConfig {
   /** 是否启用 SSR 模式 */
   enabled: boolean;
-  /** 是否延迟 hydration（客户端激活） */
+  /** SSR 占位符 HTML */
+  placeholder?: string;
+  /** 是否延迟 hydration */
   deferHydration?: boolean;
 }
 
@@ -285,6 +484,12 @@ export interface QualitySource {
   url: string;
   /** 显示名称 */
   name: string;
+  /** 视频宽度（像素） */
+  width?: number;
+  /** 视频高度（像素） */
+  height?: number;
+  /** 视频码率（bps） */
+  bitrate?: number;
 }
 
 /**
@@ -625,3 +830,8 @@ export interface PlayerMethods {
   /** 移除事件监听 */
   off<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): void;
 }
+
+export type RefValue = (el: Element, vnode?: VNode) => void;
+
+// 定义指令函数的类型
+export type DirectiveFn = (el: Element, val: unknown) => void | (() => void);

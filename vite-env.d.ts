@@ -1,7 +1,10 @@
 /// <reference types="vite/client" />
 
 // SCSS 文件作为 side-effect import
-declare module '*.scss' {}
+declare module '*.scss' {
+  const content: Record<string, string>;
+  export default content;
+}
 
 // 图片资源声明
 declare module '*.png' {

@@ -15,20 +15,24 @@ import {
   DanmakuArea,
   RenderMode,
   ScreenMode,
-  type DanmakuItem,
-  type DanmakuOptions,
-  type DanmakuEvents,
-  type PerformanceStats,
-  type DanmakuFilter,
-  type DanmakuMaskConfig,
-  type DanmakuRenderItem as DanmakuRenderItemType,
+} from '@/types/danmaku';
+import type {
+  DanmakuItem,
+  DanmakuFilter,
+} from '@/types/danmaku';
+import type {
+  DanmakuOptions,
+  DanmakuEvents,
+  PerformanceStats,
+  DanmakuMaskConfig,
+  DanmakuRenderItem as DanmakuRenderItemType,
 } from './types';
 import { DOMElementPool, DanmakuItemPool } from './objectPool';
 import { TrackManager } from './trackManager';
 import { DOMEngine } from './domEngine';
 import { CanvasEngine } from './canvasEngine';
 import { DanmakuScheduler } from './scheduler';
-import { rafTimeout, cancelRaf, createLogger } from '@/utils';
+import { rafTimeout, cancelRaf, createLogger, isBrowser } from '@/utils';
 const logger = createLogger('Danmaku');
 
 /** 带有 memory 信息的 Performance 接口（Chrome 扩展） */
@@ -44,7 +48,7 @@ function hasMemoryInfo(perf: Performance): perf is PerformanceWithMemory {
   return 'memory' in perf;
 }
 
-// 重新导出类型
+// 重新导出类型 — 通用类型从 @/types/danmaku，扩展类型从 ./types
 export {
   DanmakuType,
   DanmakuSpeed,
@@ -52,16 +56,22 @@ export {
   DanmakuArea,
   RenderMode,
   ScreenMode,
-  type DanmakuItem,
-  type DanmakuOptions,
-  type DanmakuEvents,
-  type PerformanceStats,
-  type DanmakuFilter,
-  type DanmakuMaskConfig,
-  type MaskLoader,
-  type DanmakuSegment,
-  type DanmakuTrack,
-  type DanmakuRenderItem,
+} from '@/types/danmaku';
+
+export type {
+  DanmakuItem,
+  DanmakuFilter,
+  DanmakuSegment,
+} from '@/types/danmaku';
+
+export type {
+  DanmakuOptions,
+  DanmakuEvents,
+  PerformanceStats,
+  DanmakuMaskConfig,
+  MaskLoader,
+  DanmakuTrack,
+  DanmakuRenderItem,
 } from './types';
 
 // 导出子模块
@@ -85,7 +95,7 @@ interface DanmakuManagerConfig {
 export class DanmakuManager {
   private container: HTMLElement;
   private video: HTMLVideoElement;
-  private options: Required<DanmakuOptions>;
+  private options: DanmakuOptions & { renderMode: RenderMode; opacity: number; speed: DanmakuSpeed; area: DanmakuArea; fontSize: number; autoScale: boolean; visible: boolean; density: number; preventOverlap: boolean; trackHeight: number; segmentDuration: number; preloadSegments: number; maxRenderCount: number; hardwareAcceleration: boolean; showAdvanced: boolean; mergeSame: boolean; filter: DanmakuFilter };
   private events: DanmakuEvents;
 
   // 核心组件
@@ -158,6 +168,10 @@ export class DanmakuManager {
 
   /** 初始化 */
   private init(): void {
+    if (!isBrowser()) {
+      return;
+    }
+
     // 初始化对象池
     this.elementPool = new DOMElementPool({
       initialCapacity: 100,

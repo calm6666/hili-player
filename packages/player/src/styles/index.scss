@@ -1,27 +1,27 @@
-@use './controls.scss' as *;
-@use './dialog.scss' as *;
-@use './ending.scss' as *;
-@use './sendbar.scss' as *;
-@use './toast.scss' as *;
-@use './volumehint.scss' as *;
-@use './loading.scss' as *;
-@use './state.scss' as *;
-@use './topbar.scss' as *;
-@use './tooltip.scss' as *;
-@use './videoinfo.scss' as *;
-@use './checkbox.scss' as *;
-@use './colorpanel.scss' as *;
-@use './dmsetting.scss' as *;
-@use './hotkeypanel.scss' as *;
-@use './mini.scss' as *;
-@use './progressclose.scss' as *;
-@use './rowcmd.scss' as *;
-@use './rowdm.scss' as *;
-@use './scrollview.scss' as *;
-@use './selection.scss' as *;
-@use './slider.scss' as *;
-@use './switch.scss' as *;
-@use './icons.scss' as *;
+@use "./controls.scss" as *;
+@use "./dialog.scss" as *;
+@use "./ending.scss" as *;
+@use "./sendbar.scss" as *;
+@use "./toast.scss" as *;
+@use "./volumehint.scss" as *;
+@use "./loading.scss" as *;
+@use "./state.scss" as *;
+@use "./topbar.scss" as *;
+@use "./tooltip.scss" as *;
+@use "./videoinfo.scss" as *;
+@use "./checkbox.scss" as *;
+@use "./colorpanel.scss" as *;
+@use "./dmsetting.scss" as *;
+@use "./hotkeypanel.scss" as *;
+@use "./mini.scss" as *;
+@use "./progressclose.scss" as *;
+@use "./rowcmd.scss" as *;
+@use "./rowdm.scss" as *;
+@use "./scrollview.scss" as *;
+@use "./selection.scss" as *;
+@use "./slider.scss" as *;
+@use "./switch.scss" as *;
+@use "./icons.scss" as *;
 input {
   border: none;
   background: transparent;
@@ -439,6 +439,11 @@ img {
           justify-content: center;
           position: relative;
           width: 100%;
+          contain: layout style paint;
+          will-change: transform;
+          transform: translateZ(0);
+          -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
 
           .player-video-wrap {
             -webkit-box-sizing: border-box;
@@ -446,6 +451,11 @@ img {
             display: block;
             height: 100%;
             width: 100%;
+            contain: strict;
+            will-change: transform;
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
 
             video {
               content-visibility: visible;
@@ -453,6 +463,11 @@ img {
               height: 100%;
               margin: auto;
               width: 100%;
+              object-fit: contain;
+              will-change: transform;
+              transform: translateZ(0);
+              -webkit-backface-visibility: hidden;
+              backface-visibility: hidden;
             }
           }
         }
@@ -538,6 +553,7 @@ img {
           display: flex;
           justify-content: center;
           z-index: 11;
+          contain: paint;
 
           .danmaku-x-dm {
             position: absolute;
@@ -1439,13 +1455,17 @@ img {
                     overflow: hidden;
                     pointer-events: auto;
                     position: relative;
-                    -webkit-transition: border-color 0.3s ease-in-out,
+                    -webkit-transition:
+                      border-color 0.3s ease-in-out,
                       -webkit-box-shadow 0.3s ease-in-out;
-                    transition: border-color 0.3s ease-in-out,
+                    transition:
+                      border-color 0.3s ease-in-out,
                       -webkit-box-shadow 0.3s ease-in-out;
-                    transition: border-color 0.3s ease-in-out,
+                    transition:
+                      border-color 0.3s ease-in-out,
                       box-shadow 0.3s ease-in-out;
-                    transition: border-color 0.3s ease-in-out,
+                    transition:
+                      border-color 0.3s ease-in-out,
                       box-shadow 0.3s ease-in-out,
                       -webkit-box-shadow 0.3s ease-in-out;
                     width: 223px;
@@ -1546,7 +1566,8 @@ img {
                         -webkit-transition: -webkit-transform 0.3s ease-in-out;
                         transition: -webkit-transform 0.3s ease-in-out;
                         transition: transform 0.3s ease-in-out;
-                        transition: transform 0.3s ease-in-out,
+                        transition:
+                          transform 0.3s ease-in-out,
                           -webkit-transform 0.3s ease-in-out;
                         white-space: nowrap;
                         width: 100%;
@@ -1841,8 +1862,12 @@ img {
         .player-ending-wrap,
         .player-share-panel {
           opacity: 0;
-          -webkit-transition: opacity 0.2s linear, visibility 0ms 0.2s;
-          transition: opacity 0.2s linear, visibility 0ms 0.2s;
+          -webkit-transition:
+            opacity 0.2s linear,
+            visibility 0ms 0.2s;
+          transition:
+            opacity 0.2s linear,
+            visibility 0ms 0.2s;
           visibility: hidden;
         }
 
@@ -2051,7 +2076,8 @@ img {
             .player-loading-panel-blur-detail {
               -webkit-animation: animation-loading 0.94s steps(1) infinite;
               animation: animation-loading 0.94s steps(1) infinite;
-              background: url(packages/player/src/assets/images/ploading.png) no-repeat;
+              background: url(packages/player/src/assets/images/ploading.png)
+                no-repeat;
               height: 184px;
               -webkit-transform: scale(0.5);
               transform: scale(0.5);
@@ -2269,7 +2295,8 @@ img {
                     transition: -webkit-transform 0.1s
                       cubic-bezier(0, 0, 0.2, 1);
                     transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-                    transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1),
+                    transition:
+                      transform 0.1s cubic-bezier(0, 0, 0.2, 1),
                       -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
                     width: 100%;
 
@@ -2321,7 +2348,8 @@ img {
                         transition: -webkit-transform 0.1s
                           cubic-bezier(0, 0, 0.2, 1);
                         transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-                        transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1),
+                        transition:
+                          transform 0.1s cubic-bezier(0, 0, 0.2, 1),
                           -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
                       }
 
@@ -2544,13 +2572,6 @@ img {
                   .player-ctrl-btn-icon {
                     -webkit-transition: all 0.2s;
                     transition: all 0.2s;
-                  }
-
-                  .player-ctrl-btn-icon:nth-child(1) {
-                    display: none;
-                  }
-                  .player-ctrl-btn-icon:nth-child(2) {
-                    display: block;
                   }
                 }
 
@@ -3304,7 +3325,8 @@ img {
                     cubic-bezier(0, 0, 0.2, 1);
                   transition: -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
                   transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-                  transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1),
+                  transition:
+                    transform 0.1s cubic-bezier(0, 0, 0.2, 1),
                     -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
                 }
               }
@@ -4411,9 +4433,15 @@ img {
         width: fit-content;
         word-break: break-all;
         z-index: 12000;
-        -webkit-transition: transform 0.3s, opacity 0.3s linear;
-        -moz-transition: transform 0.3s, opacity 0.3s linear;
-        transition: transform 0.3s, opacity 0.3s linear;
+        -webkit-transition:
+          transform 0.3s,
+          opacity 0.3s linear;
+        -moz-transition:
+          transform 0.3s,
+          opacity 0.3s linear;
+        transition:
+          transform 0.3s,
+          opacity 0.3s linear;
       }
 
       .top-in {
@@ -4494,26 +4522,11 @@ img {
           z-index: 48;
 
           .player-state-play {
-            background: url(packages/player/src/assets/images/play.svg) 50% no-repeat;
+            background: url(packages/player/src/assets/images/play.svg) 50%
+              no-repeat;
             display: block;
             height: 64px;
             width: 64px;
-          }
-        }
-        .player-control-wrap {
-          .player-control-entity {
-            .player-control-bottom {
-              .player-control-bottom-left {
-                .player-ctrl-play {
-                  .player-ctrl-btn-icon:nth-child(1) {
-                    display: block;
-                  }
-                  .player-ctrl-btn-icon:nth-child(2) {
-                    display: none;
-                  }
-                }
-              }
-            }
           }
         }
 

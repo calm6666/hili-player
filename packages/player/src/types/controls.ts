@@ -5,7 +5,8 @@
  * 定义 Controls 组件所需的所有类型和接口
  */
 
-import type { AnimationFrameID } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from "@/utils/rafTimeout";
+import type { ProgressSegment } from "@/types";
 
 /**
  * 菜单显示状态项
@@ -33,6 +34,7 @@ export interface CtrlShowMenu {
 export interface VolumeProgress {
   isDragging: boolean;
   startY: number;
+  isMuted: boolean;
 }
 
 /**
@@ -59,7 +61,7 @@ export interface Tooltip {
  * 控制配置
  */
 export interface ControlConfig {
-  progressViewPoints?: ProgressViewPoint[];
+  progressSegments?: ProgressSegment[];
   prev?: boolean;
   next?: boolean;
   viewpoint?: boolean;
@@ -74,24 +76,18 @@ export interface ControlConfig {
 /**
  * 切换按钮
  */
-export interface SwitchBtns {
-  btn1?: unknown;
-  btn2?: unknown;
-  btn3?: unknown;
+export interface SwitchBtn {
+  icon?: string;
+  label?: string;
+  onClick?: () => void;
+  className?: string;
 }
 
 /**
- * 进度条视点
+ * 切换按钮组
  */
-export interface ProgressViewPoint {
-  element?: HTMLDivElement;
-  shadowElement?: HTMLDivElement;
-  bufferElement?: HTMLDivElement;
-  currentElement?: HTMLDivElement;
-  shadowBufferElement?: HTMLDivElement;
-  shadowCurrentElement?: HTMLDivElement;
-  shadowTextElement?: HTMLDivElement;
-  pointText: string;
-  startTime: number;
-  endTime: number;
+export interface SwitchBtns {
+  btn1?: SwitchBtn;
+  btn2?: SwitchBtn;
+  btn3?: SwitchBtn;
 }

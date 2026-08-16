@@ -666,7 +666,7 @@ logger.info('浏览器能力检测结果:', capability);
 BrowserCapabilityDetector.printCapabilityReport();
 
 // 3. 异步检测特定编码的硬件解码支持
-(async () => {
+(async (): Promise<void> => {
   const h264Capability = await BrowserCapabilityDetector.checkDecodingCapability(
     'video/mp4; codecs="avc1.42E01E"'
   );

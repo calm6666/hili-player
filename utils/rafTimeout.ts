@@ -11,7 +11,7 @@ export interface AnimationFrameID {
 }
 export function rafTimeout(fn: () => void | Promise<void>, delay = 0, interval = false): AnimationFrameID {
   let start: number | null = null; // 记录动画开始的时间戳
-  function timeElapse(timestamp: number) {
+  function timeElapse(timestamp: number): void {
     // 定义动画帧回调函数
     /*
         timestamp参数：与performance.now()的返回值相同，它表示requestAnimationFrame()开始去执行回调函数的时刻

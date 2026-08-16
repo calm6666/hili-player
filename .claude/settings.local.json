@@ -4,7 +4,27 @@
       "Bash(npx tsc *)",
       "Bash(awk ' *)",
       "Bash(npx eslint *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx vitest *)",
+      "Bash(npx vite *)",
+      "Bash(timeout 15 npx vite-node demo/server.mjs)",
+      "Bash(npx tsx *)",
+      "Bash(node demo-prod/server.mjs)",
+      "Bash(curl -s http://localhost:5175/)",
+      "Bash(pkill -f \"demo-prod/server\")",
+      "Bash(pkill -f \"node.*5175\")",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(kill -9 17588)",
+      "Bash(curl -s http://localhost:5175/entry-client.ts)",
+      "Bash(pkill -f \"demo-prod\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pnpm build *)",
+      "Bash(npx tsx -e ' *)",
+      "Bash(rm -f \"D:/hilihili/front/hili-player/demo-prod/vite.config.ts\")",
+      "Bash(node demo/server.mjs)",
+      "Bash(curl -s http://localhost:5174/)",
+      "Bash(pkill -f \"demo/server\")"
     ]
   }
 }

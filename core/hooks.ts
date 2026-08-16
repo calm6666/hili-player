@@ -64,11 +64,12 @@ export function createHookSystem(): HookSystem {
      */
     register: <T, R>(name: string, handler: (ctx: T) => R) => {
       if (!hooks.has(name)) hooks.set(name, []);
-      hooks.get(name)!.push(handler as (ctx: unknown) => unknown);
+      const wrapped = (ctx: unknown): unknown => handler(ctx as T);
+      hooks.get(name)!.push(wrapped);
       return () => {
         const arr = hooks.get(name);
         if (arr) {
-          const i = arr.indexOf(handler as (ctx: unknown) => unknown);
+          const i = arr.indexOf(wrapped);
           if (i > -1) arr.splice(i, 1);
         }
       };
@@ -81,7 +82,7 @@ export function createHookSystem(): HookSystem {
      * @param context - 初始上下文
      * @returns 经过所有处理器处理后的上下文
      */
-    run: <T, R>(name: string, context: T) => {
+    run: <T, R>(name: string, context: T): R => {
       let result: unknown = context;
       hooks.get(name)?.forEach(fn => {
         try {

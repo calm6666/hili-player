@@ -2,56 +2,101 @@
  * ============================================
  * 进度关闭组件
  * ============================================
- * 使用 h 函数实现的进度关闭组件
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
+import type { ComponentLifecycle } from '@/types';
 
 /**
  * 进度关闭组件 Props 接口
  */
 export interface ProgressCloseProps {
-  /** 进度值 (0-1) */
+  /** 进度值 (0-1)，表示圆形进度条的填充比例 */
   progress?: number;
-  /** 点击回调 */
+  /** 点击关闭按钮的回调函数 */
   onClick?: () => void;
 }
 
 /**
  * 进度关闭组件
- * 使用 h 函数实现，保持与原组件相同的 DOM 结构和类名
+ * 渲染一个带圆形进度条的关闭按钮，进度值控制圆弧填充程度
  */
-export const ProgressClose = defineComponent<ProgressCloseProps>((props) => {
-  /**
-   * 进度圆圈元素引用
-   */
-  const progressCircleRef: { current: SVGCircleElement | null } = { current: null };
+export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecycle: ComponentLifecycle) => {
+  // ============================================
+  // DOM 引用
+  // ============================================
+
+  /** SVG 根元素 DOM 引用 */
+  const svgRef = ref<SVGSVGElement>();
+
+  /** 进度圆环 DOM 引用 */
+  const progressCircleRef = ref<SVGCircleElement>();
 
   /**
-   * 处理点击
+   * 处理点击事件
    */
   const handleClick = (): void => {
     props.onClick?.();
   };
 
   /**
-   * 计算 stroke-dashoffset
+   * 根据进度值计算 SVG 圆弧的 stroke-dashoffset 值
+   * @param progress - 进度值 (0-1)
+   * @returns stroke-dashoffset 偏移量
    */
   const getStrokeDashoffset = (progress: number): number => {
+    /** 限制进度值在 0-1 范围内 */
     const clampedProgress = Math.min(Math.max(0, progress), 1);
     return 377 - clampedProgress * 377;
   };
 
+  // ============================================
+  // DOM 更新方法
+  // ============================================
+
   /**
-   * 更新进度
-   * 手动操作 DOM 更新进度圆圈
-   * @param progress - 进度值 (0-1)
+   * 设置进度值并更新圆弧显示
+   * @param progress - 新的进度值 (0-1)
    */
-  const updateProgress = (progress: number): void => {
+  const setProgress = (progress: number): void => {
     if (progressCircleRef.current) {
-      const dashoffsetStr = getStrokeDashoffset(progress).toString();
-      progressCircleRef.current.setAttribute('stroke-dashoffset', dashoffsetStr);
+      progressCircleRef.current.setAttribute('stroke-dashoffset', getStrokeDashoffset(progress).toString());
     }
+  };
+
+  /**
+   * 显示组件
+   */
+  const show = (): void => {
+    if (svgRef.current) {
+      svgRef.current.style.display = '';
+    }
+  };
+
+  /**
+   * 隐藏组件
+   */
+  const hide = (): void => {
+    if (svgRef.current) {
+      svgRef.current.style.display = 'none';
+    }
+  };
+
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
+  /**
+   * 组件挂载后，通过事件向外暴露控制方法
+   */
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('progressCloseMounted', { setProgress, show, hide });
+  };
+
+  /**
+   * 组件销毁前，清空 DOM 引用以防止内存泄漏
+   */
+  lifecycle.onBeforeDestroy = (): void => {
   };
 
   return h(
@@ -61,6 +106,7 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props) => {
       height: '150',
       viewBox: '0 0 150 150',
       class: 'close-warp',
+      ref: svgRef,
       onClick: handleClick,
     },
     h('circle', {

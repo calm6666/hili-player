@@ -171,13 +171,13 @@ export class PlayerInfoPanel {
       border-radius: 4px;
       transition: background 0.2s;
     `;
-    closeBtn.onmouseover = () => {
+    closeBtn.onmouseover = (): void => {
       closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';
     };
-    closeBtn.onmouseout = () => {
+    closeBtn.onmouseout = (): void => {
       closeBtn.style.background = 'transparent';
     };
-    closeBtn.onclick = () => this.hide();
+    closeBtn.onclick = (): void => this.hide();
 
     header.appendChild(title);
     header.appendChild(closeBtn);
@@ -322,19 +322,19 @@ export class PlayerInfoPanel {
    */
   private bindMonitorCallbacks(): void {
     this.monitor['callbacks'] = {
-      onStatsUpdate: (stats: PlayerStats) => {
+      onStatsUpdate: (stats: PlayerStats): void => {
         this.updateInfo(stats);
       },
-      onBitrateUpdate: () => {
+      onBitrateUpdate: (): void => {
         this.updateBitrateChart();
       },
-      onThroughputUpdate: () => {
+      onThroughputUpdate: (): void => {
         this.updateThroughputChart();
       },
-      onBufferUpdate: () => {
+      onBufferUpdate: (): void => {
         this.updateBufferChart();
       },
-      onFPSUpdate: () => {
+      onFPSUpdate: (): void => {
         this.updateFPSChart();
       },
     };

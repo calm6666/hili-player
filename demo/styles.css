@@ -1,0 +1,675 @@
+/**
+ * ============================================
+ * Demo 页面样式
+ * ============================================
+ * 暗色主题（#1a1a2e + #00b4d8）
+ * 所有 demo 组件的样式统一定义在此文件
+ * 播放器自带样式不在本文件中
+ */
+
+/* ============================================
+ * SVG 图标基础样式
+ * ============================================ */
+
+.demo-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ============================================
+ * 主题变量（由 App 组件通过 JS 动态设置）
+ * 这里定义暗色默认值，亮色主题通过 JS 覆盖
+ * ============================================ */
+.app-root {
+  --accent: #00b4d8;
+  --accent-hover: #0096b7;
+  --bg-base: #1a1a2e;
+  --panel-bg: rgba(255, 255, 255, 0.04);
+  --btn-bg: rgba(255, 255, 255, 0.06);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --text-primary: #e0e0e0;
+  --text-secondary: rgba(255, 255, 255, 0.5);
+  --font-size: 14px;
+
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 24px 16px 40px;
+}
+
+/* ============================================
+ * 布局
+ * ============================================ */
+
+.app-header {
+  max-width: 960px;
+  margin: 0 auto 20px;
+  text-align: center;
+}
+
+.app-title {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.app-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.app-main {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-footer {
+  max-width: 960px;
+  margin: 24px auto 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* ============================================
+ * 面板基础样式
+ * ============================================ */
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 10px 0;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title-between {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ============================================
+ * 按钮样式
+ * ============================================ */
+
+.btn {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-accent {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-danger {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-success {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  border-radius: 6px;
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-warning {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 6px;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ============================================
+ * 计数器
+ * ============================================ */
+
+.counter-value {
+  font-weight: 700;
+  font-size: 32px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+.counter-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin: 16px 0;
+}
+
+/* ============================================
+ * 用户信息
+ * ============================================ */
+
+.user-info-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.user-info-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-info-label {
+  color: var(--text-secondary);
+}
+
+.user-info-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.user-role-badge {
+  color: var(--accent);
+  font-weight: 500;
+  padding: 2px 8px;
+  background: rgba(0, 180, 216, 0.12);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.user-status-online {
+  color: #4ade80;
+  font-size: 12px;
+}
+
+.user-status-offline {
+  color: #f87171;
+  font-size: 12px;
+}
+
+/* ============================================
+ * 主题切换
+ * ============================================ */
+
+.theme-switcher-row {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-icon-wrap {
+  display: inline-flex;
+}
+
+/* ============================================
+ * 任务列表
+ * ============================================ */
+
+.task-list-ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.task-text-done {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+/* ============================================
+ * 条件渲染
+ * ============================================ */
+
+.admin-panel {
+  padding: 12px;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4ade80;
+  font-size: 13px;
+}
+
+.guest-panel {
+  padding: 12px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f87171;
+  font-size: 13px;
+}
+
+/* ============================================
+ * ref + expose
+ * ============================================ */
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-field {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+/* ============================================
+ * 事件日志
+ * ============================================ */
+
+.log-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.log-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.log-content {
+  margin-top: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ============================================
+ * 嵌套 Context
+ * ============================================ */
+
+.nested-inner {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+}
+
+.nested-level-label {
+  color: var(--text-primary);
+  font-size: 12px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.nested-level-2 {
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border-color);
+}
+
+.nested-level-3 {
+  padding: 10px;
+  margin: 6px 0;
+  border-radius: 6px;
+  background: rgba(0, 180, 216, 0.06);
+  border: 1px dashed rgba(0, 180, 216, 0.4);
+  color: var(--text-primary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nested-level-hint {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* ============================================
+ * 搜索框
+ * ============================================ */
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  display: flex;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.search-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ============================================
+ * Todo App
+ * ============================================ */
+
+.todo-add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.todo-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.todo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.todo-text {
+  flex: 1;
+}
+
+.todo-text-done {
+  flex: 1;
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.todo-delete-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  color: #f87171;
+}
+
+/* ============================================
+ * Fragment 演示
+ * ============================================ */
+
+.fragment-item {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.fragment-item-1 {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 6px;
+  background: rgba(0, 180, 216, 0.1);
+  color: var(--accent);
+}
+
+.fragment-item-2 {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-right: 6px;
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+
+.fragment-item-3 {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+}
+
+/* ============================================
+ * Tabs 标签页
+ * ============================================ */
+
+.tabs-container {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.tab-btn {
+  padding: 8px 14px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.tab-btn-active {
+  padding: 8px 14px;
+  cursor: pointer;
+  border: none;
+  background: rgba(0, 180, 216, 0.15);
+  color: var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.tab-content {
+  padding: 8px 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* ============================================
+ * 水合检测面板
+ * ============================================ */
+
+.hydration-panel {
+  background: rgba(0, 180, 216, 0.04);
+  border: 1px solid rgba(0, 180, 216, 0.3);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 10px 0;
+}
+
+.hydration-summary {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.hydration-info {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.hydration-time {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.hydration-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ============================================
+ * PlayerSection
+ * ============================================ */
+
+.player-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.player-controls {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.player-description {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}

@@ -1,83 +1,43 @@
 /**
  * 弹幕插件类型定义
- * 与 src/utils/danmaku 保持一致
+ * 通用类型从 @/types/danmaku 导入并重新导出，插件特有类型保留在本地
  */
 
-/** 弹幕类型 */
-export enum DanmakuType {
-  /** 滚动弹幕 */
-  SCROLL = 1,
-  /** 顶部固定 */
-  TOP = 2,
-  /** 底部固定 */
-  BOTTOM = 3,
-  /** 高级弹幕 */
-  ADVANCED = 4,
-}
+// ============================================
+// 从 @/types/danmaku 导入通用类型（用于本地定义 + 重新导出）
+// ============================================
+import {
+  DanmakuType,
+  DanmakuSpeed,
+  DanmakuFontSize,
+  DanmakuArea,
+  RenderMode,
+  ScreenMode,
+} from '@/types/danmaku';
+import type {
+  DanmakuItem,
+  DanmakuFilter,
+  DanmakuSegment,
+} from '@/types/danmaku';
 
-/** 弹幕速度档位 - 5档 */
-export enum DanmakuSpeed {
-  /** 极慢 - 0.5倍速 */
-  VERY_SLOW = 1,
-  /** 较慢 - 0.75倍速 */
-  SLOW = 2,
-  /** 适中 - 1.0倍速（默认） */
-  NORMAL = 3,
-  /** 较快 - 1.5倍速 */
-  FAST = 4,
-  /** 极快 - 2.0倍速 */
-  VERY_FAST = 5,
-}
+export {
+  DanmakuType,
+  DanmakuSpeed,
+  DanmakuFontSize,
+  DanmakuArea,
+  RenderMode,
+  ScreenMode,
+};
 
-/** 弹幕字号档位 */
-export enum DanmakuFontSize {
-  /** 小字号 */
-  SMALL = 0.8,
-  /** 标准字号（默认） */
-  NORMAL = 1.0,
-}
+export type {
+  DanmakuItem,
+  DanmakuFilter,
+  DanmakuSegment,
+};
 
-/** 弹幕区域档位 - 4档 */
-export enum DanmakuArea {
-  /** 25% - 仅顶部区域 */
-  QUARTER = 0.25,
-  /** 50% - 上半区域 */
-  HALF = 0.5,
-  /** 75% - 大部分区域 */
-  THREE_QUARTERS = 0.75,
-  /** 100% - 全屏 */
-  FULL = 1,
-}
-
-/** 渲染模式 */
-export enum RenderMode {
-  /** DOM渲染 - 适合少量弹幕 */
-  DOM = 'dom',
-  /** Canvas渲染 - 适合大量弹幕 */
-  CANVAS = 'canvas',
-  /** 自动模式 - 根据弹幕数量自动切换 */
-  AUTO = 'auto',
-}
-
-/** 屏幕状态 */
-export enum ScreenMode {
-  /** 正常模式 */
-  NORMAL = 'normal',
-  /** 全屏模式 */
-  FULLSCREEN = 'fullscreen',
-  /** 网页全屏 */
-  WEB_FULLSCREEN = 'webFullscreen',
-}
-
-/** 弹幕过滤器设置 */
-export interface DanmakuFilter {
-  /** 过滤滚动弹幕 */
-  scroll?: boolean;
-  /** 过滤固定弹幕（顶部+底部） */
-  fixed?: boolean;
-  /** 过滤彩色弹幕（非白色） */
-  colorful?: boolean;
-}
+// ============================================
+// 插件特有类型
+// ============================================
 
 /** 防挡遮罩配置 */
 export interface DanmakuMaskConfig {
@@ -91,35 +51,7 @@ export interface DanmakuMaskConfig {
   getCurrentTime?: () => number;
 }
 
-/** 单条弹幕数据结构 */
-export interface DanmakuItem {
-  /** 唯一ID */
-  id: string | number;
-  /** 弹幕内容 */
-  text: string;
-  /** 出现时间 (秒) */
-  time: number;
-  /** 弹幕类型 */
-  type: DanmakuType;
-  /** 字体大小 */
-  fontSize?: number;
-  /** 字体颜色 */
-  color?: string;
-  /** 发送者ID */
-  userId?: string;
-  /** 发送者名称 */
-  userName?: string;
-  /** 是否会员 */
-  isVip?: boolean;
-  /** 弹幕权重 (用于优先级) */
-  weight?: number;
-  /** 弹幕速度档位 */
-  speed?: DanmakuSpeed;
-  /** 发送者UID (用于标识本人发布的弹幕) */
-  uid?: string | number;
-}
-
-/** 弹幕配置选项 */
+/** 弹幕配置选项 — 插件层精简版 */
 export interface DanmakuOptions {
   /** 容器元素 */
   container: HTMLElement;

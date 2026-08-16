@@ -45,7 +45,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * 事件发射器类
  * 实现发布-订阅模式，用于组件间通信
  */
-export class EventEmitter<Events extends Record<string, (...args: any[]) => void>> {
+export class EventEmitter<Events extends Record<string, (...args: unknown[]) => void>> {
   /**
    * 事件监听器存储映射
    * 键为事件名，值为监听器数组
@@ -446,7 +446,7 @@ export function isMseSupported(): boolean {
 export function preloadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    img.onload = (): void => resolve(img);
     img.onerror = reject;
     img.src = src;
   });

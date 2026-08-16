@@ -3,6 +3,8 @@
  * 处理浏览器缩放、系统缩放和响应式缩放
  */
 
+import { isBrowser } from '@/utils';
+
 /** 缩放配置 */
 export interface ScaleConfig {
   /** 基础参考宽度（设计稿宽度） */
@@ -42,7 +44,7 @@ export function calculateScale(
   let scale = containerWidth / finalConfig.baseWidth;
 
   // 2. 考虑设备像素比（高DPI屏幕）
-  if (finalConfig.considerDevicePixelRatio) {
+  if (finalConfig.considerDevicePixelRatio && isBrowser()) {
     const dpr = window.devicePixelRatio || 1;
     // 高DPI屏幕适当减小缩放，避免字体过大
     if (dpr > 1) {
@@ -51,7 +53,7 @@ export function calculateScale(
   }
 
   // 3. 考虑浏览器缩放（Ctrl+滚轮）
-  if (finalConfig.considerBrowserZoom && window.visualViewport) {
+  if (finalConfig.considerBrowserZoom && isBrowser() && window.visualViewport) {
     const visualScale = window.visualViewport.scale || 1;
     // 浏览器放大时减小缩放，缩小时增加缩放，保持视觉一致性
     scale /= Math.sqrt(visualScale);
@@ -97,6 +99,14 @@ export function getZoomInfo(): {
   visualViewportScale: number;
   calculatedScale: number;
 } {
+  if (!isBrowser()) {
+    return {
+      devicePixelRatio: 1,
+      visualViewportScale: 1,
+      calculatedScale: 1,
+    };
+  }
+
   const dpr = window.devicePixelRatio || 1;
   const visualScale = window.visualViewport?.scale || 1;
   const calculatedScale = calculateScale(window.innerWidth);

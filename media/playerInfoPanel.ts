@@ -13,6 +13,7 @@ import {
   formatBitrate,
 } from './chart';
 import { PlayerType, type PlayerStats, type DashPlayer, type HlsPlayer, type FlvPlayer } from './types';
+import { isBrowser } from '@/utils';
 
 /** 面板配置 */
 export interface PanelConfig {
@@ -73,6 +74,7 @@ export class PlayerInfoPanel {
    */
   show(): void {
     if (this.isVisible) return;
+    if (!isBrowser()) return;
 
     this.isVisible = true;
     this.createPanel();
@@ -113,6 +115,8 @@ export class PlayerInfoPanel {
    * 创建面板
    */
   private createPanel(): void {
+    if (!isBrowser()) return;
+
     if (this.panel) return;
 
     // 创建面板容器

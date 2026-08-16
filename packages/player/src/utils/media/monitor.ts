@@ -20,10 +20,8 @@ import {
   type FlvPlayer,
 } from './types';
 import { createLogger } from '@/utils';
-import { createSafeCall } from '@/error';
 
 const logger = createLogger('Monitor');
-const safeCall = createSafeCall('Monitor');
 
 // ============================================
 // 类型守卫
@@ -91,10 +89,12 @@ export class MediaPlayerMonitor {
   private frameCount = 0;
   /** 丢帧计数 */
   private droppedFrameCount = 0;
-  /** 上次统计的已下载字节数 (用于计算吞吐量) */
-  private lastDownloadedBytes = 0;
-  /** 上次统计时间 */
-  private lastBitrateCheckTime = 0;
+
+  // 滑动窗口吞吐量计算
+  private throughputWindow: number[] = [];
+  private readonly THROUGHPUT_WINDOW_SIZE = 10;
+  private lastCheckTime = 0;
+  private lastCheckBytes = 0;
 
   constructor(
     video: HTMLVideoElement,
@@ -204,6 +204,26 @@ export class MediaPlayerMonitor {
   }
 
   /**
+   * 滑动窗口吞吐量计算
+   * @param currentBytes 当前已下载字节数
+   * @returns 平滑后的吞吐量 (bps)
+   */
+  private calculateThroughput(currentBytes: number): number {
+    const timeDelta = (performance.now() - this.lastCheckTime) / 1000;
+    if (timeDelta <= 0) return 0;
+    const bytesDelta = currentBytes - this.lastCheckBytes;
+    const throughput = (bytesDelta * 8) / timeDelta;
+    this.throughputWindow.push(throughput);
+    if (this.throughputWindow.length > this.THROUGHPUT_WINDOW_SIZE) {
+      this.throughputWindow.shift();
+    }
+    const average = this.throughputWindow.reduce((a, b) => a + b, 0) / this.throughputWindow.length;
+    this.lastCheckTime = performance.now();
+    this.lastCheckBytes = currentBytes;
+    return Math.round(average);
+  }
+
+  /**
    * 收集码率数据（当前选中清晰度的静态码率）
    */
   private collectBitrateData(timestamp: number): void {
@@ -270,11 +290,6 @@ export class MediaPlayerMonitor {
     let videoThroughput = 0;
     let audioThroughput = 0;
 
-    // 计算时间差（秒）
-    const timeDelta = this.lastBitrateCheckTime > 0
-      ? (timestamp - this.lastBitrateCheckTime) / 1000
-      : 1;
-
     switch (this.playerType) {
       case PlayerType.DASH: {
         try {
@@ -293,13 +308,13 @@ export class MediaPlayerMonitor {
             }
           });
 
-          // 计算下载速度 (bps)
-          if (this.lastDownloadedBytes > 0 && timeDelta > 0) {
-            const bytesDelta = totalDownloadedBytes - this.lastDownloadedBytes;
-            totalThroughput = bytesDelta > 0 ? (bytesDelta * 8) / timeDelta : 0;
+          // 使用滑动窗口计算吞吐量
+          if (this.lastCheckTime > 0) {
+            totalThroughput = this.calculateThroughput(totalDownloadedBytes);
+          } else {
+            this.lastCheckTime = performance.now();
+            this.lastCheckBytes = totalDownloadedBytes;
           }
-
-          this.lastDownloadedBytes = totalDownloadedBytes;
 
           // 估算视频和音频吞吐量比例
           const videoRepresentation = this.player?.getCurrentRepresentationForType?.('video');
@@ -324,13 +339,13 @@ export class MediaPlayerMonitor {
           // hls.js 使用 stats 获取加载信息
           const totalLoaded = this.player?.stats?.loaded || 0;
 
-          // 计算下载速度 (bps)
-          if (this.lastDownloadedBytes > 0 && timeDelta > 0) {
-            const bytesDelta = totalLoaded - this.lastDownloadedBytes;
-            totalThroughput = bytesDelta > 0 ? (bytesDelta * 8) / timeDelta : 0;
+          // 使用滑动窗口计算吞吐量
+          if (this.lastCheckTime > 0) {
+            totalThroughput = this.calculateThroughput(totalLoaded);
+          } else {
+            this.lastCheckTime = performance.now();
+            this.lastCheckBytes = totalLoaded;
           }
-
-          this.lastDownloadedBytes = totalLoaded;
 
           // 估算视频和音频吞吐量比例
           let videoBandwidth = 0;
@@ -366,8 +381,6 @@ export class MediaPlayerMonitor {
         break;
       }
     }
-
-    this.lastBitrateCheckTime = timestamp;
 
     const dataPoint: ThroughputDataPoint = {
       timestamp,
@@ -731,8 +744,9 @@ export class MediaPlayerMonitor {
     this.throughputData = [];
     this.bufferData = [];
     this.fpsData = [];
-    this.lastDownloadedBytes = 0;
-    this.lastBitrateCheckTime = 0;
+    this.throughputWindow = [];
+    this.lastCheckTime = 0;
+    this.lastCheckBytes = 0;
   }
 
   /**

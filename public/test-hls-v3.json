@@ -1,0 +1,873 @@
+{
+  "duration": 268.2,
+  "minBufferTime": 25.0,
+  "video": [
+    {
+      "id": 0,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 10135518,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d4034",
+      "width": 3840,
+      "height": 2160,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h264-3840_2160-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 1,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 5135518,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d402a",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h264-1920_1080-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 2,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 3135518,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d4020",
+      "width": 1280,
+      "height": 720,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h264-1280_720-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 3,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 1635518,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d401f",
+      "width": 854,
+      "height": 480,
+      "frameRate": 59.94,
+      "sar": "1280:1281",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h264-854_480-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 4,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 7133600,
+      "mimeType": "video/mp4",
+      "codecs": "hvc1.1.6.L150.B0",
+      "width": 3840,
+      "height": 2160,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h265-3840_2160-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 5,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 3633600,
+      "mimeType": "video/mp4",
+      "codecs": "hvc1.1.6.L120.B0",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h265-1920_1080-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 6,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 2233600,
+      "mimeType": "video/mp4",
+      "codecs": "hvc1.1.6.L93.B0",
+      "width": 1280,
+      "height": 720,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h265-1280_720-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    },
+    {
+      "id": 7,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 1179647,
+      "mimeType": "video/mp4",
+      "codecs": "hvc1.1.6.L93.B0",
+      "width": 854,
+      "height": 480,
+      "frameRate": 59.94,
+      "sar": "1280:1281",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-video-h265-854_480-0.m4s",
+        "targetDuration": 12.5125,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 8341667,
+            "r": 1
+          },
+          {
+            "d": 12512500
+          },
+          {
+            "d": 5505500
+          }
+        ],
+        "mediaSequence": 1
+      }
+    }
+  ],
+  "audio": [
+    {
+      "id": 8,
+      "baseUrl": "http://localhost:9000/video",
+      "backupUrls": [
+        "http://localhost:9000/video",
+        "http://localhost:9000/video"
+      ],
+      "bandwidth": 128000,
+      "mimeType": "audio/mp4",
+      "codecs": "mp4a.40.2",
+      "audioSamplingRate": 48000,
+      "channelConfig": {
+        "value": 2
+      },
+      "lang": "und",
+      "role": "main",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "333632953978589184-audio-0.m4s",
+        "targetDuration": 9.984,
+        "startNumber": 1,
+        "timescale": 1000000,
+        "totalCount": 27,
+        "segmentTimeline": [
+          {
+            "t": 0,
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 1
+          },
+          {
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 2
+          },
+          {
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 2
+          },
+          {
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 2
+          },
+          {
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 2
+          },
+          {
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 2
+          },
+          {
+            "d": 9984000
+          },
+          {
+            "d": 10005333,
+            "r": 1
+          },
+          {
+            "d": 8362667
+          }
+        ],
+        "mediaSequence": 1
+      }
+    }
+  ]
+}

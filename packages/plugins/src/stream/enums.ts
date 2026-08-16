@@ -86,6 +86,8 @@ export enum StreamPluginEventEnum {
   METADATA_LOADED = 'METADATA_LOADED',
   /** 统计信息更新 */
   STATS_UPDATE = 'STATS_UPDATE',
+  /** 清晰度变化（自动或手动切换） */
+  QUALITY_CHANGE = 'QUALITY_CHANGE',
 
   // 错误事件
   /** 流媒体错误 */

@@ -137,7 +137,7 @@ export interface MergeResult<T> {
   target: T;
   changedProps: Array<{
     key: string;
-    oldVal: unknown;
-    newVal: unknown;
+    oldVal: string | number | boolean | null;
+    newVal: string | number | boolean | null;
   }>;
 }

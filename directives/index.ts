@@ -42,11 +42,11 @@ export const focus: Directive<boolean> = (el, value) => {
  * @example
  * h('div', { directives: [[clickOutside, () => console.log('outside')]] })
  */
-export const clickOutside: Directive<() => void> = (el, callback) => {
+export const clickOutside: Directive<() => void> = (el, callback): (() => void) | void => {
   /**
    * 点击事件处理器
    */
-  const handler = (e: MouseEvent) => {
+  const handler = (e: MouseEvent): void => {
     /**
      * 如果点击目标不在元素内，触发回调
      */
@@ -101,7 +101,7 @@ export const draggable: Directive<{
   onMove?: (e: MouseEvent, deltaX: number, deltaY: number) => void;
   /** 拖拽结束回调 */
   onEnd?: (e: MouseEvent) => void;
-}> = (el, options) => {
+}> = (el, options): (() => void) | void => {
   if (!options.enabled) return;
 
   /**
@@ -114,7 +114,7 @@ export const draggable: Directive<{
   /**
    * 鼠标按下处理器
    */
-  const onMouseDown = (e: MouseEvent) => {
+  const onMouseDown = (e: MouseEvent): void => {
     isDragging = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -130,7 +130,7 @@ export const draggable: Directive<{
   /**
    * 鼠标移动处理器
    */
-  const onMouseMove = (e: MouseEvent) => {
+  const onMouseMove = (e: MouseEvent): void => {
     if (!isDragging) return;
     const deltaX = e.clientX - startX;
     const deltaY = e.clientY - startY;
@@ -140,7 +140,7 @@ export const draggable: Directive<{
   /**
    * 鼠标释放处理器
    */
-  const onMouseUp = (e: MouseEvent) => {
+  const onMouseUp = (e: MouseEvent): void => {
     isDragging = false;
     options.onEnd?.(e);
     document.removeEventListener('mousemove', onMouseMove);
@@ -177,7 +177,7 @@ export const longPress: Directive<{
   onLongPress: () => void;
   /** 点击回调 */
   onClick?: () => void;
-}> = (el, options) => {
+}> = (el, options): (() => void) | void => {
   const { duration = 500, onLongPress, onClick } = options;
 
   /**
@@ -189,7 +189,7 @@ export const longPress: Directive<{
   /**
    * 开始长按
    */
-  const start = () => {
+  const start = (): void => {
     isLongPress = false;
     timer = window.setTimeout(() => {
       isLongPress = true;
@@ -200,7 +200,7 @@ export const longPress: Directive<{
   /**
    * 取消长按
    */
-  const cancel = () => {
+  const cancel = (): void => {
     if (timer !== null) {
       clearTimeout(timer);
       timer = null;
@@ -210,7 +210,7 @@ export const longPress: Directive<{
   /**
    * 点击处理器
    */
-  const onClickHandler = () => {
+  const onClickHandler = (): void => {
     if (!isLongPress && onClick) {
       onClick();
     }
@@ -254,7 +254,7 @@ export const throttle: Directive<{
   handler: (e: Event) => void;
   /** 节流间隔（毫秒） */
   delay?: number;
-}> = (el, options) => {
+}> = (el, options): (() => void) | void => {
   const { event, handler, delay = 100 } = options;
 
   /**
@@ -265,7 +265,7 @@ export const throttle: Directive<{
   /**
    * 节流处理器
    */
-  const throttledHandler = (e: Event) => {
+  const throttledHandler = (e: Event): void => {
     const now = Date.now();
     if (now - lastTime >= delay) {
       lastTime = now;
@@ -299,7 +299,7 @@ export const debounce: Directive<{
   handler: (e: Event) => void;
   /** 防抖延迟（毫秒） */
   delay?: number;
-}> = (el, options) => {
+}> = (el, options): (() => void) | void => {
   const { event, handler, delay = 300 } = options;
 
   /**
@@ -310,7 +310,7 @@ export const debounce: Directive<{
   /**
    * 防抖处理器
    */
-  const debouncedHandler = (e: Event) => {
+  const debouncedHandler = (e: Event): void => {
     if (timer !== null) {
       clearTimeout(timer);
     }
@@ -344,7 +344,7 @@ export const debounce: Directive<{
  * @param text - 提示文本
  * @returns 清理函数
  */
-export const tooltip: Directive<string> = (el, text) => {
+export const tooltip: Directive<string> = (el, text): (() => void) | void => {
   /**
    * 创建提示元素
    */
@@ -367,7 +367,7 @@ export const tooltip: Directive<string> = (el, text) => {
   /**
    * 显示提示
    */
-  const show = () => {
+  const show = (): void => {
     document.body.appendChild(tooltipEl);
     const rect = el.getBoundingClientRect();
     tooltipEl.style.left = `${rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2}px`;
@@ -378,7 +378,7 @@ export const tooltip: Directive<string> = (el, text) => {
   /**
    * 隐藏提示
    */
-  const hide = () => {
+  const hide = (): void => {
     tooltipEl.style.opacity = '0';
     setTimeout(() => {
       if (tooltipEl.parentNode) {

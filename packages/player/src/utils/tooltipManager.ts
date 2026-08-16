@@ -99,7 +99,7 @@ export class TooltipManager {
   private registerEvents(): void {
     // 监听 tooltip 显示事件
     this.unsubscribers.push(
-      this.eventBus.on('TOOLTIP_SHOW', (payload: unknown) => {
+      this.eventBus.on<TooltipShowPayload>('TOOLTIP_SHOW', (payload) => {
         if (isTooltipShowPayload(payload)) {
           this.show(payload.element, payload.message, {
             duration: payload.duration,
@@ -113,7 +113,7 @@ export class TooltipManager {
 
     // 监听 tooltip 隐藏事件
     this.unsubscribers.push(
-      this.eventBus.on('TOOLTIP_HIDE', (payload: unknown) => {
+      this.eventBus.on<TooltipHidePayload>('TOOLTIP_HIDE', (payload) => {
         if (typeof payload === 'object' && payload !== null && 'element' in payload &&
             payload.element instanceof HTMLElement && payload.element !== this.targetEl) {
           return; // 不是当前 tooltip 的目标元素，忽略

@@ -2,83 +2,102 @@
  * ============================================
  * 弹幕发送栏组件 (SendBar)
  * ============================================
- * 使用 h 函数框架实现的弹幕发送栏组件
- * 保持与老播放器完全相同的 DOM 结构和类名
+ * 提供弹幕输入、发送、弹幕开关和设置面板等交互功能
  */
 
-import { h, defineComponent } from '@/core';
-import type { VNode } from '@/types';
+import { h, defineComponent, ref } from '@/core';
 import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
 import type { AnimationFrameID } from '@/utils/rafTimeout';
+import type { ComponentLifecycle } from '@/types';
 
 /**
  * 面板显示状态
+ * 管理设置面板和弹幕类型选择面板的延迟显示/隐藏定时器
  */
 export interface DmShowpanel {
+  /** 设置面板的定时器 */
   setting: {
+    /** 设置面板延迟显示的定时器 ID */
     showTimer: AnimationFrameID | null;
+    /** 设置面板延迟隐藏的定时器 ID */
     hideTimer: AnimationFrameID | null;
   };
+  /** 弹幕类型选择面板的定时器 */
   selection: {
+    /** 选择面板延迟显示的定时器 ID */
     showTimer: AnimationFrameID | null;
+    /** 选择面板延迟隐藏的定时器 ID */
     hideTimer: AnimationFrameID | null;
   };
 }
 
 /**
- * 提示按钮
+ * 提示按钮信息
+ * 用于弹幕开关悬停时显示提示气泡
  */
 export interface Tooltip {
+  /** 触发提示的 DOM 元素 */
   element: HTMLElement | null;
+  /** 提示名称 */
   name: string;
+  /** 提示的数据属性名 */
   dataName: string;
 }
 
 /**
  * SendBar 组件 Props 接口
+ * 定义弹幕发送栏的所有属性和回调
  */
 export interface SendBarProps {
-  /** 在线人数 */
+  /** 在线观看人数文本 */
   onlineCount?: string;
-  /** 弹幕数量 */
+  /** 弹幕总数文本 */
   danmakuCount?: string;
-  /** 是否显示登录提示 */
+  /** 是否显示登录提示（未登录时显示登录/注册链接） */
   showLoginTip?: boolean;
-  /** 弹幕开关状态 */
+  /** 弹幕开关初始状态，true 为开启 */
   danmakuSwitch?: boolean;
-  /** 输入框占位符 */
+  /** 输入框占位符文本 */
   placeholder?: string;
-  /** 输入框聚焦回调 */
+  /** 输入框获得焦点时的回调 */
   onInputFocus?: () => void;
-  /** 输入框失焦回调 */
+  /** 输入框失去焦点时的回调 */
   onInputBlur?: () => void;
-  /** 弹幕开关变化回调 */
+  /** 弹幕开关状态变化时的回调 */
   onDanmakuSwitch?: (checked: boolean) => void;
-  /** 发送弹幕回调 */
+  /** 发送弹幕时的回调，参数为弹幕文本 */
   onSendDanmaku?: (text: string) => void;
-  /** 显示提示回调 */
+  /** 显示提示气泡时的回调 */
   onShowTooltip?: (tooltip: Tooltip) => void;
-  /** 隐藏提示回调 */
+  /** 隐藏提示气泡时的回调 */
   onHideTooltip?: () => void;
 }
 
 /**
  * 弹幕发送栏组件
- * 使用 h 函数实现，保持与老播放器完全相同的 DOM 结构和类名
+ * 提供弹幕输入、发送、开关控制和设置面板等交互功能
  */
-export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
+export const SendBar = defineComponent<SendBarProps>((props, lifecycle: ComponentLifecycle) => {
   // ============================================
   // 状态数据
   // ============================================
+
+  /** 面板显示状态，管理设置面板和弹幕类型选择面板的定时器 */
   const dmShowpanel: DmShowpanel = {
     setting: { showTimer: null, hideTimer: null },
     selection: { showTimer: null, hideTimer: null },
   };
 
+  /** 提示气泡延迟显示的定时器 ID */
   let tipInTimer: AnimationFrameID | null = null;
+
+  /** 弹幕输入框的当前文本值 */
   let inputValue = '';
+
+  /** 弹幕开关状态，true 表示弹幕开启 */
   let isDanmakuEnabled = props.danmakuSwitch ?? true;
 
+  /** 弹幕开关提示信息 */
   const tooltip: Tooltip = {
     element: null,
     name: 'danmaku-switch',
@@ -88,45 +107,54 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
   // ============================================
   // DOM 元素引用
   // ============================================
-  const sendingBarRef: { current: HTMLDivElement | null } = { current: null };
-  const settingIconRef: { current: HTMLDivElement | null } = { current: null };
-  const textSettingIconRef: { current: HTMLDivElement | null } = { current: null };
-  const settingWrapRef: { current: HTMLDivElement | null } = { current: null };
-  const selectionContainerRef: { current: HTMLDivElement | null } = { current: null };
-  const inputRef: { current: HTMLInputElement | null } = { current: null };
-  const switchInputRef: { current: HTMLInputElement | null } = { current: null };
+
+  /** 发送栏外层容器 DOM 引用 */
+  const sendingBarRef = ref<HTMLDivElement>();
+
+  /** 弹幕设置图标 DOM 引用，用于绑定鼠标悬停事件 */
+  const settingIconRef = ref<HTMLDivElement>();
+
+  /** 弹幕类型选择图标 DOM 引用，用于绑定鼠标悬停事件 */
+  const textSettingIconRef = ref<HTMLDivElement>();
+
+  /** 弹幕设置面板容器 DOM 引用，用于控制面板的显示/隐藏 */
+  const settingWrapRef = ref<HTMLDivElement>();
+
+  /** 弹幕类型选择面板容器 DOM 引用，用于控制面板的显示/隐藏 */
+  const selectionContainerRef = ref<HTMLDivElement>();
+
+  /** 弹幕输入框 DOM 引用 */
+  const inputRef = ref<HTMLInputElement>();
+
+  /** 弹幕开关复选框 DOM 引用 */
+  const switchInputRef = ref<HTMLInputElement>();
 
   // ============================================
   // 事件处理
   // ============================================
 
-  /**
-   * 处理输入框聚焦
-   */
+  /** 处理输入框获得焦点事件 */
   const handleInputFocus = (): void => {
     props.onInputFocus?.();
     lifecycle.emit?.('inputFocus');
   };
 
-  /**
-   * 处理输入框失焦
-   */
+  /** 处理输入框失去焦点事件 */
   const handleInputBlur = (): void => {
     props.onInputBlur?.();
     lifecycle.emit?.('inputBlur');
   };
 
   /**
-   * 处理输入变化
+   * 处理输入框内容变化事件
+   * @param event - 输入事件
    */
   const handleInputChange = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) return;
     inputValue = event.target.value;
   };
 
-  /**
-   * 处理发送弹幕
-   */
+  /** 处理发送弹幕，清空输入框并触发回调 */
   const handleSend = (): void => {
     if (inputValue.trim()) {
       props.onSendDanmaku?.(inputValue.trim());
@@ -139,7 +167,8 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
   };
 
   /**
-   * 处理弹幕开关变化
+   * 处理弹幕开关变化事件
+   * @param event - 变化事件
    */
   const handleSwitchChange = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) return;
@@ -149,7 +178,8 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
   };
 
   /**
-   * 显示开关提示
+   * 显示弹幕开关的提示气泡
+   * @param event - 鼠标进入事件
    */
   const showSwitchTip = (event: Event): void => {
     if (!tooltip.element && event.target instanceof HTMLElement) {
@@ -162,9 +192,7 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
     }, 300);
   };
 
-  /**
-   * 隐藏开关提示
-   */
+  /** 隐藏弹幕开关的提示气泡 */
   const hideSwitchTip = (): void => {
     cancelRaf(tipInTimer!);
     props.onHideTooltip?.();
@@ -172,7 +200,8 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
   };
 
   /**
-   * 打开面板
+   * 打开指定面板（设置面板或弹幕类型选择面板）
+   * @param panel - 面板类型，'setting' 为设置面板，'selection' 为类型选择面板
    */
   const openPanel = (panel: 'setting' | 'selection'): void => {
     switch (panel) {
@@ -192,7 +221,8 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
   };
 
   /**
-   * 关闭面板
+   * 关闭指定面板（设置面板或弹幕类型选择面板）
+   * @param panel - 面板类型，'setting' 为设置面板，'selection' 为类型选择面板
    */
   const closePanel = (panel: 'setting' | 'selection'): void => {
     switch (panel) {
@@ -212,14 +242,71 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
   };
 
   // ============================================
+  // API 方法
+  // ============================================
+
+  /**
+   * 设置输入框的值
+   * @param value - 要设置的文本值
+   */
+  const setInputValue = (value: string): void => {
+    inputValue = value;
+    if (inputRef.current) {
+      inputRef.current.value = value;
+    }
+  };
+
+  /**
+   * 设置弹幕开关状态
+   * @param enabled - true 开启弹幕，false 关闭弹幕
+   */
+  const setDanmakuSwitch = (enabled: boolean): void => {
+    isDanmakuEnabled = enabled;
+    if (switchInputRef.current) {
+      switchInputRef.current.checked = enabled;
+    }
+  };
+
+  /** 聚焦弹幕输入框 */
+  const focusInput = (): void => {
+    inputRef.current?.focus();
+  };
+
+  /** 让弹幕输入框失去焦点 */
+  const blurInput = (): void => {
+    inputRef.current?.blur();
+  };
+
+  // ============================================
   // 生命周期
   // ============================================
+
+  /** 设置图标鼠标进入事件处理，打开设置面板 */
+  const handleSettingMouseEnter = (): void => openPanel('setting');
+  /** 设置图标鼠标离开事件处理，关闭设置面板 */
+  const handleSettingMouseLeave = (): void => closePanel('setting');
+  /** 弹幕类型图标鼠标进入事件处理，打开类型选择面板 */
+  const handleTextSettingMouseEnter = (): void => openPanel('selection');
+  /** 弹幕类型图标鼠标离开事件处理，关闭类型选择面板 */
+  const handleTextSettingMouseLeave = (): void => closePanel('selection');
+
+  /** 组件挂载后绑定鼠标悬停事件并对外暴露控制方法 */
   lifecycle.onMounted = (): void => {
     // 添加事件监听
-    settingIconRef.current?.addEventListener('mouseenter', () => openPanel('setting'));
-    settingIconRef.current?.addEventListener('mouseleave', () => closePanel('setting'));
-    textSettingIconRef.current?.addEventListener('mouseenter', () => openPanel('selection'));
-    textSettingIconRef.current?.addEventListener('mouseleave', () => closePanel('selection'));
+    settingIconRef.current?.addEventListener('mouseenter', handleSettingMouseEnter);
+    settingIconRef.current?.addEventListener('mouseleave', handleSettingMouseLeave);
+    textSettingIconRef.current?.addEventListener('mouseenter', handleTextSettingMouseEnter);
+    textSettingIconRef.current?.addEventListener('mouseleave', handleTextSettingMouseLeave);
+
+    lifecycle.emit?.('sendBarMounted', { setInputValue, setDanmakuSwitch, focusInput, blurInput });
+  };
+
+  /** 组件销毁前移除鼠标悬停事件监听 */
+  lifecycle.onBeforeDestroy = (): void => {
+    settingIconRef.current?.removeEventListener('mouseenter', handleSettingMouseEnter);
+    settingIconRef.current?.removeEventListener('mouseleave', handleSettingMouseLeave);
+    textSettingIconRef.current?.removeEventListener('mouseenter', handleTextSettingMouseEnter);
+    textSettingIconRef.current?.removeEventListener('mouseleave', handleTextSettingMouseLeave);
   };
 
   // ============================================
@@ -306,7 +393,7 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle) => {
         ),
         // 发送按钮
         h('div', {
-          class: ['player-dm-btn-send', 'player-button', { disabled: !inputValue.trim() }],
+          class: ['player-dm-btn-send', 'player-button', inputValue.trim() ? '' : 'disabled'].filter(Boolean).join(' '),
           'data-v-risk': 'fingerprint',
           onClick: handleSend,
         },

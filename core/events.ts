@@ -6,6 +6,122 @@
  * 参考 dash.js 和 hls.js 的枚举命名风格：大写驼峰 + 下划线分隔
  */
 
+import type { TypedEventBus } from './eventBus';
+
+/**
+ * 播放器事件数据类型映射
+ * 将 PlayerEventEnum 的每个事件名映射到其 payload 类型
+ * 用于 TypedEventBus 的类型安全
+ *
+ * 使用 type 交叉而非 interface + 索引签名：
+ * interface { [key: string]: unknown; play: undefined; }
+ * → TypeScript 将 'play' 的类型也视为 unknown（索引签名覆盖）
+ *
+ * type 交叉 { play: undefined; } & Record<string, unknown>
+ * → TypeScript 保留具体属性的类型，索引签名仅用于动态访问
+ */
+export type PlayerEventMap = {
+  // 播放状态相关事件
+  stateChange: string;
+  play: undefined;
+  pause: undefined;
+  ended: undefined;
+  timeUpdate: { time: number };
+  progress: undefined;
+  waiting: undefined;
+  canPlay: undefined;
+  canPlayThrough: undefined;
+  loading: undefined;
+  loaded: undefined;
+
+  // 视频属性相关事件
+  volumeChange: { volume: number; muted: boolean };
+  mutedChange: boolean;
+  rateChange: number;
+  qualityChange: { quality: string; name?: string; isBackup?: boolean } | string;
+  resize: { width: number; height: number };
+  durationChange: undefined;
+
+  // 全屏/画中画相关事件
+  fullscreenChange: { isFullscreen: boolean };
+  pipChange: { isPip: boolean };
+  webFullscreenChange: { isWebFullscreen: boolean };
+  wideScreenChange: { isWideScreen: boolean };
+
+  // 错误相关事件
+  error: { error: unknown; code?: number; message?: string };
+  errorRecovery: undefined;
+
+  // 控制栏相关事件
+  controlsShow: undefined;
+  controlsHide: undefined;
+  seekStart: { time: number; previousTime: number };
+  seekEnd: { time: number; previousTime: number };
+
+  // 生命周期事件
+  ready: undefined;
+  mounted: { container?: HTMLElement; video?: HTMLVideoElement; sendingArea?: HTMLElement };
+  /** 插件约定的挂载事件名（兼容旧插件） */
+  'player:mounted': { container?: HTMLElement; video?: HTMLVideoElement; sendingArea?: HTMLElement };
+  destroy: undefined;
+
+  // 弹幕相关事件
+  danmakuToggle: undefined;
+  danmakuDensityChange: number;
+  danmakuOpacityChange: number;
+  danmakuSpeedChange: number;
+  danmakuSend: { text: string; options?: Record<string, unknown> };
+  danmakuSent: Record<string, unknown>;
+  danmakuClear: undefined;
+  danmakuSettingChange: Record<string, unknown>;
+
+  // 字幕相关事件
+  subtitleToggle: undefined;
+  subtitleLangChange: string;
+  subtitleSwitch: { lang: string };
+
+  // 监控相关事件
+  monitorStats: Record<string, unknown>;
+  monitorBitrate: Record<string, unknown>;
+  monitorBuffer: Record<string, unknown>;
+  monitorFps: Record<string, unknown>;
+  monitorThroughput: Record<string, unknown>;
+  monitorStart: undefined;
+  monitorStop: undefined;
+  monitorSetPlayer: unknown;
+
+  // 互动相关事件
+  interactionLike: undefined;
+  interactionCoin: undefined;
+  interactionCollect: undefined;
+  interactionFollow: undefined;
+  interactionLinkClick: undefined;
+  interactionVoteSelect: { voteIndex: number; optionIndex: number };
+  interactionScoreSelect: { scoreIndex: number; value: number };
+  interactionCardClose: { type: string; index: number };
+  interactionPositionChange: { type: string; index: number; top: number; left: number };
+
+  // 流媒体相关事件
+  streamLoadComplete: Record<string, unknown>;
+  streamError: { message?: string; error?: unknown; [key: string]: unknown };
+  streamStatsUpdate: Record<string, unknown>;
+  streamMetadataLoaded: Record<string, unknown>;
+  streamPlayStart: undefined;
+  streamPlayPause: undefined;
+  streamBufferStart: undefined;
+  streamBufferEnd: undefined;
+  streamNetworkError: Record<string, unknown>;
+  streamDecodeError: Record<string, unknown>;
+  streamQualityChange: { width: number; height: number; bitrate?: number; isAuto?: boolean };
+
+  // 提示工具相关事件
+  tooltipShow: { text: string; x: number; y: number };
+  tooltipHide: undefined;
+} & Record<string, unknown>;
+
+/** 播放器类型安全事件总线类型 */
+export type PlayerEventBus = TypedEventBus<PlayerEventMap>;
+
 /**
  * 播放器事件枚举
  * 用于事件总线通信，防止事件名称拼写错误
@@ -92,12 +208,90 @@ export enum PlayerEventEnum {
   DANMAKU_OPACITY_CHANGE = 'danmakuOpacityChange',
   /** 弹幕速度改变 */
   DANMAKU_SPEED_CHANGE = 'danmakuSpeedChange',
+  /** 发送弹幕 */
+  DANMAKU_SEND = 'danmakuSend',
+  /** 弹幕发送成功 */
+  DANMAKU_SENT = 'danmakuSent',
+  /** 清空弹幕 */
+  DANMAKU_CLEAR = 'danmakuClear',
+  /** 弹幕设置变更 */
+  DANMAKU_SETTING_CHANGE = 'danmakuSettingChange',
 
   // 字幕相关事件
   /** 字幕显示状态改变 */
   SUBTITLE_TOGGLE = 'subtitleToggle',
   /** 字幕语言改变 */
   SUBTITLE_LANG_CHANGE = 'subtitleLangChange',
+  /** 字幕切换 */
+  SUBTITLE_SWITCH = 'subtitleSwitch',
+
+  // 监控相关事件
+  /** 监控数据更新 */
+  MONITOR_STATS = 'monitorStats',
+  /** 码率信息更新 */
+  MONITOR_BITRATE = 'monitorBitrate',
+  /** 缓冲区信息更新 */
+  MONITOR_BUFFER = 'monitorBuffer',
+  /** 帧率信息更新 */
+  MONITOR_FPS = 'monitorFps',
+  /** 吞吐量信息更新 */
+  MONITOR_THROUGHPUT = 'monitorThroughput',
+  /** 开始监控 */
+  MONITOR_START = 'monitorStart',
+  /** 停止监控 */
+  MONITOR_STOP = 'monitorStop',
+  /** 设置播放器实例到监控器 */
+  MONITOR_SET_PLAYER = 'monitorSetPlayer',
+
+  // 互动相关事件
+  /** 互动点赞 */
+  INTERACTION_LIKE = 'interactionLike',
+  /** 互动投币 */
+  INTERACTION_COIN = 'interactionCoin',
+  /** 互动收藏 */
+  INTERACTION_COLLECT = 'interactionCollect',
+  /** 互动关注 */
+  INTERACTION_FOLLOW = 'interactionFollow',
+  /** 外链点击 */
+  INTERACTION_LINK_CLICK = 'interactionLinkClick',
+  /** 投票选择 */
+  INTERACTION_VOTE_SELECT = 'interactionVoteSelect',
+  /** 评分选择 */
+  INTERACTION_SCORE_SELECT = 'interactionScoreSelect',
+  /** 卡片关闭 */
+  INTERACTION_CARD_CLOSE = 'interactionCardClose',
+  /** 位置变化 */
+  INTERACTION_POSITION_CHANGE = 'interactionPositionChange',
+
+  // 流媒体相关事件
+  /** 流媒体加载完成 */
+  STREAM_LOAD_COMPLETE = 'streamLoadComplete',
+  /** 流媒体错误 */
+  STREAM_ERROR = 'streamError',
+  /** 流媒体统计更新 */
+  STREAM_STATS_UPDATE = 'streamStatsUpdate',
+  /** 流媒体元数据加载 */
+  STREAM_METADATA_LOADED = 'streamMetadataLoaded',
+  /** 流媒体播放开始 */
+  STREAM_PLAY_START = 'streamPlayStart',
+  /** 流媒体播放暂停 */
+  STREAM_PLAY_PAUSE = 'streamPlayPause',
+  /** 流媒体缓冲开始 */
+  STREAM_BUFFER_START = 'streamBufferStart',
+  /** 流媒体缓冲结束 */
+  STREAM_BUFFER_END = 'streamBufferEnd',
+  /** 流媒体网络错误 */
+  STREAM_NETWORK_ERROR = 'streamNetworkError',
+  /** 流媒体解码错误 */
+  STREAM_DECODE_ERROR = 'streamDecodeError',
+  /** 流媒体清晰度变化（自动或手动切换），payload: { width, height, bitrate, isAuto } */
+  STREAM_QUALITY_CHANGE = 'streamQualityChange',
+
+  // 提示工具相关事件
+  /** 显示 tooltip 提示 */
+  TOOLTIP_SHOW = 'tooltipShow',
+  /** 隐藏 tooltip 提示 */
+  TOOLTIP_HIDE = 'tooltipHide',
 }
 
 /**
@@ -318,57 +512,4 @@ export enum PlayerConfigEnum {
 
   // 插件配置
   PLUGINS = 'plugins',
-}
-
-/**
- * 播放器状态键枚举
- * 用于状态管理器的路径定义
- */
-export enum PlayerStateKeyEnum {
-  // 播放状态
-  STATE = 'playerState',
-  CURRENT_TIME = 'playerCurrentTime',
-  DURATION = 'playerDuration',
-  BUFFERED = 'playerBuffered',
-
-  // 音量状态
-  VOLUME = 'playerVolume',
-  MUTED = 'playerMuted',
-
-  // 播放属性
-  PLAYBACK_RATE = 'playerPlaybackRate',
-  QUALITY = 'playerQuality',
-
-  // 显示状态
-  IS_FULLSCREEN = 'playerIsFullscreen',
-  IS_PIP = 'playerIsPip',
-  IS_WEB_FULLSCREEN = 'playerIsWebFullscreen',
-  IS_WIDE_SCREEN = 'playerIsWideScreen',
-
-  // 视频属性
-  VIDEO_WIDTH = 'playerVideoWidth',
-  VIDEO_HEIGHT = 'playerVideoHeight',
-  ASPECT_RATIO = 'playerAspectRatio',
-
-  // 错误状态
-  ERROR_CODE = 'playerErrorCode',
-  ERROR_MESSAGE = 'playerErrorMessage',
-
-  // 加载状态
-  IS_LOADING = 'playerIsLoading',
-  LOAD_PROGRESS = 'playerLoadProgress',
-
-  // 控制栏状态
-  CONTROLS_VISIBLE = 'playerControlsVisible',
-  CONTROLS_HOVER = 'playerControlsHover',
-
-  // 弹幕状态
-  DANMAKU_VISIBLE = 'playerDanmakuVisible',
-  DANMAKU_OPACITY = 'playerDanmakuOpacity',
-  DANMAKU_SPEED = 'playerDanmakuSpeed',
-  DANMAKU_DENSITY = 'playerDanmakuDensity',
-
-  // 字幕状态
-  SUBTITLE_VISIBLE = 'playerSubtitleVisible',
-  SUBTITLE_LANG = 'playerSubtitleLang',
 }

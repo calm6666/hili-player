@@ -36,6 +36,12 @@
 28. [附录 L: RowDm 弹幕容器](#28-附录-l-rowdm-弹幕容器)
 29. [附录 M: 其余组件](#29-附录-m-其余组件)
 30. [附录 N: VideoPlayer 核心类](#30-附录-n-videoplayer-核心类)
+31. [附录 O: 各组件详细 h() 代码](#附录-o-各组件详细-h-代码)
+32. [附录 P: 精细化拆分子组件](#附录-p-精细化拆分子组件)
+33. [附录 Q: Lottie 图标系统](#附录-q-lottie-图标系统)
+34. [附录 R: 组件 API 参考](#附录-r-组件-api-参考)
+35. [附录 S: 跨组件事件通信 — EventBus 设计](#附录-s-跨组件事件通信--eventbus-设计)
+36. [附录 T: 互动插件重构](#附录-t-互动插件重构)
 
 ---
 
@@ -87,14 +93,26 @@ hili-player/
 │   │   ├── core/pluginManager.ts       # 插件管理器
 │   │   ├── core/events.ts              # 事件枚举
 │   │   └── utils/
-│   │       ├── danmaku/                 # 弹幕引擎 (8文件)
-│   │       ├── subtitle/               # 字幕解析
 │   │       ├── media/                  # 监控/图表
 │   │       └── browserCapabilityDetector.ts
 │   │
 │   └── plugins/src/
-│       ├── danmaku/index.ts            # DanmakuPlugin
-│       ├── subtitle/index.ts           # SubtitlePlugin
+│       ├── danmaku/
+│       │   ├── index.ts                # DanmakuPlugin (插件入口)
+│       │   ├── types.ts                # DanmakuPlugin 专用类型
+│       │   └── engine/                 # 弹幕引擎 (插件内部，player 不碰)
+│       │       ├── DanmakuManager.ts
+│       │       ├── CanvasEngine.ts
+│       │       ├── DOMEngine.ts
+│       │       ├── Scheduler.ts
+│       │       ├── TrackManager.ts
+│       │       ├── ObjectPool.ts
+│       │       ├── ScaleHelper.ts
+│       │       └── types.ts
+│       ├── subtitle/
+│       │   ├── index.ts                # SubtitlePlugin (插件入口)
+│       │   ├── types.ts
+│       │   └── subtitleGenerator.ts
 │       ├── interaction/
 │       │   ├── index.ts                 # InteractionPlugin (主插件, 管理子插件)
 │       │   ├── GuidePlugin.ts           # [新] 点赞关注子插件
@@ -355,7 +373,16 @@ elRef.current?.setAttribute('data-screen', 'full');
 ### 3.3 defineComponent 模板
 
 ```typescript
-export const Xxx = defineComponent<XxxProps>((props, lifecycle) => {
+/**
+ * 组件事件映射类型
+ * key 为事件名，value 为 payload 类型（undefined 表示无 payload）
+ */
+type XxxEvents = {
+  toggle: undefined;
+  change: { value: string };
+};
+
+export const Xxx = defineComponent<XxxProps, XxxEvents>((props, lifecycle) => {
   // 1. ref 对象
   const rootRef: { current: HTMLDivElement | null } = { current: null };
 
@@ -366,6 +393,9 @@ export const Xxx = defineComponent<XxxProps>((props, lifecycle) => {
   const toggle = (): void => {
     isActive = !isActive;
     rootRef.current?.classList.toggle('active', isActive);
+    // 通过 lifecycle.emit 触发事件（类型安全，事件名和 payload 自动推断）
+    lifecycle.emit?.('toggle');
+    lifecycle.emit?.('change', { value: isActive ? 'active' : 'inactive' });
   };
 
   // 4. 生命周期
@@ -377,11 +407,64 @@ export const Xxx = defineComponent<XxxProps>((props, lifecycle) => {
     h('span', {}, '内容')
   );
 });
+
+// 父组件使用时，onXxx 回调自动生成（onToggle, onChange）
+// h(Xxx, { onToggle: () => {...}, onChange: (payload) => {...} })
 ```
 
 ---
 
 ## 4. 类型系统
+
+### 4.0 组件事件类型系统
+
+组件使用 `defineComponent<Props, Events>` 双泛型参数定义，第二个泛型 `Events` 为事件映射类型：
+
+```typescript
+/**
+ * 事件映射类型定义规则：
+ * - key 为事件名（小驼峰）
+ * - value 为 payload 类型
+ * - undefined 表示无 payload 的事件
+ *
+ * defineComponent<Props, Events> 会自动：
+ * 1. lifecycle.emit 变为 TypedEmit<Events>，约束事件名和 payload 类型
+ * 2. lifecycle.on 变为 TypedOn<Events>，约束回调参数类型
+ * 3. h() 调用时自动生成 onXxx 回调属性（EventCallbacks<Events>）
+ */
+type QualityMenuEvents = {
+  qualityChange: { quality: string };
+};
+
+const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
+  (props, lifecycle) => {
+    const handleClick = (quality: string): void => {
+      // 类型安全：事件名 'qualityChange' 和 payload { quality } 自动校验
+      lifecycle.emit?.('qualityChange', { quality });
+    };
+    // ...
+  }
+);
+
+// 父组件使用：onXxx 回调自动生成
+h(QualityMenu, {
+  current: '1080p',
+  qualities: ['auto', '480p', '720p', '1080p'],
+  onQualityChange: (payload) => {
+    // payload 自动推断为 { quality: string }
+    console.log(payload.quality);
+  },
+});
+```
+
+**框架核心不可消除的 `as` 类型桥接**（运行时类型桥接，无法通过类型守卫消除）：
+
+| 位置 | `as` 表达式 | 原因 |
+|------|------------|------|
+| `defineComponent` 返回值 | `}) as ExposedComponent<P, E>` | 闭包函数类型到 ExposedComponent 的桥接 |
+| `defineComponent` 内部 | `lc as TypedComponentLifecycle<E>` | 无类型 lifecycle 到类型安全 lifecycle 的桥接 |
+| `defineComponent` emit | `callbackName as keyof typeof props` | 动态事件名到 props key 的映射 |
+| `h()` 函数组件调用 | `tag as FnComponent` | Component 联合类型到可调用 FnComponent 的收窄 |
 
 ### 4.1 问题
 
@@ -641,35 +724,31 @@ plugins 包复制了 player 包的 util 文件，而不是通过共享接口访�
 
 | 操作 | 详情 | 耦合度 |
 |------|------|--------|
-| **创建 `types/danmaku.ts`** | 从 player 和 plugin 两侧合并 DanmakuItem/DanmakuOptions/DanmakuType 等纯类型定义 | 零耦合 — 类型文件不导入任何运行时代码 |
+| **创建 `types/danmaku.ts`** | DanmakuItem/DanmakuOptions/DanmakuType 等纯类型定义 | 零耦合 |
 | **创建 `types/subtitle.ts`** | SubtitleItem/SubtitleFormat/ParsedSubtitle 等类型 | 零耦合 |
-| **提取到根 `utils/subtitle/`** | subtitleGenerator (parseSRT/parseASS/parseVTT) — 因为 plugin 也需要解析字幕文件 | 低耦合 — 独立工具，被 player 和 plugin 共同依赖 |
-| **保留 `packages/player/src/utils/danmaku/`** | DanmakuManager/CanvasEngine/DOMEngine 等运行时引擎 — 只有 player 使用 | player 内部实现 |
-| **删除 `packages/plugins/src/utils/`** | 11 个重复文件全部删除 | 消除重复 |
+| **删除 player 侧重复文件** | `packages/player/src/utils/danmaku/` (8文件) 和 `packages/player/src/utils/subtitle/` (3文件) — **这些是 plugins 的拷贝，引擎归插件** | player 解耦 |
+| **保留 plugins 侧原始文件** | `packages/plugins/src/utils/danmaku/` + `packages/plugins/src/utils/subtitle/` — 引擎和解析器归插件所有 | 插件内部实现 |
 
 **修复后的依赖关系**：
 
 ```
-types/danmaku.ts          ← 纯类型，player 和 plugin 都导入 (零耦合)
-types/subtitle.ts         ← 纯类型，player 和 plugin 都导入 (零耦合)
+types/danmaku.ts          ← 纯类型，player 和 plugin 都导入
+types/subtitle.ts         ← 纯类型，player 和 plugin 都导入
     ↑            ↑
     │            │
 packages/player  packages/plugins
     │            │
-    │            ├── danmaku/index.ts  → 只导入 types/danmaku.ts (类型)
-    │            ├── subtitle/index.ts → 导入 types/subtitle.ts + utils/subtitle/ (类型+解析工具)
-    │            └── interaction/index.ts → 导入 types/ (类型)
+    │            ├── utils/danmaku/    ← 弹幕引擎 (插件内部，player 不碰)
+    │            ├── utils/subtitle/   ← 字幕解析器 (插件内部)
+    │            └── danmaku/index.ts  ← DanmakuPlugin (插件入口)
     │
-    ├── utils/danmaku/    ← 引擎代码 (player 私有，plugin 不导入)
-    └── utils/subtitle/   ← (删除，改为从根 utils/subtitle/ 导入)
-
-utils/subtitle/           ← subtitleGenerator (共享解析工具，独立于 player 和 plugin)
+    └── (不拥有弹幕引擎和字幕解析器)
 ```
 
 **关键点**：
-- DanmakuPlugin 不直接导入 DanmakuManager — 通过构造函数接收 `manager: DanmakuManager` 实例
-- SubtitlePlugin 导入根 `utils/subtitle/` 的解析器 — 这是独立工具，不依赖 player
-- 所有共享类型在 `types/` — 纯 TypeScript 接口/枚举，零运行时依赖
+- 弹幕引擎和字幕解析器归插件所有 — player 不能直接导入它们
+- Player 通过 `player.use(DanmakuPlugin(...))` 启用弹幕，通过 EventBus 通信
+- 所有共享类型在 `types/` — 纯 TypeScript 接口/枚举
 
 ---
 
@@ -760,7 +839,7 @@ const player = new VideoPlayer({
 当前 `CanvasEngine` 在构造函数中直接创建 Canvas 并 appendChild。修改为仅在切换到 Canvas 模式时才创建和插入 DOM。
 
 ```typescript
-// packages/player/src/utils/danmaku/canvasEngine.ts
+// packages/plugins/src/danmaku/engine/CanvasEngine.ts
 
 class CanvasEngine {
   private canvas: HTMLCanvasElement | null = null;
@@ -802,7 +881,7 @@ class CanvasEngine {
 当前绑定 `video.addEventListener('timeupdate', ...)` → 改为独立 `requestAnimationFrame` 循环。
 
 ```typescript
-// packages/player/src/utils/danmaku/index.ts — DanmakuManager
+// packages/plugins/src/danmaku/engine/DanmakuManager.ts
 
 class DanmakuManager {
   private lastRenderTime = 0;
@@ -868,7 +947,7 @@ class CanvasEngine {
 ### 8.4 增量加载
 
 ```typescript
-// packages/player/src/utils/danmaku/scheduler.ts
+// packages/plugins/src/danmaku/engine/Scheduler.ts
 
 class DanmakuScheduler {
   private pendingFetches = new Map<number, Promise<DanmakuItem[]>>();
@@ -1145,14 +1224,32 @@ hili-player/
 │   │   │   └── ... (其余17个)              # [正确]
 │   │   ├── core/pluginManager.ts          # [需改] +StreamPlugin检测, +debug继承
 │   │   ├── core/events.ts                # [需改] +新事件枚举
-│   │   ├── utils/danmaku/                 # [需改] 懒Canvas, RAF, 双缓冲, 增量加载
 │   │   ├── utils/media/                   # [需改] +streamMiddleware, 码率修复
 │   │   └── utils/browserCapabilityDetector.ts  # [正确]
 │   │
 │   └── plugins/src/
-│       ├── danmaku/index.ts               # [需改] install签名, +debug, +回调, 只导入types/
-│       ├── subtitle/index.ts              # [需改] install签名, 导入utils/subtitle/
-│       ├── interaction/index.ts           # [需改] install签名
+│       ├── danmaku/
+│       │   ├── index.ts                    # DanmakuPlugin (插件入口)
+│       │   ├── types.ts                    # DanmakuPlugin 专用类型
+│       │   └── engine/                     # 弹幕引擎 (插件内部，player 不碰)
+│       │       ├── DanmakuManager.ts       # [需改] 独立RAF, 懒Canvas
+│       │       ├── CanvasEngine.ts         # [需改] 懒创建+双缓冲
+│       │       ├── DOMEngine.ts            # [正确]
+│       │       ├── Scheduler.ts            # [需改] 增量加载
+│       │       ├── TrackManager.ts         # [正确]
+│       │       ├── ObjectPool.ts           # [正确]
+│       │       ├── ScaleHelper.ts          # [正确]
+│       │       └── types.ts                # 弹幕引擎内部类型
+│       ├── subtitle/
+│       │   ├── index.ts                    # SubtitlePlugin (插件入口)
+│       │   ├── types.ts                    # 字幕类型
+│       │   └── subtitleGenerator.ts        # 字幕解析器 (SRT/ASS/VTT)
+│       ├── interaction/
+│       │   ├── index.ts                   # InteractionPlugin (主插件)
+│       │   ├── GuidePlugin.ts             # [新] 点赞关注子插件
+│       │   ├── LinkPlugin.ts              # [新] 外链子插件
+│       │   ├── VotePlugin.ts              # [新] 投票子插件
+│       │   └── ScorePlugin.ts             # [新] 评分子插件
 │       ├── hls/HlsPlugin.ts               # [需改] implements StreamPlugin, +useLocalHls
 │       ├── dash/DashPlugin.ts             # [需改] implements StreamPlugin
 │       ├── flv/FlvPlugin.ts               # [需改] implements StreamPlugin
@@ -1172,11 +1269,7 @@ hili-player/
 │
 ├── core/                                  # [已有] h(), mount(), state, eventBus, hooks
 ├── utils/
-│   ├── rafInterval.ts                     # [已有]
-│   └── subtitle/                          # [新增] subtitleGenerator (共享解析器)
-│       ├── index.ts                       # 从player/subtitle/提取
-│       ├── types.ts                       # (删除 — 类型已在types/subtitle.ts)
-│       └── subtitleGenerator.ts           # parseSRT/parseASS/parseVTT/检测格式
+│   └── rafInterval.ts                     # [已有] RAF 工具
 │
 └── media/                                 # [已有] monitor, chart, playerInfoPanel
 ```
@@ -1194,9 +1287,8 @@ hili-player/
 | 0.3 | 创建 `types/danmaku.ts` — 合并 player 和 plugin 的弹幕类型 | types/danmaku.ts [新] | 只有纯类型，零运行时依赖 |
 | 0.4 | 创建 `types/subtitle.ts` — 合并 player 和 plugin 的字幕类型 | types/subtitle.ts [新] | 只有纯类型 |
 | 0.5 | 创建 `types/callbacks.ts` — 回调类型 | types/callbacks.ts [新] | 同上 |
-| 0.6 | 提取字幕解析器到 `utils/subtitle/` — parseSRT/ASS/VTT | utils/subtitle/ [新], packages/player/src/utils/subtitle/ [删源码, 改导入] | player+plugin 都从 utils/subtitle/ 导入 |
-| 0.7 | 删除 `packages/plugins/src/utils/` 下 11 个重复文件 | packages/plugins/src/utils/ [删] | 编译通过 |
-| 0.8 | 全部导入路径更新 | player/src/, plugins/src/ | 编译通过 |
+| 0.6 | 删除 player 侧重复: `packages/player/src/utils/danmaku/` (8文件) + `packages/player/src/utils/subtitle/` (3文件) — 引擎归插件 | player 侧删除 | 编译通过 |
+| 0.7 | 全部导入路径更新 | player/src/, plugins/src/ | 编译通过 |
 | 0.9 | 修复 3 个流媒体插件 `implements Plugin, StreamPlugin` → `implements StreamPlugin` | HlsPlugin, DashPlugin, FlvPlugin | 编译通过 |
 | 0.10 | 修复 3 个功能插件 `install(player: unknown)` → `install(player: VideoPlayer)` | DanmakuPlugin, SubtitlePlugin, InteractionPlugin | 编译通过 |
 
@@ -1649,10 +1741,13 @@ export const PlayerDocker = defineComponent<PlayerDockerProps>((props, lifecycle
             // video 元素由 initVideo() 动态创建插入
           ),
           h('div', { class: 'player-video-poster', hidden: true, ref: posterRef })
-          // 以下子组件在 onMounted 中动态创建并插入 videoAreaRef:
-          // RowDm, RowCmd, Top, Ending, State, Loading, Toast,
-          // Dialog, Colorpanel, Hotkeypanel, Info, VolumeHint
-          // Controls — 在 loadedmetadata 后创建
+
+          // ===== 以下子组件由插件/播放器在 onMounted 中动态注入 =====
+          // 弹幕容器 (.player-row-dm-wrap 等) — DanmakuPlugin 注入
+          // 互动容器 (.player-cmd-dm-wrap)       — InteractionPlugin 注入
+          // 字幕容器                              — SubtitlePlugin 注入
+          // 顶部栏/状态/加载/Toast 等             — PlayerDocker 自身管理
+          // Controls                              — 在 loadedmetadata 后创建
         ),
 
         // 发送区域 — SendBar 容器
@@ -2371,9 +2466,9 @@ const renderSlider = (value: number): VNode =>
 - UP 主信息、相关视频列表、分享链接/二维码 通过 props 传入
 - 二维码使用 `canvas[width=150][height=150]` 元素
 
-### O.5 RowCmd 互动命令 [已有/正确]
+### O.5 RowCmd 互动命令 [已有/被替代]
 
-`packages/player/src/components/RowCmd.ts` 已正确实现。
+`packages/player/src/components/RowCmd.ts` 现有实现正确，但将被 `InteractionLayer.ts` (容器) + `InteractionPlugin` (逻辑) 替代，详见附录 T。
 
 关键动态逻辑（已实现）:
 - `currentTimeChange(time)` → 遍历所有卡片，根据 `timeStart/timeEnd` 控制显示:
@@ -3668,7 +3763,9 @@ SendBar:
 
 ---
 
-### Q.10 RowCmd — 互动命令卡片
+### Q.10 RowCmd — 互动命令卡片 [已有/被替代]
+
+> 将被 InteractionLayer + InteractionPlugin 四子插件替代，详见附录 T。
 
 **Props**:`RowCmdProps`
 
@@ -3873,7 +3970,7 @@ export enum PlayerEventEnum {
   PLAY = 'PLAY',                         // 开始播放
   PAUSE = 'PAUSE',                       // 暂停
   ENDED = 'ENDED',                       // 播放结束 → Ending 面板 + DanmakuPlugin.stop
-  TIME_UPDATE = 'TIME_UPDATE',           // 时间更新 { time: number } → RowCmd/R Controls
+  TIME_UPDATE = 'TIME_UPDATE',           // 时间更新 { time: number } → InteractionPlugin / Controls
   WAITING = 'WAITING',                   // 缓冲开始 → Loading/State
   CAN_PLAY = 'CAN_PLAY',                 // 缓冲完成 → Loading/State
   PROGRESS = 'PROGRESS',                 // 缓冲进度 { buffer: number } → Controls
@@ -3904,7 +4001,7 @@ export enum PlayerEventEnum {
   SUBTITLE_TOGGLE = 'SUBTITLE_TOGGLE',
   SUBTITLE_SWITCH = 'SUBTITLE_SWITCH',
 
-  // ===== 互动 (RowCmd/InteractionPlugin → 其他) =====
+  // ===== 互动 (InteractionPlugin → 其他) =====
   INTERACTION_LIKE = 'INTERACTION_LIKE',
   INTERACTION_VOTE = 'INTERACTION_VOTE',
 

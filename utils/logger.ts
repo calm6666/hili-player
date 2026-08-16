@@ -141,6 +141,7 @@ class LoggerManager {
 
     switch (level) {
       case LogLevel.DEBUG:
+        // eslint-disable-next-line no-console
         console.debug(prefix, message, ...data);
         break;
       case LogLevel.INFO:

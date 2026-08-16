@@ -13,7 +13,6 @@ export type {
   Tooltip,
   ControlConfig,
   SwitchBtns,
-  ProgressViewPoint,
 } from './controls';
 
 export type {

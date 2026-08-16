@@ -8,10 +8,12 @@
 
 import type { Plugin, PluginContext } from './plugin';
 import type { VideoPlayer } from '@/hili-player/index';
+import type { StreamPlugin } from '@/types/streamPlugin';
 import { createStateManager } from '@/core/state';
-import { createEventBus } from '@/core/eventBus';
+import { createTypedEventBus } from '@/core/eventBus';
 import { createHookSystem } from '@/core/hooks';
-import type { StateManager, EventBus, HookSystem } from '@/core';
+import type { StateManager, PlayerEventBus, HookSystem } from '@/core';
+import { PlayerEventMap } from '@/core/events';
 import { createLogger } from '@/utils';
 
 const logger = createLogger('PluginManager');
@@ -43,7 +45,7 @@ export class PluginManager {
    * 插件专用的事件总线
    * 插件可以使用此事件总线进行通信
    */
-  events: EventBus;
+  events: PlayerEventBus;
 
   /**
    * 插件专用的钩子系统
@@ -52,14 +54,30 @@ export class PluginManager {
   hooks: HookSystem;
 
   /**
+   * 插件上下文
+   * 插件安装时获得的上下文对象，包含播放器实例和各种系统
+   * 插件可通过 player.pluginManager.context 访问
+   */
+  context: PluginContext | null = null;
+
+  /**
    * 创建插件管理器实例
    * @param player - 关联的播放器实例
    */
   constructor(player: VideoPlayer) {
     this.player = player;
     this.state = createStateManager();
-    this.events = createEventBus();
+    this.events = createTypedEventBus<PlayerEventMap>();
     this.hooks = createHookSystem();
+  }
+
+  /**
+   * 判断插件是否为流媒体插件
+   * @param p - 插件实例
+   * @returns 是否为 StreamPlugin
+   */
+  private isStreamPlugin(p: Plugin): p is Plugin & StreamPlugin {
+    return 'type' in p && 'load' in p && 'getStats' in p;
   }
 
   /**
@@ -73,7 +91,7 @@ export class PluginManager {
     }
 
     // 创建插件上下文（供插件使用）
-    const _context: PluginContext = {
+    const context: PluginContext = {
       player: this.player,
       state: this.state,
       events: this.events,
@@ -81,15 +99,24 @@ export class PluginManager {
       log: (msg) => logger.info(`[Plugin:${plugin.name}] ${msg}`),
     };
 
-    // 将上下文附加到播放器，供插件访问
-    Object.defineProperty(this.player, '_pluginContext', {
-      value: _context,
-      writable: true,
-      enumerable: false,
-      configurable: true,
-    });
+    // 保存上下文到 PluginManager，插件可通过 player.pluginManager.context 访问
+    this.context = context;
 
     plugin.install(this.player);
+
+    // 调试模式继承：如果插件有 options 且 options.debug 未定义，则继承播放器的 debug 设置
+    if ('options' in plugin) {
+      const pluginWithOpts = plugin as Plugin & { options: Record<string, unknown> };
+      if (pluginWithOpts.options && pluginWithOpts.options.debug === undefined) {
+        pluginWithOpts.options.debug = this.player.props.debug;
+      }
+    }
+
+    // StreamPlugin 检测：自动注册到流媒体中间件
+    if (this.isStreamPlugin(plugin)) {
+      this.player.streamMiddleware?.registerStreamPlugin(plugin);
+    }
+
     this.plugins.set(plugin.name, plugin);
     logger.info(`插件 "${plugin.name}" 安装成功`);
   }
@@ -101,6 +128,11 @@ export class PluginManager {
   uninstall(name: string): void {
     const plugin = this.plugins.get(name);
     if (!plugin) return;
+
+    // StreamPlugin 检测：卸载前从流媒体中间件注销
+    if (this.isStreamPlugin(plugin)) {
+      this.player.streamMiddleware?.unregisterStreamPlugin();
+    }
 
     if (plugin.uninstall) {
       plugin.uninstall(this.player);
@@ -121,6 +153,14 @@ export class PluginManager {
     if (!plugin) return undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return plugin as T;
+  }
+
+  /**
+   * 遍历所有已安装的插件
+   * @param callback - 对每个插件执行的回调
+   */
+  forEachPlugin(callback: (plugin: Plugin) => void): void {
+    this.plugins.forEach((plugin) => callback(plugin));
   }
 
   /**

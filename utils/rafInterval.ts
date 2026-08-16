@@ -15,7 +15,7 @@ export function rafInterval(callback: () => void, interval: number): number {
   const isCancelled: boolean = false;
 
   // 定义内部循环函数，实现定时执行的逻辑
-  const loop = (timestamp: number) => {
+  const loop = (timestamp: number): void => {
     if (timerId === null) return; // 确保 timerId 不为 null
     // 先判断activeTimers[timerId]是否存在且已初始化，如果不存在则直接返回，避免后续报错
     if (!activeTimers[timerId]) {

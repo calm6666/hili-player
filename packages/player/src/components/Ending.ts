@@ -2,99 +2,98 @@
  * ============================================
  * 结尾组件 (Ending)
  * ============================================
- * 使用 h 函数框架实现的播放器结尾组件
- * 保持与老播放器完全相同的 DOM 结构和类名
+ * 视频播放结束后展示的结尾面板，包含 UP 主信息、互动按钮、相关视频和分享功能
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
 import type { VNode } from '@/types';
 
 /**
  * Ending 组件 Props 接口
+ * 定义结尾面板所需的属性和回调
  */
 export interface EndingProps {
-  /** 是否打开 */
+  /** 是否打开结尾面板 */
   isOpen?: boolean;
-  /** UP主信息 */
+  /** UP 主信息，包含头像、昵称、粉丝数等 */
   upInfo?: {
+    /** UP 主的用户 ID */
     id: string;
+    /** UP 主的昵称 */
     name: string;
+    /** UP 主的头像 URL */
     avatar: string;
+    /** UP 主的粉丝数 */
     followCount: number;
   };
-  /** 相关视频 */
+  /** 相关推荐视频信息 */
   relatedVideo?: {
+    /** 推荐视频标题 */
     title: string;
+    /** 推荐视频封面图 URL */
     cover: string;
+    /** 推荐视频的 BV 号 */
     bvid: string;
   };
-  /** 视频BV号 */
+  /** 当前视频的 BV 号 */
   bvid?: string;
-  /** 视频链接 */
+  /** 视频分享链接地址 */
   videoUrl?: string;
-  /** 嵌入代码 */
+  /** 视频嵌入代码（iframe） */
   iframeCode?: string;
-  /** 重播回调 */
+  /** 点击重播按钮时的回调 */
   onRestart?: () => void;
-  /** 关注回调 */
+  /** 点击关注按钮时的回调 */
   onFollow?: () => void;
-  /** 点赞回调 */
+  /** 点击点赞按钮时的回调 */
   onLike?: () => void;
-  /** 投币回调 */
+  /** 点击投币按钮时的回调 */
   onCoin?: () => void;
-  /** 收藏回调 */
+  /** 点击收藏按钮时的回调 */
   onCollect?: () => void;
-  /** 分享回调 */
+  /** 点击分享按钮时的回调 */
   onShare?: () => void;
-  /** 关闭分享回调 */
+  /** 关闭分享面板时的回调 */
   onCloseShare?: () => void;
-  /** 复制链接回调 */
+  /** 复制链接时的回调，type 区分复制视频地址还是嵌入代码 */
   onCopyLink?: (type: 'html' | 'iframe') => void;
 }
 
 /**
  * 结尾组件
- * 使用 h 函数实现，保持与老播放器完全相同的 DOM 结构和类名
+ * 视频播放结束后展示结尾面板，支持 UP 主信息展示、互动操作、相关视频推荐和分享功能
  */
 export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
   // ============================================
   // DOM 元素引用
   // ============================================
-  const endingWrapRef: { current: HTMLDivElement | null } = { current: null };
-  const endingPanelRef: { current: HTMLDivElement | null } = { current: null };
-  const sharePanelRef: { current: HTMLDivElement | null } = { current: null };
+
+  /** 结尾面板外层容器 DOM 引用，通过 data-select 属性控制显示哪个子面板 */
+  const endingWrapRef = ref<HTMLDivElement>();
+
+  /** 结尾内容面板 DOM 引用 */
+  const endingPanelRef = ref<HTMLDivElement>();
+
+  /** 分享面板 DOM 引用 */
+  const sharePanelRef = ref<HTMLDivElement>();
 
   // ============================================
   // 方法
   // ============================================
 
-  /**
-   * 显示结尾面板
-   */
+  /** 显示结尾面板，将 data-select 设为 "1" 切换到结尾内容视图 */
   const showEndWrap = (): void => {
     endingWrapRef.current?.setAttribute('data-select', '1');
     lifecycle.emit?.('showEnd');
   };
 
-  /**
-   * 关闭结尾面板
-   */
-  const closeEndWrap = (): void => {
-    endingWrapRef.current?.removeAttribute('data-select');
-    lifecycle.emit?.('closeEnd');
-  };
-
-  /**
-   * 显示分享面板
-   */
+  /** 显示分享面板，将 data-select 设为 "2" 切换到分享视图 */
   const showSharePanel = (): void => {
     endingWrapRef.current?.setAttribute('data-select', '2');
     lifecycle.emit?.('showShare');
   };
 
-  /**
-   * 关闭分享面板
-   */
+  /** 关闭分享面板，将 data-select 恢复为 "1" 回到结尾内容视图 */
   const closeSharePanel = (): void => {
     endingWrapRef.current?.setAttribute('data-select', '1');
     lifecycle.emit?.('closeShare');
@@ -104,11 +103,11 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
   // 渲染函数
   // ============================================
 
-  /**
-   * 渲染结尾内容
-   */
+  /** 渲染结尾内容面板，包含 UP 主信息、互动按钮和相关推荐视频 */
   const renderEndingContent = (): VNode => {
+    /** UP 主信息数据 */
     const upInfo = props.upInfo;
+    /** 相关推荐视频数据 */
     const relatedVideo = props.relatedVideo;
 
     return h('div', { class: 'player-ending' },
@@ -176,9 +175,7 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
     );
   };
 
-  /**
-   * 渲染分享面板
-   */
+  /** 渲染分享面板，包含社交分享按钮、视频地址复制和嵌入代码复制 */
   const renderSharePanel = (): VNode => {
     return h('div', { class: 'player-video-share-box' },
       h('div', { class: 'player-video-share-header' },
@@ -202,7 +199,7 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
             h('p', { class: 'player-video-share-link-label' }, '视频地址'),
             h('div', { class: 'player-video-share-link-content' },
               h('input', { class: 'player-video-share-link-input html', value: props.videoUrl || '', readOnly: true }),
-              h('div', { class: 'player-video-share-link-copy html ui ui-button', value: props.videoUrl || '', onClick: () => props.onCopyLink?.('html') },
+              h('div', { class: 'player-video-share-link-copy html ui ui-button', 'data-copy-value': props.videoUrl || '', onClick: () => props.onCopyLink?.('html') },
                 h('div', { class: 'ui-area ui-button-blue' }, '复制')
               )
             )
@@ -212,7 +209,7 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
             h('p', { class: 'player-video-share-link-label' }, '嵌入代码'),
             h('div', { class: 'player-video-share-link-content' },
               h('input', { class: 'player-video-share-link-input iframe', value: props.iframeCode || '', readOnly: true }),
-              h('div', { class: 'player-video-share-link-copy iframe ui ui-button', value: props.iframeCode || '', onClick: () => props.onCopyLink?.('iframe') },
+              h('div', { class: 'player-video-share-link-copy iframe ui ui-button', 'data-copy-value': props.iframeCode || '', onClick: () => props.onCopyLink?.('iframe') },
                 h('div', { class: 'ui-area ui-button-blue' }, '复制')
               )
             )
@@ -234,6 +231,8 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
   // ============================================
   // 生命周期
   // ============================================
+
+  /** 组件挂载后，如果 isOpen 为 true 则自动显示结尾面板 */
   lifecycle.onMounted = (): void => {
     if (props.isOpen) {
       showEndWrap();
@@ -243,6 +242,7 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
   // ============================================
   // 组件渲染
   // ============================================
+
   return h('div', { class: 'player-ending-wrap', ref: endingWrapRef },
     h('div', { class: 'player-ending-back' }),
     h('div', { class: 'player-ending-panel', 'data-option': '1', ref: endingPanelRef }, renderEndingContent()),

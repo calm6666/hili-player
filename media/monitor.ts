@@ -19,6 +19,7 @@ import {
   type HlsPlayer,
   type FlvPlayer,
 } from './types';
+import { isBrowser } from '@/utils';
 
 /** 默认配置 */
 const DEFAULT_CONFIG: Required<MonitorConfig> = {
@@ -115,6 +116,7 @@ export class MediaPlayerMonitor {
    */
   start(): void {
     if (this.isMonitoring) return;
+    if (!isBrowser()) return;
 
     this.isMonitoring = true;
     this.lastFrameTime = performance.now();

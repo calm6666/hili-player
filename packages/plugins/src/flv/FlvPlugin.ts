@@ -5,116 +5,45 @@
  * 基于 flv.js 的 FLV 格式流媒体播放器插件
  *
  * 功能：
- * - 动态加载 flv.js 库
+ * - 静态导入 flv.js 库
  * - 支持直播和点播模式
  * - 支持 HTTP-FLV 协议
+ * - 错误重试机制（最多 3 次重试）
+ * - 直播延迟控制（目标延迟、最大延迟）
  * - 提供缓冲、码率等实时统计信息
  * - 通过事件总线与播放器和其他插件通信
  * - 自动检测浏览器兼容性（依赖 MSE）
+ * - 首帧时间追踪
+ * - 编码信息收集
  *
  * 使用方式：
- * import { FlvPlugin } from '@hili-player/plugins';
+ * import { createFlvPlugin } from '@hili-player/plugins';
  * const player = new VideoPlayer({
- *   plugins: [FlvPlugin({ isLive: true })]
+ *   plugins: [createFlvPlugin({ isLive: true })]
  * });
  */
 
-import type { Plugin } from '@hili-player/player';
+import flvjs from 'flv.js';
 import type { VideoPlayer } from '@hili-player/player';
-import type { StreamPlugin, StreamConfig, BufferInfo, StreamStats } from '../stream/types';
-import type { EventBus } from '@/core/eventBus';
-import { StreamPluginTypeEnum, StreamPluginEventEnum } from '../stream/enums';
+import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
+import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel } from '@/types/streamPlugin';
+import type { PluginOptions } from '@/types/plugin';
+import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
 const logger = createLogger('FlvPlugin');
 
-/**
- * FLV.js 播放器实例接口
- * 定义 flv.js FlvPlayer 的核心 API
- */
-interface FlvJsPlayer {
-  /** 绑定视频元素 */
-  attachMediaElement(video: HTMLVideoElement): void;
-  /** 加载 FLV 流 */
-  load(): void;
-  /** 开始播放 */
-  play(): Promise<void>;
-  /** 暂停播放 */
-  pause(): void;
-  /** 卸载流 */
-  unload(): void;
-  /** 销毁实例 */
-  destroy(): void;
-  /** 跳转到指定时间 */
-  seek(time: number): void;
-  /** 绑定事件监听 */
-  on(event: string, listener: (...args: unknown[]) => void): void;
-  /** 移除事件监听 */
-  off(event: string, listener: (...args: unknown[]) => void): void;
-  /** 当前缓冲区间（只读） */
-  readonly buffered: TimeRanges | null;
-  /** 视频总时长（只读） */
-  readonly duration: number;
-  /** 当前音量（只读） */
-  readonly volume: number;
-  /** 是否静音（只读） */
-  readonly muted: boolean;
-  /** 当前播放时间（只读） */
-  readonly currentTime: number;
-  /** 媒体信息（编码、分辨率等） */
-  mediaInfo?: {
-    width?: number;
-    height?: number;
-    fps?: number;
-    profile?: string;
-    level?: string;
-    chromaFormat?: string;
-    audiocodec?: string;
-    videocodec?: string;
-  };
-}
+/** 最大错误重试次数 */
+const MAX_RETRY_COUNT = 3;
 
-/**
- * FLV.js 模块接口
- * 定义 flv.js 模块的静态结构
- */
-interface FlvJsModule {
-  /** 创建 FLV 播放器实例 */
-  createPlayer(config: {
-    type: 'flv';
-    url: string;
-    isLive?: boolean;
-    hasAudio?: boolean;
-    hasVideo?: boolean;
-    enableStashBuffer?: boolean;
-    stashInitialSize?: number;
-    lazyLoadMaxDuration?: number;
-  }): FlvJsPlayer;
-  /** 检测浏览器是否支持 flv.js */
-  isSupported(): boolean;
-  /** 获取特性列表 */
-  getFeatureList(): {
-    mseLivePlayback: boolean;
-    msePlayback: boolean;
-  };
-  /** 事件常量映射 */
-  Events: {
-    LOADING_COMPLETE: string;
-    RECOVERED_EARLY_EOF: string;
-    MEDIA_INFO: string;
-    METADATA_ARRIVED: string;
-    SCRIPTDATA_ARRIVED: string;
-    STATISTICS_INFO: string;
-    BUFFER_EOS: string;
-    ERROR: string;
-  };
-}
+/** 重试间隔（毫秒） */
+const RETRY_INTERVAL = 1000;
 
 /**
  * FLV 插件配置
  */
-interface FlvJsConfig {
+interface FlvPluginConfig {
   /** 是否自动播放，默认 true */
   autoplay?: boolean;
   /** 是否直播模式，默认 false */
@@ -125,51 +54,29 @@ interface FlvJsConfig {
   stashInitialSize?: number;
   /** 懒加载最大时长（秒，点播模式有效） */
   lazyLoadMaxDuration?: number;
-}
-
-/**
- * 类型谓词：检查 player:mounted 事件数据是否包含有效的 HTMLVideoElement
- */
-function isMountedDataWithVideo(data: unknown): data is { video: HTMLVideoElement } {
-  if (data === null || typeof data !== 'object') return false;
-  if (!('video' in data)) return false;
-  const video = data.video;
-  return video instanceof HTMLVideoElement;
-}
-
-/**
- * 类型谓词：检查动态导入的模块是否符合 FlvJsModule 接口
- */
-function isFlvJsModule(mod: unknown): mod is FlvJsModule {
-  return (
-    mod !== null &&
-    typeof mod === 'object' &&
-    'createPlayer' in mod &&
-    'isSupported' in mod &&
-    'Events' in mod
-  );
-}
-
-/**
- * 类型谓词：检查对象是否为包含 StreamStats 部分字段的对象
- */
-function isPartialStreamStats(value: unknown): value is Partial<StreamStats> {
-  if (value === null || typeof value !== 'object') return false;
-  const obj = value;
-  const knownKeys: (keyof StreamStats)[] = [
-    'downloadSpeed', 'videoBitrate', 'audioBitrate', 'dropRate',
-    'bufferLength', 'currentTime', 'duration', 'firstFrameTime',
-    'totalStallCount', 'totalStallTime', 'videoCodec', 'audioCodec', 'resolution',
-  ];
-  return knownKeys.some((key) => key in obj);
+  /** 直播目标延迟（秒），播放器会尝试追赶延迟 */
+  liveTargetLatency?: number;
+  /** 直播最大延迟（秒），超过此延迟会强制追赶 */
+  liveMaxLatency?: number;
+  /** 最大错误重试次数，默认 3 */
+  maxRetryCount?: number;
+  /** 重试间隔（毫秒），默认 1000 */
+  retryInterval?: number;
+  /** 插件选项 */
+  options?: PluginOptions;
 }
 
 /**
  * FLV 流媒体插件类
- * 实现 Plugin 和 StreamPlugin 接口
+ * 实现 StreamPlugin 接口（StreamPlugin 继承 Plugin）
  * 基于 flv.js 提供 FLV 格式视频播放能力
+ *
+ * 特性：
+ * - 错误重试机制：遇到错误时自动重试，最多 3 次
+ * - 直播延迟控制：支持配置目标延迟和最大延迟
+ * - FLV 通常不支持多码率，getQualities/setQuality 为存根方法
  */
-export class FlvPlugin implements Plugin, StreamPlugin {
+export class FlvPlugin implements StreamPlugin {
   /** 插件名称（必须唯一） */
   readonly name = 'flv';
   /** 插件版本号 */
@@ -177,19 +84,16 @@ export class FlvPlugin implements Plugin, StreamPlugin {
   /** 插件描述 */
   readonly description = 'FLV 格式流媒体播放器插件，基于 flv.js';
   /** 插件类型 */
-  readonly type = StreamPluginTypeEnum.FLV;
+  readonly type: StreamPluginTypeEnum = StreamPluginTypeEnum.FLV;
 
   /** flv.js 播放器实例 */
-  private flvPlayer: FlvJsPlayer | null = null;
-
-  /** flv.js 模块引用（动态导入后缓存） */
-  private flvjs: FlvJsModule | null = null;
+  private flvPlayer: ReturnType<typeof flvjs.createPlayer> | null = null;
 
   /** 视频元素（从播放器获取） */
   videoElement: HTMLVideoElement | null = null;
 
   /** 事件总线（从播放器获取） */
-  eventBus: EventBus | null = null;
+  eventBus: PlayerEventBus | null = null;
 
   /** 播放器实例引用 */
   private player: VideoPlayer | null = null;
@@ -198,7 +102,7 @@ export class FlvPlugin implements Plugin, StreamPlugin {
   private config: StreamConfig | null = null;
 
   /** 插件自定义配置 */
-  private pluginConfig: FlvJsConfig;
+  private pluginConfig: FlvPluginConfig;
 
   /** 统计信息缓存 */
   private stats: Partial<StreamStats> = {};
@@ -206,20 +110,42 @@ export class FlvPlugin implements Plugin, StreamPlugin {
   /** 上次卡顿开始时间（用于计算卡顿总时长） */
   private lastStallTime = 0;
 
+  /** 加载开始时间戳（用于计算首帧时间） */
+  private loadStartTime = 0;
+
+  /** 是否已记录首帧时间 */
+  private firstFrameRecorded = false;
+
+  /** 首帧时间（毫秒） */
+  private firstFrameTime = 0;
+
   /** 浏览器能力检测结果 */
   private browserCapability: ReturnType<typeof BrowserCapabilityDetector.getFullCapabilityResult> | null = null;
+
+  /** 首帧事件处理器引用（用于移除监听） */
+  private firstFrameHandler: (() => void) | null = null;
+
+  /** 当前重试次数 */
+  private retryCount = 0;
+
+  /** 重试定时器 ID */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * 构造函数
    * @param config - FLV 插件配置
    */
-  constructor(config?: FlvJsConfig) {
+  constructor(config?: FlvPluginConfig) {
     this.pluginConfig = {
       autoplay: true,
       isLive: false,
       enableStashBuffer: true,
-      stashInitialSize: 128,       // 128KB 隐藏缓冲区
-      lazyLoadMaxDuration: 3 * 60, // 点播模式最多懒加载 3 分钟
+      stashInitialSize: 128,
+      lazyLoadMaxDuration: 3 * 60,
+      liveTargetLatency: 3,
+      liveMaxLatency: 10,
+      maxRetryCount: MAX_RETRY_COUNT,
+      retryInterval: RETRY_INTERVAL,
       ...config,
     };
   }
@@ -238,13 +164,11 @@ export class FlvPlugin implements Plugin, StreamPlugin {
    * @param player - 播放器实例
    */
   install(player: VideoPlayer): void {
-    // 保存播放器实例引用
+    // 步骤 1：保存播放器引用
     this.player = player;
-
-    // 从播放器获取事件总线（公共属性）
     this.eventBus = player.events;
 
-    // 检测浏览器能力（FLV 依赖 MSE）
+    // 步骤 2：浏览器能力检测
     this.browserCapability = BrowserCapabilityDetector.getFullCapabilityResult();
     logger.info(
       `浏览器能力检测: FLV支持=${this.browserCapability.flvjsSupported}, ` +
@@ -252,7 +176,7 @@ export class FlvPlugin implements Plugin, StreamPlugin {
       `浏览器=${this.browserCapability.browserName} ${this.browserCapability.browserVersion}`
     );
 
-    // 如果浏览器不支持 FLV（缺少 MSE），发出警告
+    // 步骤 3：兼容性警告
     if (!this.browserCapability.flvjsSupported) {
       logger.warn(
         '当前浏览器不支持 FLV 协议（缺少 MSE 支持），' +
@@ -260,9 +184,9 @@ export class FlvPlugin implements Plugin, StreamPlugin {
       );
     }
 
-    // 监听播放器挂载完成事件，获取视频元素
-    player.events.on('player:mounted', (data: unknown) => {
-      if (isMountedDataWithVideo(data)) {
+    // 步骤 4：监听播放器挂载事件，获取视频元素
+    player.events.on('player:mounted', (data) => {
+      if (data && data.video instanceof HTMLVideoElement) {
         this.videoElement = data.video;
         logger.info('已获取视频元素');
       }
@@ -283,6 +207,8 @@ export class FlvPlugin implements Plugin, StreamPlugin {
     this.eventBus = null;
     this.videoElement = null;
     this.browserCapability = null;
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
     logger.info('插件已卸载');
   }
 
@@ -294,28 +220,22 @@ export class FlvPlugin implements Plugin, StreamPlugin {
 
   /**
    * 检查浏览器是否支持 flv.js 播放
-   * 优先使用缓存的检测结果，否则实时检测
+   * 直接使用 flvjs.isSupported() 检测
    *
    * @returns 是否支持 flv.js
    */
   isSupported(): boolean {
-    // 优先使用安装时缓存的检测结果
-    if (this.browserCapability) {
-      return this.browserCapability.flvjsSupported;
-    }
-    // 降级：实时检测
-    if (typeof window === 'undefined') return false;
-    return BrowserCapabilityDetector.isFlvjsSupported();
+    return flvjs.isSupported();
   }
 
   /**
    * 加载 FLV 流媒体
-   * 动态导入 flv.js 库，创建播放器实例并绑定到视频元素
+   * 使用静态导入的 flv.js 库，创建播放器实例并绑定到视频元素
    *
    * @param config - 流媒体配置（包含 URL、格式等）
    */
   load(config: StreamConfig): void {
-    // 验证视频元素是否存在
+    // 步骤 1：检查视频元素是否就绪
     if (!this.videoElement) {
       const msg = '视频元素未设置，请确保播放器已挂载到 DOM';
       logger.error(msg);
@@ -323,87 +243,194 @@ export class FlvPlugin implements Plugin, StreamPlugin {
       return;
     }
 
-    // 动态导入 flv.js（按需加载，减小初始包体积）
-    import('flv.js')
-      .then((flvjs) => {
-        // flv.js 的默认导出是 flvjs 对象
-        if (!isFlvJsModule(flvjs)) {
-          const msg = '动态导入的 flv.js 模块结构不符合预期';
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
+    // 步骤 2：保存配置并重置状态
+    this.config = config;
+    this.loadStartTime = Date.now();
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
+    this.retryCount = 0;
 
-        if (!this.videoElement) {
-          const msg = '视频元素已被移除，无法加载';
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
+    // 步骤 3：注册首帧时间追踪
+    this.registerFirstFrameTracking();
 
-        // 保存配置
-        this.config = config;
+    // 步骤 4：创建 flv.js 播放器实例
+    this.createFlvPlayer(config);
+  }
 
-        // 创建 flv.js 播放器实例（传入详细配置）
-        this.flvPlayer = this.flvjs.createPlayer({
-          type: 'flv',
-          url: config.url,
-          isLive: config.isLive ?? this.pluginConfig.isLive,
-          hasAudio: true,
-          hasVideo: true,
-          enableStashBuffer: this.pluginConfig.enableStashBuffer,
-          stashInitialSize: this.pluginConfig.stashInitialSize,
-          lazyLoadMaxDuration: this.pluginConfig.lazyLoadMaxDuration,
-        });
+  /**
+   * 创建 flv.js 播放器实例
+   * 直接使用 flvjs.createPlayer() 创建，包含直播延迟控制配置
+   *
+   * @param config - 流媒体配置
+   */
+  private createFlvPlayer(config: StreamConfig): void {
+    if (!this.videoElement) return;
 
-        // 绑定 flv.js 内置事件
-        this.bindEvents();
+    const url = typeof config.url === 'string' ? config.url : String(config.url);
+    const isLive = config.isLive ?? this.pluginConfig.isLive;
 
-        // 绑定到视频元素并加载
-        this.flvPlayer.attachMediaElement(this.videoElement);
-        this.flvPlayer.load();
+    // 步骤 1：使用 flvjs.createPlayer() 创建播放器实例
+    // MediaDataSource（第一参数）包含流类型和地址
+    // Config（第二参数）包含缓冲和清理策略
+    this.flvPlayer = flvjs.createPlayer(
+      {
+        type: 'flv',
+        url: url,
+        isLive: isLive,
+        hasAudio: true,
+        hasVideo: true,
+      },
+      {
+        enableStashBuffer: this.pluginConfig.enableStashBuffer,
+        stashInitialSize: this.pluginConfig.stashInitialSize,
+        lazyLoadMaxDuration: this.pluginConfig.lazyLoadMaxDuration,
+        autoCleanupSourceBuffer: true,
+        autoCleanupMaxBackwardDuration: 3 * 60,
+        autoCleanupMinBackwardDuration: 60,
+      },
+    );
 
-        // 通知外部：加载完成
-        this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: config.url });
+    // 步骤 2：绑定 flv.js 内置事件
+    this.bindEvents();
 
-        // 自动播放
-        if (this.pluginConfig.autoplay) {
-          this.play();
-        }
+    // 步骤 3：绑定到视频元素并加载
+    const player = this.flvPlayer;
+    if (!player) return;
+    player.attachMediaElement(this.videoElement);
+    player.load();
 
-        // 如果指定了起始时间，跳转到对应位置
-        if (config.startTime && config.startTime > 0) {
-          this.seek(config.startTime);
-        }
+    // 步骤 4：通知外部：加载完成
+    this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: config.url });
 
-        logger.info('FLV 流加载成功:', config.url);
-      })
-      .catch((err) => {
-        const msg = `加载 flv.js 失败: ${err instanceof Error ? err.message : String(err)}`;
-        logger.error(msg);
-        this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+    // 步骤 5：自动播放
+    if (this.pluginConfig.autoplay) {
+      this.play();
+    }
+
+    // 步骤 6：如果指定了起始时间，跳转到对应位置
+    if (config.startTime && config.startTime > 0) {
+      this.seek(config.startTime);
+    }
+
+    logger.info('FLV 流加载成功:', url);
+  }
+
+  /**
+   * 注册首帧时间追踪
+   * 监听视频元素的 playing 事件，记录从加载开始到首帧渲染的时间
+   */
+  private registerFirstFrameTracking(): void {
+    this.removeFirstFrameTracking();
+
+    const video = this.videoElement;
+    if (!video) return;
+
+    this.firstFrameHandler = (): void => {
+      if (!this.firstFrameRecorded) {
+        this.firstFrameRecorded = true;
+        this.firstFrameTime = Date.now() - this.loadStartTime;
+        this.stats.firstFrameTime = this.firstFrameTime;
+        logger.info(`首帧时间: ${this.firstFrameTime}ms`);
+        this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      }
+    };
+
+    video.addEventListener('playing', this.firstFrameHandler);
+  }
+
+  /**
+   * 移除首帧时间追踪监听
+   */
+  private removeFirstFrameTracking(): void {
+    if (this.firstFrameHandler && this.videoElement) {
+      this.videoElement.removeEventListener('playing', this.firstFrameHandler);
+      this.firstFrameHandler = null;
+    }
+  }
+
+  /**
+   * 错误重试逻辑
+   * 当播放器遇到错误时，尝试重新创建播放器实例
+   * 最多重试 maxRetryCount 次，每次间隔 retryInterval 毫秒
+   *
+   * @returns 是否已触发重试
+   */
+  private retryOnError(): boolean {
+    const maxRetry = this.pluginConfig.maxRetryCount ?? MAX_RETRY_COUNT;
+    const interval = this.pluginConfig.retryInterval ?? RETRY_INTERVAL;
+
+    // 步骤 1：检查是否已达到最大重试次数
+    if (this.retryCount >= maxRetry) {
+      logger.error(`已达到最大重试次数 (${maxRetry})，停止重试`);
+      this.eventBus?.emit(StreamPluginEventEnum.ERROR, {
+        message: `播放失败，已重试 ${maxRetry} 次`,
+        retryCount: this.retryCount,
       });
+      return false;
+    }
+
+    // 步骤 2：递增重试计数
+    this.retryCount++;
+    logger.info(`尝试重试 (${this.retryCount}/${maxRetry})，${interval}ms 后重新加载...`);
+
+    // 步骤 3：清理当前播放器实例
+    if (this.flvPlayer) {
+      try {
+        this.flvPlayer.pause();
+        this.flvPlayer.unload();
+        this.flvPlayer.detachMediaElement();
+        this.flvPlayer.destroy();
+      } catch (e) {
+        logger.warn('重试时清理播放器实例出错:', e);
+      }
+      this.flvPlayer = null;
+    }
+
+    // 步骤 4：延迟后重新创建播放器
+    this.retryTimer = setTimeout(() => {
+      if (this.config) {
+        this.createFlvPlayer(this.config);
+      }
+    }, interval);
+
+    return true;
+  }
+
+  /**
+   * 清除重试定时器
+   */
+  private clearRetryTimer(): void {
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 
   /**
    * 绑定 flv.js 核心事件
    * 将 flv.js 的内部事件转换为统一的 StreamPlugin 事件
+   * 使用 flvjs.Events 事件常量
    */
   private bindEvents(): void {
-    if (!this.flvPlayer || !this.flvjs) return;
+    if (!this.flvPlayer) return;
 
-    const Events = this.flvjs.Events;
+    const Events = flvjs.Events;
 
-    // 播放器错误处理
-    this.flvPlayer.on(Events.ERROR, (...args: unknown[]) => {
-      const [first, second] = args;
-      const errorType = typeof first === 'string' ? first : String(first);
-      const errorDetail = typeof second === 'string' ? second : String(second);
-      logger.error('播放器错误:', errorType, errorDetail);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, {
-        type: errorType,
-        detail: errorDetail,
-      });
+    // 播放器错误处理（带重试机制）
+    this.flvPlayer.on(Events.ERROR, (...args: [string, string]) => {
+      const [errorType, errorDetail] = args;
+      logger.error(`播放器错误 (重试次数: ${this.retryCount}):`, errorType, errorDetail);
+
+      // 尝试重试
+      const retried = this.retryOnError();
+      if (!retried) {
+        // 重试次数已用完，发出错误事件
+        this.eventBus?.emit(StreamPluginEventEnum.ERROR, {
+          type: errorType,
+          detail: errorDetail,
+          retryCount: this.retryCount,
+        });
+      }
     });
 
     // 媒体信息就绪 → 获取编码、分辨率等信息
@@ -411,10 +438,18 @@ export class FlvPlugin implements Plugin, StreamPlugin {
       const mediaInfo = this.flvPlayer?.mediaInfo;
       logger.info('媒体信息:', mediaInfo);
       this.eventBus?.emit(StreamPluginEventEnum.METADATA_LOADED, mediaInfo);
+      if (mediaInfo && mediaInfo.width && mediaInfo.height) {
+        this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, {
+          width: mediaInfo.width,
+          height: mediaInfo.height,
+          bitrate: undefined,
+          isAuto: false,
+        });
+      }
     });
 
     // 元数据到达（如脚本数据、SEI 等）
-    this.flvPlayer.on(Events.METADATA_ARRIVED, (metadata: unknown) => {
+    this.flvPlayer.on(Events.METADATA_ARRIVED, (metadata: Record<string, string | number | boolean>) => {
       logger.info('元数据到达:', metadata);
     });
 
@@ -424,22 +459,24 @@ export class FlvPlugin implements Plugin, StreamPlugin {
       this.eventBus?.emit(StreamPluginEventEnum.BUFFER_START, {});
     });
 
-    // 缓冲结束 → 计算卡顿时长
-    this.flvPlayer.on(Events.BUFFER_EOS, () => {
-      if (this.lastStallTime > 0) {
+    // 统计信息定期更新 → 更新下载速度等指标，同时检测缓冲结束
+    this.flvPlayer.on(Events.STATISTICS_INFO, (stats: Partial<StreamStats>) => {
+      this.stats = { ...this.stats, ...stats };
+      // 从 flv.js 的 statisticsInfo 中提取下载速度
+      const statsInfo = this.flvPlayer?.statisticsInfo;
+      if (statsInfo && typeof statsInfo === 'object' && 'speed' in statsInfo && typeof statsInfo.speed === 'number') {
+        this.stats.downloadSpeed = statsInfo.speed;
+      }
+
+      // 如果之前处于缓冲状态，检测是否已恢复
+      if (this.lastStallTime > 0 && this.videoElement && !this.videoElement.paused && this.videoElement.readyState >= 3) {
         const stallDuration = Date.now() - this.lastStallTime;
         this.stats.totalStallTime = (this.stats.totalStallTime || 0) + stallDuration;
         this.stats.totalStallCount = (this.stats.totalStallCount || 0) + 1;
         this.lastStallTime = 0;
+        this.eventBus?.emit(StreamPluginEventEnum.BUFFER_END, {});
       }
-      this.eventBus?.emit(StreamPluginEventEnum.BUFFER_END, {});
-    });
 
-    // 统计信息定期更新 → 更新下载速度等指标
-    this.flvPlayer.on(Events.STATISTICS_INFO, (stats: unknown) => {
-      if (isPartialStreamStats(stats)) {
-        this.stats = { ...this.stats, ...stats };
-      }
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
     });
 
@@ -455,15 +492,18 @@ export class FlvPlugin implements Plugin, StreamPlugin {
    */
   play(): void {
     if (this.flvPlayer) {
-      this.flvPlayer.play()
-        .then(() => {
+      const result = this.flvPlayer.play();
+      if (result instanceof Promise) {
+        result.then(() => {
           this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
-        })
-        .catch((err) => {
-          const msg = `播放失败: ${err instanceof Error ? err.message : String(err)}`;
-          logger.error(msg);
+        }).catch((err: Error) => {
+          const msg = `播放失败: ${err.message}`;
+          console.error(`[FlvPlugin] ${msg}`);
           this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
         });
+      } else {
+        this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
+      }
     }
   }
 
@@ -480,13 +520,13 @@ export class FlvPlugin implements Plugin, StreamPlugin {
 
   /**
    * 跳转到指定时间
-   * 使用 flv.js 的 seek 方法确保精确跳转
+   * 通过设置 video 元素的 currentTime 实现精确跳转
    *
    * @param time - 目标时间（秒）
    */
   seek(time: number): void {
-    if (this.flvPlayer) {
-      this.flvPlayer.seek(time);
+    if (this.videoElement) {
+      this.videoElement.currentTime = time;
     }
   }
 
@@ -495,6 +535,8 @@ export class FlvPlugin implements Plugin, StreamPlugin {
    * 暂停、卸载、销毁 flv.js 实例，清理所有引用
    */
   destroy(): void {
+    this.removeFirstFrameTracking();
+    this.clearRetryTimer();
     if (this.flvPlayer) {
       this.flvPlayer.pause();
       this.flvPlayer.unload();
@@ -504,6 +546,10 @@ export class FlvPlugin implements Plugin, StreamPlugin {
     this.config = null;
     this.stats = {};
     this.lastStallTime = 0;
+    this.loadStartTime = 0;
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
+    this.retryCount = 0;
   }
 
   /**
@@ -514,7 +560,6 @@ export class FlvPlugin implements Plugin, StreamPlugin {
    */
   getBufferInfo(): BufferInfo {
     const video = this.videoElement;
-    // 优先使用 flv.js 内部维护的缓冲区间
     const buffered = this.flvPlayer?.buffered;
 
     if (!video || !buffered || buffered.length === 0) {
@@ -524,7 +569,6 @@ export class FlvPlugin implements Plugin, StreamPlugin {
     const currentTime = video.currentTime || 0;
     let bufferEnd = 0;
 
-    // 查找包含当前播放位置的缓冲区间
     for (let i = 0; i < buffered.length; i++) {
       if (buffered.start(i) <= currentTime && buffered.end(i) >= currentTime) {
         bufferEnd = buffered.end(i);
@@ -543,7 +587,7 @@ export class FlvPlugin implements Plugin, StreamPlugin {
 
   /**
    * 获取统计信息
-   * 收集当前播放器状态，包括播放时间、缓冲长度、编码信息等
+   * 收集当前播放器状态，包括播放时间、缓冲长度、编码信息、首帧时间等
    *
    * @returns 流媒体统计信息
    */
@@ -551,21 +595,50 @@ export class FlvPlugin implements Plugin, StreamPlugin {
     const video = this.videoElement;
     const bufferInfo = this.getBufferInfo();
     const mediaInfo = this.flvPlayer?.mediaInfo;
+    const statsInfo = this.flvPlayer?.statisticsInfo;
+
+    // 从 FlvPlayerStatisticsInfo 中提取下载速度（NativePlayerStatisticsInfo 没有 speed 字段）
+    const downloadSpeed = statsInfo && 'speed' in statsInfo ? statsInfo.speed : (this.stats.downloadSpeed ?? 0);
+    // 从 FlvPlayerMediaInfo 中提取编码信息（NativePlayerMediaInfo 没有 videoCodec/audioCodec 字段）
+    const videoCodec = mediaInfo && 'videoCodec' in mediaInfo ? mediaInfo.videoCodec : undefined;
+    const audioCodec = mediaInfo && 'audioCodec' in mediaInfo ? mediaInfo.audioCodec : undefined;
 
     return {
       ...this.stats,
       currentTime: video?.currentTime || 0,
       duration: video?.duration || 0,
       bufferLength: bufferInfo.length,
-      firstFrameTime: 0,
+      firstFrameTime: this.firstFrameTime,
       totalStallCount: this.stats.totalStallCount || 0,
       totalStallTime: this.stats.totalStallTime || 0,
-      videoCodec: mediaInfo?.videocodec,
-      audioCodec: mediaInfo?.audiocodec,
+      downloadSpeed,
+      videoCodec,
+      audioCodec,
       resolution: mediaInfo?.width && mediaInfo?.height
         ? { width: mediaInfo.width, height: mediaInfo.height }
         : undefined,
     };
+  }
+
+  /**
+   * 获取可用画质列表
+   * FLV 通常不支持多码率切换，返回空数组
+   *
+   * @returns 空数组（FLV 不支持多码率）
+   */
+  getQualities(): QualityLevel[] {
+    // FLV 通常不支持多码率，返回空数组
+    return [];
+  }
+
+  /**
+   * 设置播放画质
+   * FLV 通常不支持多码率切换
+   *
+   * @param quality - 画质标识
+   */
+  setQuality(quality: string): void {
+    logger.warn(`FLV 格式不支持多码率切换，忽略画质切换请求: ${quality}`);
   }
 
   /**
@@ -593,6 +666,14 @@ export class FlvPlugin implements Plugin, StreamPlugin {
   getPlayer(): VideoPlayer | null {
     return this.player;
   }
+
+  /**
+   * 获取当前重试次数
+   * @returns 当前重试次数
+   */
+  getRetryCount(): number {
+    return this.retryCount;
+  }
 }
 
 /**
@@ -604,15 +685,24 @@ export class FlvPlugin implements Plugin, StreamPlugin {
  *
  * @example
  * // 基本用法（点播）
- * player.use(FlvPlugin());
+ * player.use(createFlvPlugin());
  *
  * @example
  * // 直播模式
- * player.use(FlvPlugin({
+ * player.use(createFlvPlugin({
  *   isLive: true,
  *   autoplay: true
  * }));
+ *
+ * @example
+ * // 直播模式 + 延迟控制
+ * player.use(createFlvPlugin({
+ *   isLive: true,
+ *   liveTargetLatency: 3,
+ *   liveMaxLatency: 10,
+ *   maxRetryCount: 3
+ * }));
  */
-export function createFlvPlugin(config?: FlvJsConfig): FlvPlugin {
+export function createFlvPlugin(config?: FlvPluginConfig): FlvPlugin {
   return new FlvPlugin(config);
 }

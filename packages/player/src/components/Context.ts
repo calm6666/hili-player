@@ -2,12 +2,11 @@
  * ============================================
  * 右键菜单组件 (Context)
  * ============================================
- * 使用 h 函数框架实现的播放器右键菜单组件
- * 保持与老播放器完全相同的 DOM 结构和类名
  */
 
-import { h, defineComponent } from '@/core';
-import type { VNode } from '@/types';
+import { h, defineComponent, ref } from '@/core';
+import { isBrowser } from '@/utils';
+import type { VNode, ComponentLifecycle } from '@/types';
 
 /**
  * 菜单项配置
@@ -23,9 +22,9 @@ export interface ContextMenuItem {
  * 菜单位置
  */
 export interface ContextOffset {
-  /** 左边距 */
+  /** 左边距（像素） */
   left: number;
-  /** 上边距 */
+  /** 上边距（像素） */
   top: number;
 }
 
@@ -35,13 +34,13 @@ export interface ContextOffset {
 export interface ContextProps {
   /** 菜单项列表 */
   menuItems?: ContextMenuItem[];
-  /** 播放器版本 */
+  /** 播放器版本号 */
   version?: string;
   /** 菜单点击回调 */
   onMenuClick?: (action: string) => void;
   /** 关闭菜单回调 */
   onClose?: () => void;
-  /** 打开面板回调 */
+  /** 打开面板回调（色彩调整、快捷键说明、视频统计信息） */
   onOpenPanel?: (panel: 'color' | 'keyboard' | 'info') => void;
 }
 
@@ -58,41 +57,47 @@ const DEFAULT_MENU_ITEMS: ContextMenuItem[] = [
 
 /**
  * 右键菜单组件
- * 使用 h 函数实现，保持与老播放器完全相同的 DOM 结构和类名
  */
-export const Context = defineComponent<ContextProps>((props, lifecycle) => {
+export const Context = defineComponent<ContextProps>((props, lifecycle: ComponentLifecycle) => {
   // ============================================
   // 状态数据
   // ============================================
+
+  /** 实际使用的菜单项列表，未传入时使用默认菜单项 */
   const menuItems = props.menuItems || DEFAULT_MENU_ITEMS;
+  /** 播放器版本号，未传入时默认为 1.0.0 */
   const version = props.version || '1.0.0';
 
   // ============================================
   // DOM 元素引用
   // ============================================
-  const contextmenuRef: { current: HTMLUListElement | null } = { current: null };
-  const contextAreaRef: { current: HTMLDivElement | null } = { current: null };
+
+  /** 右键菜单列表元素引用 */
+  const contextmenuRef = ref<HTMLUListElement>();
+  /** 右键菜单区域容器元素引用 */
+  const contextAreaRef = ref<HTMLDivElement>();
 
   // ============================================
   // 方法
   // ============================================
 
   /**
-   * 显示菜单
-   * @param offset - 菜单位置
+   * 在指定坐标显示右键菜单
+   * @param x - 左边距（像素）
+   * @param y - 上边距（像素）
    */
-  const showMenu = (offset: ContextOffset): void => {
+  const showMenu = (x: number, y: number): void => {
+    if (!isBrowser()) return;
     if (contextmenuRef.current) {
-      contextmenuRef.current.style.left = `${offset.left}px`;
-      contextmenuRef.current.style.top = `${offset.top}px`;
+      contextmenuRef.current.style.left = `${x}px`;
+      contextmenuRef.current.style.top = `${y}px`;
       contextmenuRef.current.classList.add('player-active');
     }
-    lifecycle.emit?.('showMenu', offset);
     document.addEventListener('click', hideMenu);
   };
 
   /**
-   * 隐藏菜单
+   * 隐藏右键菜单并触发关闭回调
    */
   const hideMenu = (): void => {
     contextmenuRef.current?.classList.remove('player-active');
@@ -102,7 +107,7 @@ export const Context = defineComponent<ContextProps>((props, lifecycle) => {
   };
 
   /**
-   * 处理菜单点击
+   * 处理菜单项点击，根据动作标识执行对应操作
    * @param dataAction - 动作标识
    */
   const clickMenu = (dataAction: string): void => {
@@ -111,7 +116,9 @@ export const Context = defineComponent<ContextProps>((props, lifecycle) => {
 
     switch (dataAction) {
       case 'copyLink':
-        navigator.clipboard.writeText(document.URL);
+        if (isBrowser() && navigator.clipboard) {
+          navigator.clipboard.writeText(document.URL);
+        }
         break;
       case 'color':
         props.onOpenPanel?.('color');
@@ -137,7 +144,8 @@ export const Context = defineComponent<ContextProps>((props, lifecycle) => {
   // ============================================
 
   /**
-   * 渲染菜单项
+   * 渲染菜单项列表
+   * @returns 菜单项 VNode 数组
    */
   const renderMenuItems = (): VNode[] => {
     return menuItems.map((item) =>
@@ -146,6 +154,18 @@ export const Context = defineComponent<ContextProps>((props, lifecycle) => {
         onClick: () => clickMenu(item.dataAction),
       }, item.dataAction === 'version' ? `${item.text} ${version}` : item.text)
     );
+  };
+
+  // ============================================
+  // 生命周期
+  // ============================================
+
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('contextMounted', { showMenu, hideMenu });
+  };
+
+  lifecycle.onBeforeDestroy = (): void => {
+    document.removeEventListener('click', hideMenu);
   };
 
   // ============================================

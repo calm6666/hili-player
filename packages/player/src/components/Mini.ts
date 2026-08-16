@@ -2,64 +2,137 @@
  * ============================================
  * 迷你播放器组件
  * ============================================
- * 使用 h 函数实现的迷你播放器组件
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
+import type { ComponentLifecycle } from '@/types';
 
 /**
  * 迷你播放器组件 Props 接口
  */
 export interface MiniProps {
-  /** 视频总时长 */
+  /** 视频总时长（秒） */
   duration?: number;
-  /** 当前缓冲时间 */
+  /** 当前缓冲进度时间（秒） */
   buffer?: number;
-  /** 当前播放时间 */
+  /** 当前播放时间（秒） */
   currentTime?: number;
-  /** 关闭回调 */
+  /** 关闭迷你播放器回调 */
   onClose?: () => void;
-  /** 播放状态切换回调 */
+  /** 播放/暂停状态切换回调 */
   onStateChange?: () => void;
 }
 
 /**
  * 迷你播放器组件
- * 使用 h 函数实现，保持与原组件相同的 DOM 结构和类名
  */
-export const Mini = defineComponent<MiniProps>((props) => {
-  /**
-   * 缓冲进度元素引用
-   */
-  const progressBufferRef: { current: HTMLDivElement | null } = { current: null };
+export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifecycle) => {
+  // ============================================
+  // DOM 引用
+  // ============================================
+
+  /** 缓冲进度条元素引用 */
+  const progressBufferRef = ref<HTMLDivElement>();
+
+  /** 播放进度条元素引用 */
+  const progressTempoRef = ref<HTMLDivElement>();
+
+  /** 根容器元素引用 */
+  const miniWrapRef = ref<HTMLDivElement>();
+
+  // ============================================
+  // 事件处理函数
+  // ============================================
 
   /**
-   * 播放进度元素引用
-   */
-  const progressTempoRef: { current: HTMLDivElement | null } = { current: null };
-
-  /**
-   * 总时长
-   */
-  const duration = props.duration ?? 0;
-
-  /**
-   * 处理关闭
+   * 处理关闭按钮点击
    */
   const handleClose = (): void => {
     props.onClose?.();
   };
 
   /**
-   * 处理状态切换
+   * 处理播放/暂停状态切换点击
    */
   const handleStateChange = (): void => {
     props.onStateChange?.();
   };
 
+  // ============================================
+  // DOM 更新函数
+  // ============================================
+
+  /**
+   * 更新缓冲进度条的显示比例
+   * @param buffer - 缓冲进度时间（秒）
+   */
+  const updateBuffer = (buffer: number): void => {
+    if (progressBufferRef.current && props.duration) {
+      const scale = buffer / props.duration;
+      progressBufferRef.current.style.transform = `scaleX(${scale})`;
+    }
+  };
+
+  /**
+   * 更新当前播放进度条的显示比例
+   * @param current - 当前播放时间（秒）
+   */
+  const updateCurrent = (current: number): void => {
+    if (progressTempoRef.current && props.duration) {
+      const scale = current / props.duration;
+      progressTempoRef.current.style.transform = `scaleX(${scale})`;
+    }
+  };
+
+  /**
+   * 显示迷你播放器
+   */
+  const show = (): void => {
+    if (miniWrapRef.current) {
+      miniWrapRef.current.style.display = '';
+    }
+  };
+
+  /**
+   * 隐藏迷你播放器
+   */
+  const hide = (): void => {
+    if (miniWrapRef.current) {
+      miniWrapRef.current.style.display = 'none';
+    }
+  };
+
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
+  lifecycle.onMounted = (): void => {
+    // 初始化进度条
+    if (props.buffer !== undefined) {
+      updateBuffer(props.buffer);
+    }
+    if (props.currentTime !== undefined) {
+      updateCurrent(props.currentTime);
+    }
+
+    lifecycle.emit?.('miniMounted', {
+      updateBuffer,
+      updateCurrent,
+      show,
+      hide,
+    });
+  };
+
+  lifecycle.onBeforeDestroy = (): void => {
+  };
+
+  // ============================================
+  // 主渲染函数
+  // ============================================
+
   return h(
     'div',
-    { class: 'player-mini-warp' },
+    { class: 'player-mini-warp', ref: miniWrapRef },
     h(
       'div',
       { class: 'player-mini-close', onClick: handleClose },

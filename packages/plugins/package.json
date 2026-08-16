@@ -30,6 +30,10 @@
     "./flv": {
       "import": "./dist/flv/index.js",
       "types": "./dist/flv/index.d.ts"
+    },
+    "./interaction": {
+      "import": "./dist/interaction/index.js",
+      "types": "./dist/interaction/index.d.ts"
     }
   },
   "files": [
@@ -47,19 +51,18 @@
     "plugins",
     "danmaku",
     "subtitle",
+    "interaction",
     "dash",
     "hls",
     "flv"
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@hili-player/player": "workspace:*",
-    "dashjs": "^5.1.1",
-    "hls.js": "^1.6.16",
-    "flv.js": "^1.6.2"
+    "@hili-player/player": "workspace:*"
   },
   "dependencies": {
-    
+    "dashjs": "^5.1.1",
+    "flv.js": "^1.6.2"
   },
   "devDependencies": {
     "vite": "^5.2.0",

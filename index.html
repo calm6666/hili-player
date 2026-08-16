@@ -5,81 +5,222 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hili Player - 极简视频播放器</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #1a1a2e;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 20px;
+      padding: 30px 20px;
+      color: #e0e0e0;
     }
 
-    h1 {
-      color: #fff;
-      margin-bottom: 10px;
-      font-size: 28px;
-    }
+    h1 { color: #fff; margin-bottom: 6px; font-size: 26px; }
+    .subtitle { color: rgba(255,255,255,0.5); margin-bottom: 24px; font-size: 13px; }
 
-    .subtitle {
-      color: rgba(255, 255, 255, 0.6);
-      margin-bottom: 30px;
-      font-size: 14px;
-    }
-
+    /* ===== 播放器区域 ===== */
     .player-wrapper {
-      width: 100%;
-      max-width: 900px;
+      width: 100%; max-width: 960px;
       aspect-ratio: 16 / 9;
       background: #000;
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
     }
 
-    .controls-info {
-      margin-top: 30px;
-      color: rgba(255, 255, 255, 0.7);
+    /* ===== 控制面板 ===== */
+    .panel {
+      width: 100%; max-width: 960px;
+      margin-top: 20px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+
+    .panel-title {
+      font-size: 14px; font-weight: 600;
+      color: #00b4d8;
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .panel-title::before {
+      content: ''; display: inline-block;
+      width: 3px; height: 14px;
+      background: #00b4d8; border-radius: 2px;
+    }
+
+    /* 源选择器 */
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .source-btn {
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: #ccc;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .source-btn:hover { background: rgba(0,180,216,0.15); border-color: #00b4d8; color: #fff; }
+    .source-btn.active { background: rgba(0,180,216,0.25); border-color: #00b4d8; color: #00b4d8; }
+
+    .source-btn .tag {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .tag-hls { background: #e8590c; color: #fff; }
+    .tag-dash { background: #7048e8; color: #fff; }
+    .tag-mp4 { background: #2b8a3e; color: #fff; }
+    .tag-url { background: #1971c2; color: #fff; }
+
+    /* URL 输入 */
+    .url-row {
+      display: flex; gap: 8px; margin-top: 10px;
+    }
+
+    .url-input {
+      flex: 1;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: #e0e0e0;
       font-size: 13px;
-      line-height: 1.8;
+      outline: none;
+    }
+
+    .url-input:focus { border-color: #00b4d8; }
+    .url-input::placeholder { color: rgba(255,255,255,0.3); }
+
+    .action-btn {
+      padding: 8px 16px;
+      background: #00b4d8;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .action-btn:hover { background: #0096b7; }
+    .action-btn.secondary { background: rgba(255,255,255,0.1); }
+    .action-btn.secondary:hover { background: rgba(255,255,255,0.18); }
+
+    /* 文件上传 */
+    .file-row {
+      display: flex; gap: 8px; margin-top: 10px; align-items: center;
+    }
+
+    .file-label {
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+
+    .file-label:hover { background: rgba(255,255,255,0.18); }
+
+    .file-name {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 弹幕面板 */
+    .danmaku-controls {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+    }
+
+    .danmaku-controls label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      display: flex; align-items: center; gap: 4px;
+    }
+
+    .danmaku-controls input[type="range"] {
+      width: 80px;
+      accent-color: #00b4d8;
+    }
+
+    .danmaku-controls input[type="text"] {
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 12px;
+      outline: none;
+      width: 160px;
+    }
+
+    .danmaku-controls input[type="text"]:focus { border-color: #00b4d8; }
+
+    /* 事件日志 */
+    .event-log {
+      margin-top: 10px;
+      max-height: 180px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .event-log .log-line { padding: 1px 0; }
+    .event-log .log-time { color: #00b4d8; }
+    .event-log .log-event { color: #ffd43b; }
+
+    /* 快捷键 */
+    .shortcut-info {
+      margin-top: 20px;
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      line-height: 2;
       text-align: center;
     }
 
-    .controls-info code {
-      background: rgba(255, 255, 255, 0.1);
+    .shortcut-info code {
+      background: rgba(255,255,255,0.08);
       padding: 2px 6px;
       border-radius: 3px;
       font-family: 'Courier New', monospace;
+      color: rgba(255,255,255,0.7);
     }
 
-    .features {
-      margin-top: 30px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
-      width: 100%;
-      max-width: 900px;
-    }
-
-    .feature-card {
-      background: rgba(255, 255, 255, 0.05);
-      padding: 15px;
-      border-radius: 8px;
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 13px;
-    }
-
-    .feature-card strong {
-      color: #00b4d8;
-      display: block;
-      margin-bottom: 5px;
-    }
+    /* 滚动条 */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -88,83 +229,415 @@
 
   <div class="player-wrapper" id="player-container"></div>
 
-  <div class="controls-info">
-    <p>键盘快捷键：<code>Space/K</code> 播放/暂停 | <code>←/→</code> 快退/快进 5秒 | <code>↑/↓</code> 音量增减</p>
-    <p><code>F</code> 全屏 | <code>M</code> 静音 | 双击视频区域切换全屏</p>
+  <!-- ===== 视频源选择 ===== -->
+  <div class="panel">
+    <div class="panel-title">视频源选择</div>
+    <div class="source-grid" id="source-grid"></div>
+
+    <div class="url-row">
+      <input class="url-input" id="url-input" type="text" placeholder="输入 .m3u8 / .mpd / .mp4 链接或 manifest JSON 路径" />
+      <button class="action-btn" id="btn-load-url">加载</button>
+    </div>
+
+    <div class="file-row">
+      <label class="file-label" for="file-input">选择本地 MP4 文件</label>
+      <input type="file" id="file-input" accept="video/*" style="display:none" />
+      <span class="file-name" id="file-name">未选择文件</span>
+      <button class="action-btn secondary" id="btn-load-file" style="display:none">播放</button>
+    </div>
   </div>
 
-  <div class="features">
-    <div class="feature-card">
-      <strong>零运行时开销</strong>
-      直接操作真实 DOM，无虚拟 DOM Diff，性能等价于手写原生 JavaScript
+  <!-- ===== 弹幕控制 ===== -->
+  <div class="panel">
+    <div class="panel-title">弹幕测试</div>
+    <div class="danmaku-controls">
+      <button class="action-btn secondary" id="btn-danmaku-load">加载测试弹幕 (100条)</button>
+      <button class="action-btn secondary" id="btn-danmaku-burst">弹幕风暴 (500条)</button>
+      <button class="action-btn secondary" id="btn-danmaku-clear">清空弹幕</button>
+      <button class="action-btn secondary" id="btn-danmaku-toggle">显示/隐藏弹幕</button>
     </div>
-    <div class="feature-card">
-      <strong>TypeScript 原生</strong>
-      完整类型支持，极致的开发体验和代码提示
+    <div class="danmaku-controls" style="margin-top:8px">
+      <label>透明度 <input type="range" id="dm-opacity" min="0" max="1" step="0.1" value="0.8" /></label>
+      <label>速度 <input type="range" id="dm-speed" min="0.5" max="3" step="0.1" value="1" /></label>
+      <label>字号 <input type="range" id="dm-fontsize" min="12" max="36" step="1" value="25" /></label>
     </div>
-    <div class="feature-card">
-      <strong>模块化设计</strong>
-      组件、指令、工具函数分离，按需使用
+    <div class="danmaku-controls" style="margin-top:8px">
+      <input type="text" id="dm-input" placeholder="输入弹幕内容，回车发送" />
+      <button class="action-btn" id="btn-dm-send">发送</button>
     </div>
-    <div class="feature-card">
-      <strong>功能完备</strong>
-      支持多画质、全屏、画中画、键盘快捷键等
-    </div>
+  </div>
+
+  <!-- ===== 事件日志 ===== -->
+  <div class="panel">
+    <div class="panel-title">事件日志 <button class="action-btn secondary" id="btn-log-clear" style="margin-left:auto;font-size:11px;padding:4px 10px">清空</button></div>
+    <div class="event-log" id="event-log"></div>
+  </div>
+
+  <!-- ===== 快捷键 ===== -->
+  <div class="shortcut-info">
+    <code>Space/K</code> 播放/暂停 &nbsp;
+    <code>←/→</code> 快退/快进 5秒 &nbsp;
+    <code>↑/↓</code> 音量增减 &nbsp;
+    <code>F</code> 全屏 &nbsp;
+    <code>M</code> 静音 &nbsp;
+    双击视频区域切换全屏
   </div>
 
   <script type="module">
     import { VideoPlayer } from './packages/player/src/index.ts';
+    import { createHlsPlugin } from './packages/plugins/src/hls/index.ts';
+    import { createDashPlugin } from './packages/plugins/src/dash/index.ts';
+    import { DanmakuPlugin } from './packages/plugins/src/danmaku/index.ts';
+    import { createFlvPlugin } from './packages/plugins/src/flv/index.ts';
 
-    // 获取容器元素
-    const container = document.getElementById('player-container');
-    if (!container) {
-      console.error('找不到播放器容器');
-      throw new Error('找不到播放器容器');
+    // ===== 视频源列表 =====
+    const SOURCES = [
+      { name: 'DASH (v1)', tag: 'dash', src: '/test-dash.json' },
+      { name: 'DASH (v1 explicit)', tag: 'dash', src: '/test-dash-explicit.json' },
+      { name: 'DASH (v2)', tag: 'dash', src: '/test-dash-v2.json' },
+      { name: 'DASH (v2 explicit)', tag: 'dash', src: '/test-dash-v2-explicit.json' },
+      { name: 'DASH (v3)', tag: 'dash', src: '/test-dash-v3.json' },
+      { name: 'DASH (v3 explicit)', tag: 'dash', src: '/test-dash-v3-explicit.json' },
+      { name: 'DASH (v4)', tag: 'dash', src: '/test-dash-v4.json' },
+      { name: 'DASH (v4 explicit)', tag: 'dash', src: '/test-dash-v4-explicit.json' },
+      { name: 'DASH (v5)', tag: 'dash', src: '/test-dash-v5.json' },
+      { name: 'DASH (v5 explicit)', tag: 'dash', src: '/test-dash-v5-explicit.json' },
+      { name: 'HLS (v1)', tag: 'hls', src: '/test-hls.json' },
+      { name: 'HLS (v1 explicit)', tag: 'hls', src: '/test-hls-explicit.json' },
+      { name: 'HLS (v2)', tag: 'hls', src: '/test-hls-v2.json' },
+      { name: 'HLS (v2 explicit)', tag: 'hls', src: '/test-hls-v2-explicit.json' },
+      { name: 'HLS (v3)', tag: 'hls', src: '/test-hls-v3.json' },
+      { name: 'HLS (v3 explicit)', tag: 'hls', src: '/test-hls-v3-explicit.json' },
+      { name: 'HLS (v4)', tag: 'hls', src: '/test-hls-v4.json' },
+      { name: 'HLS (v4 explicit)', tag: 'hls', src: '/test-hls-v4-explicit.json' },
+      { name: 'HLS (v5)', tag: 'hls', src: '/test-hls-v5.json' },
+      { name: 'HLS (v5 explicit)', tag: 'hls', src: '/test-hls-v5-explicit.json' },
+    ];
+
+    // ===== 全局状态 =====
+    let player = null;
+    let currentSource = null;
+    let localFileUrl = null;
+
+    // ===== 生成测试弹幕 =====
+    const DANMAKU_TEXTS = [
+      '666666', '前排', '来了来了', '哈哈哈', '好看',
+      '冲冲冲', '牛啊', '太强了', '卧槽', '厉害',
+      '笑死', '不错不错', '可以可以', '妙啊', '绝了',
+      '芜湖起飞', '好耶', '太棒了', '感动', '泪目',
+      '催更', '下次一定', '一键三连', '投币了', '收藏了',
+      '打卡', '每日打卡', '签到', '第一', '前排留名',
+      'awsl', 'kswl', 'xswl', 'yyds', '绝绝子',
+      '真香', '破防了', '格局打开', '好活', '有点东西',
+      '上头了', '停不下来', '再看亿遍', '经典', '名场面',
+    ];
+
+    const DANMAKU_COLORS = [
+      '#FFFFFF', '#FE0302', '#FF7204', '#FFD400', '#00CD00',
+      '#019899', '#426ABE', '#89D5FF', '#CC0273', '#B22222',
+      '#FF69B4', '#9C27B0', '#00BCD4', '#8BC34A', '#FF5722',
+    ];
+
+    function generateDanmaku(count, startOffset = 0) {
+      const result = [];
+      for (let i = 0; i < count; i++) {
+        const time = startOffset + Math.random() * 230;
+        const text = DANMAKU_TEXTS[Math.floor(Math.random() * DANMAKU_TEXTS.length)];
+        const color = DANMAKU_COLORS[Math.floor(Math.random() * DANMAKU_COLORS.length)];
+        const typeRoll = Math.random();
+        let type = 'scroll';
+        if (typeRoll > 0.92) type = 'top';
+        else if (typeRoll > 0.85) type = 'bottom';
+
+        result.push({
+          id: `dm_${Date.now()}_${i}`,
+          text,
+          time: Math.round(time * 10) / 10,
+          type,
+          color,
+          fontSize: type === 'scroll' ? 25 : 28,
+        });
+      }
+      return result.sort((a, b) => a.time - b.time);
     }
 
-    // 创建播放器
-    const player = new VideoPlayer({
-      src: [
-        { quality: '1080p', url: 'http://127.0.0.1:9000/hfs/d2564b1ae7286c6b6f6d3e52551c8c3cb4a87b2ade979543711679428fb2e92e.mp4', name: '1080P' },
-        { quality: '720p', url: 'http://127.0.0.1:9000/hfs/d2564b1ae7286c6b6f6d3e52551c8c3cb4a87b2ade979543711679428fb2e92e.mp4', name: '720P' },
-        { quality: '480p', url: 'http://127.0.0.1:9000/hfs/d2564b1ae7286c6b6f6d3e52551c8c3cb4a87b2ade979543711679428fb2e92e.mp4', name: '480P' },
-      ],
-      poster: '',
-      autoplay: false,
-      muted: false,
-      volume: 0.8,
-      controls: true,
-      keyboard: true,
-      pip: true,
-      fullscreen: true,
+    // ===== 渲染源选择按钮 =====
+    const sourceGrid = document.getElementById('source-grid');
+    SOURCES.forEach((source, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'source-btn';
+      btn.innerHTML = `<span class="tag tag-${source.tag}">${source.tag.toUpperCase()}</span>${source.name}`;
+      btn.addEventListener('click', () => loadSource(source, btn));
+      sourceGrid.appendChild(btn);
     });
 
-    // 挂载播放器到容器
-    player.mount(container);
+    // ===== 日志系统 =====
+    const logEl = document.getElementById('event-log');
+    let logCount = 0;
 
-    // 监听播放器事件
-    player.on('ready', () => {
-      console.log('播放器已就绪');
+    function log(event, data) {
+      logCount++;
+      if (logCount > 500) {
+        const firstLine = logEl.firstChild;
+        if (firstLine) logEl.removeChild(firstLine);
+      }
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      const dataStr = data !== undefined ? ` ${JSON.stringify(data).slice(0, 80)}` : '';
+      line.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-event">${event}</span>${dataStr}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('btn-log-clear').addEventListener('click', () => {
+      logEl.innerHTML = '';
+      logCount = 0;
     });
 
-    player.on('play', () => {
-      console.log('开始播放');
+    // ===== 创建/销毁播放器 =====
+    function destroyPlayer() {
+      if (player) {
+        try { player.destroy(); } catch(e) { /* ignore */ }
+        player = null;
+      }
+      const container = document.getElementById('player-container');
+      container.innerHTML = '';
+    }
+
+    function createPlayer(config) {
+      destroyPlayer();
+      const container = document.getElementById('player-container');
+
+      // 根据视频源类型选择对应的流媒体插件
+      const src = typeof config.src === 'string' ? config.src : '';
+      const plugins = [DanmakuPlugin()];
+
+      if (/\.m3u8(\?|$)/i.test(src) || /hls/i.test(src)) {
+        plugins.unshift(createHlsPlugin({ autoplay: false }));
+        log('plugin:register', 'HLS');
+      } else if (/\.mpd(\?|$)/i.test(src) || /dash/i.test(src)) {
+        plugins.unshift(createDashPlugin({ autoplay: false }));
+        log('plugin:register', 'DASH');
+      } else if (/\.flv(\?|$)/i.test(src) || /flv/i.test(src)) {
+        plugins.unshift(createFlvPlugin({ autoplay: false }));
+        log('plugin:register', 'FLV');
+      } else if (src.endsWith('.json')) {
+        // JSON manifest：根据文件名判断 HLS/DASH
+        if (/hls/i.test(src)) {
+          plugins.unshift(createHlsPlugin({ autoplay: false }));
+          log('plugin:register', 'HLS (from manifest)');
+        } else {
+          plugins.unshift(createDashPlugin({ autoplay: false }));
+          log('plugin:register', 'DASH (from manifest)');
+        }
+      } else {
+        // mp4 或其他直链，不需要流媒体插件
+        log('plugin:register', 'none (direct play)');
+      }
+
+      player = new VideoPlayer({
+        ...config,
+        plugins,
+      });
+
+      player.mount(container);
+
+      // 绑定事件日志
+      const events = [
+        'ready', 'play', 'pause', 'ended', 'waiting', 'canplay',
+        'timeupdate', 'progress', 'volumechange', 'mutedchange',
+        'ratechange', 'qualitychange', 'fullscreenchange', 'pipchange',
+        'error', 'statechange', 'destroy',
+      ];
+
+      events.forEach(evt => {
+        try {
+          player.on(evt, (...args) => {
+            log(evt, args.length ? args[0] : undefined);
+          });
+        } catch(e) { /* 某些事件可能不存在 */ }
+      });
+
+      // 暴露到全局
+      window.player = player;
+      log('player:created', { src: config.src?.toString?.()?.slice(0, 60) });
+    }
+
+    // ===== 加载视频源 =====
+    function loadSource(source, btnEl) {
+      // 更新按钮状态
+      document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      currentSource = source;
+
+      createPlayer({
+        src: source.src,
+        autoplay: false,
+        muted: true,
+        volume: 0.8,
+        controls: true,
+        keyboard: true,
+        pip: true,
+        fullscreen: true,
+      });
+    }
+
+    // ===== URL 加载 =====
+    document.getElementById('btn-load-url').addEventListener('click', () => {
+      const url = document.getElementById('url-input').value.trim();
+      if (!url) return;
+
+      document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+
+      // 判断类型
+      let src = url;
+      createPlayer({
+        src,
+        autoplay: false,
+        muted: true,
+        volume: 0.8,
+        controls: true,
+        keyboard: true,
+        pip: true,
+        fullscreen: true,
+      });
     });
 
-    player.on('pause', () => {
-      console.log('播放暂停');
+    // 回车加载
+    document.getElementById('url-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('btn-load-url').click();
     });
 
-    player.on('timeupdate', (currentTime, duration) => {
-      // console.log('播放进度:', currentTime, '/', duration);
+    // ===== 本地文件 =====
+    const fileInput = document.getElementById('file-input');
+    const fileName = document.getElementById('file-name');
+    const btnLoadFile = document.getElementById('btn-load-file');
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        fileName.textContent = file.name;
+        btnLoadFile.style.display = 'inline-block';
+        if (localFileUrl) URL.revokeObjectURL(localFileUrl);
+        localFileUrl = URL.createObjectURL(file);
+      }
     });
 
-    player.on('statechange', (state) => {
-      console.log('状态变化:', state);
+    btnLoadFile.addEventListener('click', () => {
+      if (!localFileUrl) return;
+      document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+
+      createPlayer({
+        src: localFileUrl,
+        autoplay: false,
+        muted: false,
+        volume: 0.8,
+        controls: true,
+        keyboard: true,
+        pip: true,
+        fullscreen: true,
+      });
     });
 
-    // 暴露到全局供调试
-    window.player = player;
+    // ===== 弹幕控制 =====
+    document.getElementById('btn-danmaku-load').addEventListener('click', () => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.loadDanmaku) {
+        const list = generateDanmaku(100);
+        danmakuApi.loadDanmaku(list);
+        log('danmaku:load', { count: 100 });
+      } else {
+        log('danmaku:error', '弹幕插件未加载');
+      }
+    });
+
+    document.getElementById('btn-danmaku-burst').addEventListener('click', () => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.loadDanmaku) {
+        const currentTime = player.videoEl?.currentTime || 0;
+        const list = generateDanmaku(500, currentTime);
+        danmakuApi.loadDanmaku(list);
+        log('danmaku:burst', { count: 500 });
+      }
+    });
+
+    document.getElementById('btn-danmaku-clear').addEventListener('click', () => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.clear) {
+        danmakuApi.clear();
+        log('danmaku:clear');
+      }
+    });
+
+    document.getElementById('btn-danmaku-toggle').addEventListener('click', () => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.setVisible) {
+        const current = danmakuApi.getVisible?.() ?? true;
+        danmakuApi.setVisible(!current);
+        log('danmaku:toggle', { visible: !current });
+      }
+    });
+
+    document.getElementById('dm-opacity').addEventListener('input', (e) => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.setOpacity) {
+        danmakuApi.setOpacity(parseFloat(e.target.value));
+      }
+    });
+
+    document.getElementById('dm-speed').addEventListener('input', (e) => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.setSpeed) {
+        danmakuApi.setSpeed(parseFloat(e.target.value));
+      }
+    });
+
+    document.getElementById('dm-fontsize').addEventListener('input', (e) => {
+      if (!player) return;
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.setFontSize) {
+        danmakuApi.setFontSize(parseInt(e.target.value));
+      }
+    });
+
+    function sendDanmaku() {
+      if (!player) return;
+      const input = document.getElementById('dm-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const danmakuApi = player.getPluginAPI('danmaku');
+      if (danmakuApi && danmakuApi.send) {
+        const currentTime = player.videoEl?.currentTime || 0;
+        danmakuApi.send({
+          id: `dm_user_${Date.now()}`,
+          text,
+          time: currentTime,
+          type: 'scroll',
+          color: '#FFFFFF',
+          fontSize: 25,
+        });
+        log('danmaku:send', { text, time: currentTime });
+      }
+      input.value = '';
+    }
+
+    document.getElementById('btn-dm-send').addEventListener('click', sendDanmaku);
+    document.getElementById('dm-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendDanmaku();
+    });
+
+    // ===== 默认加载第一个源 =====
+    // 不自动加载，等用户选择
+    log('demo:ready', '请选择视频源开始播放');
   </script>
 </body>
 </html>

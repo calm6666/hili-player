@@ -3,7 +3,8 @@
  * 管理弹幕轨道分配
  */
 
-import { DanmakuType, DanmakuArea, type DanmakuTrack, type DanmakuRenderItem, type TrackConfig } from './types';
+import { DanmakuType, DanmakuArea } from '@/types/danmaku';
+import type { DanmakuTrack, DanmakuRenderItem, TrackConfig } from './types';
 
 /** 轨道管理器配置 */
 interface TrackManagerConfig {

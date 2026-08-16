@@ -3,7 +3,7 @@
  * 管理弹幕分段加载和智能渲染调度
  */
 
-import type { DanmakuItem, DanmakuSegment } from './types';
+import type { DanmakuItem, DanmakuSegment } from '@/types/danmaku';
 import { createLogger } from '@/utils';
 const logger = createLogger('DanmakuScheduler');
 

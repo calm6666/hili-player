@@ -2,11 +2,11 @@
  * ============================================
  * 滑块组件
  * ============================================
- * 使用 h 函数实现的滑块组件
  */
 
-import { h, defineComponent } from '@/core';
-import type { VNode } from '@/types';
+import { h, defineComponent, ref } from '@/core';
+import type { VNode, ComponentLifecycle } from '@/types';
+import { isBrowser } from '@/utils';
 
 /**
  * 标记点接口
@@ -22,13 +22,13 @@ export interface SliderMark {
  * 滑块组件 Props 接口
  */
 export interface SliderProps {
-  /** 宽度 */
+  /** 滑块宽度，支持字符串或数字（像素） */
   width?: string | number;
   /** 当前值 (0-100) */
   value?: number;
   /** 标记点数组 */
   marks?: SliderMark[] | null;
-  /** 步长 */
+  /** 步长，用于离散调整滑块值 */
   step?: number;
   /** 值变化回调 */
   onChange?: (value: number) => void;
@@ -40,47 +40,34 @@ export interface SliderProps {
 
 /**
  * 滑块组件
- * 使用 h 函数实现，保持与原组件相同的 DOM 结构和类名
  */
-export const Slider = defineComponent<SliderProps>((props) => {
-  /**
-   * 默认值
-   */
+export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentLifecycle) => {
+  /** 滑块宽度，默认 100% */
   const width = props.width ?? '100%';
+
+  /** 步长，默认为 1 表示连续调整 */
   const step = props.step ?? 1;
 
-  /**
-   * 当前值
-   */
+  /** 当前滑块值 */
   let currentValue = props.value ?? 0;
 
-  /**
-   * 拖动开始时的 X 坐标
-   */
+  /** 拖动开始时的 X 坐标 */
   let startX = 0;
 
-  /**
-   * 是否正在拖动
-   */
+  /** 是否正在拖动 */
   let isDragging = false;
 
-  /**
-   * 进度条容器元素引用
-   */
-  const progressRef: { current: HTMLDivElement | null } = { current: null };
+  /** 进度条容器元素引用 */
+  const progressRef = ref<HTMLDivElement>();
+
+  /** 进度条元素引用 */
+  const progressBarRef = ref<HTMLDivElement>();
+
+  /** 进度值显示元素引用 */
+  const progressValRef = ref<HTMLDivElement>();
 
   /**
-   * 进度条元素引用
-   */
-  const progressBarRef: { current: HTMLDivElement | null } = { current: null };
-
-  /**
-   * 进度值显示元素引用
-   */
-  const progressValRef: { current: HTMLDivElement | null } = { current: null };
-
-  /**
-   * 获取显示值
+   * 获取显示值，优先从标记点中查找名称，否则返回百分比字符串
    */
   const getDisplayValue = (): string => {
     if (props.marks) {
@@ -93,7 +80,7 @@ export const Slider = defineComponent<SliderProps>((props) => {
   };
 
   /**
-   * 更新进度条宽度
+   * 更新进度条宽度和显示值
    */
   const updateProgressBar = (): void => {
     if (progressBarRef.current) {
@@ -105,14 +92,16 @@ export const Slider = defineComponent<SliderProps>((props) => {
   };
 
   /**
-   * 计算值从鼠标位置
+   * 根据鼠标位置计算滑块值
    */
   const calculateValueFromPosition = (clientX: number): number => {
     if (!progressRef.current) {
       return currentValue;
     }
 
+    /** 进度条容器的边界矩形 */
     const rect = progressRef.current.getBoundingClientRect();
+    /** 鼠标位置对应的百分比 */
     const percentage = Math.min(
       Math.max(0, ((clientX - rect.left) / rect.width) * 100),
       100
@@ -129,7 +118,7 @@ export const Slider = defineComponent<SliderProps>((props) => {
   };
 
   /**
-   * 处理进度条容器点击
+   * 处理进度条容器点击，直接跳转到点击位置
    */
   const handleProgressClick = (event: MouseEvent): void => {
     currentValue = calculateValueFromPosition(event.clientX);
@@ -138,9 +127,10 @@ export const Slider = defineComponent<SliderProps>((props) => {
   };
 
   /**
-   * 处理滑块点鼠标按下
+   * 处理滑块点鼠标按下，开始拖动
    */
   const handleDotMouseDown = (event: MouseEvent): void => {
+    if (!isBrowser()) return;
     isDragging = true;
 
     if (step === 1) {
@@ -149,15 +139,12 @@ export const Slider = defineComponent<SliderProps>((props) => {
 
     props.onDragStart?.();
 
-    /**
-     * 添加全局鼠标事件监听
-     */
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   };
 
   /**
-   * 处理鼠标移动
+   * 处理鼠标移动，实时更新滑块位置
    */
   const handleMouseMove = (event: MouseEvent): void => {
     if (!isDragging || !progressRef.current) {
@@ -167,8 +154,11 @@ export const Slider = defineComponent<SliderProps>((props) => {
     if (step !== 1) {
       currentValue = calculateValueFromPosition(event.clientX);
     } else {
+      /** 进度条容器的边界矩形 */
       const rect = progressRef.current.getBoundingClientRect();
+      /** 鼠标移动的水平偏移量 */
       const deltaX = event.clientX - startX;
+      /** 偏移量对应的百分比变化 */
       const deltaPercentage = (deltaX / rect.width) * 100;
       currentValue = Math.min(Math.max(0, currentValue + deltaPercentage), 100);
       startX = event.clientX;
@@ -179,18 +169,54 @@ export const Slider = defineComponent<SliderProps>((props) => {
   };
 
   /**
-   * 处理鼠标释放
+   * 处理鼠标释放，结束拖动
    */
   const handleMouseUp = (): void => {
     isDragging = false;
 
-    /**
-     * 移除全局鼠标事件监听
-     */
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
 
     props.onDragEnd?.();
+  };
+
+  // ============================================
+  // API 方法
+  // ============================================
+
+  /**
+   * 设置当前值并更新进度条
+   */
+  const setValue = (value: number): void => {
+    currentValue = Math.min(Math.max(0, value), 100);
+    updateProgressBar();
+  };
+
+  /**
+   * 获取当前值
+   */
+  const getValue = (): number => {
+    return currentValue;
+  };
+
+  // ============================================
+  // 生命周期
+  // ============================================
+
+  /**
+   * 组件挂载后，通过事件向上层暴露 setValue 和 getValue 方法
+   */
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('sliderMounted', { setValue, getValue });
+  };
+
+  /**
+   * 组件销毁前，移除全局鼠标事件监听并重置拖动状态
+   */
+  lifecycle.onBeforeDestroy = (): void => {
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+    isDragging = false;
   };
 
 

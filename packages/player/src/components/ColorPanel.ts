@@ -2,74 +2,184 @@
  * ============================================
  * 色彩调整面板组件
  * ============================================
- * 使用 h 函数实现的色彩调整面板组件
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
+import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
 /**
  * 色彩调整面板组件 Props 接口
  */
 export interface ColorPanelProps {
-  /** 是否显示 */
+  /** 是否显示面板 */
   visible?: boolean;
-  /** 饱和度值 (0-200) */
+  /** 饱和度值 (0-200)，默认 100 */
   saturate?: number;
-  /** 亮度值 (0-200) */
+  /** 亮度值 (0-200)，默认 100 */
   brightness?: number;
-  /** 对比度值 (0-200) */
+  /** 对比度值 (0-200)，默认 100 */
   contrast?: number;
-  /** 关闭回调 */
+  /** 关闭面板的回调函数 */
   onClose?: () => void;
-  /** 重置回调 */
+  /** 重置色彩参数的回调函数 */
   onReset?: () => void;
-  /** 饱和度变化回调 */
+  /** 饱和度变化时的回调函数 */
   onSaturateChange?: (value: number) => void;
-  /** 亮度变化回调 */
+  /** 亮度变化时的回调函数 */
   onBrightnessChange?: (value: number) => void;
-  /** 对比度变化回调 */
+  /** 对比度变化时的回调函数 */
   onContrastChange?: (value: number) => void;
 }
 
 /**
  * 色彩调整面板组件
- * 使用 h 函数实现，保持与原组件相同的 DOM 结构和类名
+ * 提供饱和度、亮度、对比度三个滑块用于调整视频画面色彩
  */
-export const ColorPanel = defineComponent<ColorPanelProps>((props) => {
-  /**
-   * 饱和度值
-   */
-  const saturate = props.saturate ?? 100;
+export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: ComponentLifecycle) => {
+  // ============================================
+  // 状态
+  // ============================================
+
+  /** 当前饱和度值 */
+  let saturate = props.saturate ?? 100;
+
+  /** 当前亮度值 */
+  let brightness = props.brightness ?? 100;
+
+  /** 当前对比度值 */
+  let contrast = props.contrast ?? 100;
+
+  // ============================================
+  // DOM 引用
+  // ============================================
+
+  /** 面板根容器 DOM 引用 */
+  const panelRef = ref<HTMLDivElement>();
+
+  /** 饱和度滑块进度条 DOM 引用 */
+  const saturateBarRef = ref<HTMLDivElement>();
+
+  /** 饱和度滑块拖拽手柄 DOM 引用 */
+  const saturateThumbRef = ref<HTMLDivElement>();
+
+  /** 饱和度数值显示 DOM 引用 */
+  const saturateValueRef = ref<HTMLDivElement>();
+
+  /** 亮度滑块进度条 DOM 引用 */
+  const brightnessBarRef = ref<HTMLDivElement>();
+
+  /** 亮度滑块拖拽手柄 DOM 引用 */
+  const brightnessThumbRef = ref<HTMLDivElement>();
+
+  /** 亮度数值显示 DOM 引用 */
+  const brightnessValueRef = ref<HTMLDivElement>();
+
+  /** 对比度滑块进度条 DOM 引用 */
+  const contrastBarRef = ref<HTMLDivElement>();
+
+  /** 对比度滑块拖拽手柄 DOM 引用 */
+  const contrastThumbRef = ref<HTMLDivElement>();
+
+  /** 对比度数值显示 DOM 引用 */
+  const contrastValueRef = ref<HTMLDivElement>();
 
   /**
-   * 亮度值
-   */
-  const brightness = props.brightness ?? 100;
-
-  /**
-   * 对比度值
-   */
-  const contrast = props.contrast ?? 100;
-
-  /**
-   * 计算滑块进度
+   * 计算滑块进度比例
+   * @param value - 当前数值 (0-200)
+   * @returns 进度比例 (0-1)
    */
   const getSliderProgress = (value: number): number => {
     return value / 200;
   };
 
   /**
-   * 计算滑块位置
+   * 计算滑块手柄的像素偏移位置
+   * @param value - 当前数值 (0-200)
+   * @returns 手柄偏移像素值
    */
   const getSliderPosition = (value: number): number => {
     return (value / 200) * 268;
   };
 
   /**
-   * 渲染滑块
+   * 更新滑块的 UI 显示（进度条缩放、手柄位置、数值文本）
+   * @param barRef - 进度条 DOM 引用
+   * @param thumbRef - 手柄 DOM 引用
+   * @param valueRef - 数值显示 DOM 引用
+   * @param value - 当前数值
    */
-  const renderSlider = (value: number): VNode => {
+  const updateSliderUI = (barRef: { current: HTMLDivElement | null }, thumbRef: { current: HTMLDivElement | null }, valueRef: { current: HTMLDivElement | null }, value: number): void => {
+    const progress = getSliderProgress(value);
+    const position = getSliderPosition(value);
+    if (barRef.current) {
+      barRef.current.style.transform = `scaleX(${progress})`;
+    }
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = `translateX(${position}px)`;
+    }
+    if (valueRef.current) {
+      valueRef.current.innerText = value.toString();
+    }
+  };
+
+  // ============================================
+  // DOM 更新方法
+  // ============================================
+
+  /**
+   * 设置饱和度并更新对应滑块 UI
+   * @param value - 新的饱和度值
+   */
+  const setSaturate = (value: number): void => {
+    saturate = value;
+    updateSliderUI(saturateBarRef, saturateThumbRef, saturateValueRef, value);
+  };
+
+  /**
+   * 设置亮度并更新对应滑块 UI
+   * @param value - 新的亮度值
+   */
+  const setBrightness = (value: number): void => {
+    brightness = value;
+    updateSliderUI(brightnessBarRef, brightnessThumbRef, brightnessValueRef, value);
+  };
+
+  /**
+   * 设置对比度并更新对应滑块 UI
+   * @param value - 新的对比度值
+   */
+  const setContrast = (value: number): void => {
+    contrast = value;
+    updateSliderUI(contrastBarRef, contrastThumbRef, contrastValueRef, value);
+  };
+
+  /**
+   * 显示面板组件
+   */
+  const show = (): void => {
+    if (panelRef.current) {
+      panelRef.current.style.display = '';
+    }
+  };
+
+  /**
+   * 隐藏面板组件
+   */
+  const hide = (): void => {
+    if (panelRef.current) {
+      panelRef.current.style.display = 'none';
+    }
+  };
+
+  /**
+   * 渲染单个滑块控件
+   * @param value - 当前数值
+   * @param barRef - 进度条 DOM 引用
+   * @param thumbRef - 手柄 DOM 引用
+   * @returns 滑块虚拟节点
+   */
+  const renderSlider = (value: number, barRef: { current: HTMLDivElement | null }, thumbRef: { current: HTMLDivElement | null }): VNode => {
     return h(
       'div',
       { class: 'player-color-panel-slider ui ui-slider ui-dark' },
@@ -86,11 +196,12 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props) => {
               class: 'ui-bar ui-bar-normal',
               role: 'progressbar',
               style: { transform: `scaleX(${getSliderProgress(value)})` },
+              ref: barRef,
             })
           ),
           h(
             'div',
-            { class: 'ui-thumb', style: { transform: `translateX(${getSliderPosition(value)}px)` } },
+            { class: 'ui-thumb', style: { transform: `translateX(${getSliderPosition(value)}px)` }, ref: thumbRef },
             h('div', { class: 'ui-thumb-dot' })
           )
         )
@@ -98,10 +209,28 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props) => {
     );
   };
 
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
+  /**
+   * 组件挂载后，通过事件向外暴露控制方法
+   */
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('colorPanelMounted', { setSaturate, setBrightness, setContrast, show, hide });
+  };
+
+  /**
+   * 组件销毁前，清空所有 DOM 引用以防止内存泄漏
+   */
+  lifecycle.onBeforeDestroy = (): void => {
+  };
+
   return h(
     'div',
     {
       class: 'player-color-panel',
+      ref: panelRef,
       style: {
         display: props.visible ? '' : 'none',
       },
@@ -120,22 +249,22 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props) => {
       'div',
       { class: 'player-color-panel-saturate player-color-wrap' },
       h('div', { class: 'player-color-panel-name' }, '饱和度'),
-      renderSlider(saturate),
-      h('div', { class: 'player-color-panel-value' }, saturate.toString())
+      renderSlider(saturate, saturateBarRef, saturateThumbRef),
+      h('div', { class: 'player-color-panel-value', ref: saturateValueRef }, saturate.toString())
     ),
     h(
       'div',
       { class: 'player-color-panel-brightness player-color-wrap' },
       h('div', { class: 'player-color-panel-name' }, '亮度'),
-      renderSlider(brightness),
-      h('div', { class: 'player-color-panel-value' }, brightness.toString())
+      renderSlider(brightness, brightnessBarRef, brightnessThumbRef),
+      h('div', { class: 'player-color-panel-value', ref: brightnessValueRef }, brightness.toString())
     ),
     h(
       'div',
       { class: 'player-color-panel-contrast player-color-wrap' },
       h('div', { class: 'player-color-panel-name' }, '对比度'),
-      renderSlider(contrast),
-      h('div', { class: 'player-color-panel-value' }, contrast.toString())
+      renderSlider(contrast, contrastBarRef, contrastThumbRef),
+      h('div', { class: 'player-color-panel-value', ref: contrastValueRef }, contrast.toString())
     ),
     h(
       'div',

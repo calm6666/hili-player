@@ -2,8 +2,11 @@
  * ============================================
  * 交互插件 (InteractionPlugin)
  * ============================================
- * 互动命令功能插件，通过事件总线实现跨组件通信
- * 支持点赞关注、外链视频、投票、评分等互动卡片
+ * 互动命令功能插件，通过 PlayerEventEnum 事件实现跨组件通信
+ * 在 MOUNTED 时查找 .player-cmd-dm-inside 容器（不自行创建容器）
+ * 使用 4 个子插件（GuidePlugin, LinkPlugin, VotePlugin, ScorePlugin）渲染卡片
+ * 使用 diffAlgorithm（binarySearchByTime + updateCardsDiff）进行时间驱动的卡片可见性控制
+ * 在编辑模式下使用 dragEditor（bindDragInEditMode）提供拖拽定位
  *
  * 使用方式：
  * import { InteractionPlugin } from '@hili-player/plugins';
@@ -15,103 +18,37 @@
  *     onVoteSelect: (voteIndex, optionIndex) => console.log(voteIndex, optionIndex)
  *   })
  * ]
- *
- * 事件通信：
- * - interaction:like - 点赞
- * - interaction:coin - 投币
- * - interaction:collect - 收藏
- * - interaction:follow - 关注
- * - interaction:linkClick - 链接点击
- * - interaction:voteSelect - 投票选择
- * - interaction:scoreSelect - 评分选择
- * - interaction:positionChange - 位置变更
- * - interaction:cardClose - 卡片关闭
- * - interaction:currentTimeChange - 当前时间变更
  */
 
-import type { Plugin } from '@hili-player/player';
+import type { Plugin, PluginOptions } from '@/types/plugin';
+import type { VideoPlayer } from '../../../player/src/player/VideoPlayer';
+import type { PlayerEventBus } from '../../../player/src/core/plugin';
+import { PlayerEventEnum } from '@/core/events';
+import { GuidePlugin } from './GuidePlugin';
+import { LinkPlugin } from './LinkPlugin';
+import { VotePlugin } from './VotePlugin';
+import { ScorePlugin } from './ScorePlugin';
+import { binarySearchByTime, updateCardsDiff } from './diffAlgorithm';
+import { bindDragInEditMode } from './dragEditor';
+import { isBrowser } from '@/utils';
 import type {
   CardType,
   PositionEvent,
-  InteractionType,
   InteractionGuideThree,
   InteractionLink,
   InteractionVote,
   InteractionScore,
   InteractionCard,
   InteractionPluginConfig,
-} from './types';
-
-// 重新导出类型
-export type {
-  CardType,
-  PositionEvent,
-  InteractionType,
-  VoteOption,
-  InteractionGuideThree,
-  InteractionLink,
-  InteractionVote,
-  InteractionScore,
-  InteractionCard,
-  InteractionPluginConfig,
+  InteractionSubPlugin,
 } from './types';
 
 // ============================================
-// 类型谓词函数（用于替代 as 类型断言）
+// 类型定义
 // ============================================
 
-/** 播放器事件接口 */
-interface PlayerEvents {
-  on: (event: string, handler: (data: unknown) => void) => () => void;
-  emit: (event: string, data?: unknown) => void;
-}
-
-/** 检查对象是否拥有 events 属性 */
-function hasPlayerEvents(obj: unknown): obj is { events: PlayerEvents } {
-  return typeof obj === 'object' && obj !== null && 'events' in obj;
-}
-
-/** 检查对象是否拥有 container 属性 */
-function hasContainerProperty(obj: unknown): obj is { container?: HTMLElement } {
-  return typeof obj === 'object' && obj !== null && 'container' in obj;
-}
-
-/** 检查对象是否拥有 item 属性且为 InteractionGuideThree */
-function isGuideItemData(obj: unknown): obj is { item: InteractionGuideThree } {
-  return typeof obj === 'object' && obj !== null && 'item' in obj &&
-    typeof obj.item === 'object' && obj.item !== null && 'top' in obj.item && 'left' in obj.item;
-}
-
-/** 检查对象是否拥有 item 属性且为 InteractionLink */
-function isLinkItemData(obj: unknown): obj is { item: InteractionLink } {
-  return typeof obj === 'object' && obj !== null && 'item' in obj &&
-    typeof obj.item === 'object' && obj.item !== null && 'top' in obj.item && 'left' in obj.item && 'link_content' in obj.item;
-}
-
-/** 检查对象是否拥有 item 属性且为 InteractionVote */
-function isVoteItemData(obj: unknown): obj is { item: InteractionVote } {
-  return typeof obj === 'object' && obj !== null && 'item' in obj &&
-    typeof obj.item === 'object' && obj.item !== null && 'question' in obj.item && 'options' in obj.item && 'top' in obj.item && 'left' in obj.item;
-}
-
-/** 检查对象是否拥有 item 属性且为 InteractionScore */
-function isScoreItemData(obj: unknown): obj is { item: InteractionScore } {
-  return typeof obj === 'object' && obj !== null && 'item' in obj &&
-    typeof obj.item === 'object' && obj.item !== null && 'title' in obj.item && 'scoreType' in obj.item && 'top' in obj.item && 'left' in obj.item;
-}
-
-/** 检查对象是否拥有 type 和 index 属性 */
-function hasTypeAndIndex(obj: unknown): obj is { type: CardType; index: number } {
-  return typeof obj === 'object' && obj !== null && 'type' in obj && 'index' in obj;
-}
-
-/** 检查对象是否拥有 element 属性 */
-function hasElementProperty(obj: unknown): obj is { element?: HTMLDivElement } {
-  return typeof obj === 'object' && obj !== null && 'element' in obj;
-}
-
-/** 交互插件已解析配置类型 */
-type InteractionResolvedConfig = {
+/** 交互插件已解析配置 */
+interface InteractionResolvedConfig {
   isEdit: boolean;
   data: Partial<InteractionCard>;
   onPositionChange: ((event: PositionEvent) => void) | null;
@@ -123,90 +60,47 @@ type InteractionResolvedConfig = {
   onLinkClick: ((link: InteractionLink) => void) | null;
   onVoteSelect: ((voteIndex: number, optionIndex: number) => void) | null;
   onScoreSelect: ((scoreIndex: number, value: number) => void) | null;
-};
+}
+
+/** 拖拽清理函数类型 */
+type DragCleanup = () => void;
 
 // ============================================
-// 图标定义（使用简单SVG字符串）
+// 互动插件 API 接口
 // ============================================
 
-/** 点赞图标 SVG */
-const FillLikeIcon = '<svg viewBox="0 0 28 28"><path d="M23 3H5a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4V7a4 4 0 0 0-4-4z"/></svg>';
-
-/** 投币图标 SVG */
-const FillCoinIcon = '<svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="10"/></svg>';
-
-/** 收藏图标 SVG */
-const FillCollectIcon = '<svg viewBox="0 0 28 28"><path d="M14 2l3 9h9l-7 5 3 9-8-6-8 6 3-9-7-5h9z"/></svg>';
-
-/** 加号图标 SVG */
-const PlusIcon = '<svg viewBox="0 0 28 28"><path d="M14 2v24M2 14h24"/></svg>';
-
-/** 稍后再看图标 SVG */
-const SeeLaterIcon = '<svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="10"/><path d="M14 8v6l4 2"/></svg>';
-
-/** 星星图标 SVG */
-const StarIcon = '<svg viewBox="0 0 28 28"><path d="M14 2l3 9h9l-7 5 3 9-8-6-8 6 3-9-7-5h9z"/></svg>';
-
-/** 爱心图标 SVG */
-const LoveIcon = '<svg viewBox="0 0 28 28"><path d="M14 26s-9-6-9-13a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13z"/></svg>';
-
-/** 柠檬图标 SVG */
-const LemonIcon = '<svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="10"/></svg>';
-
-// ============================================
-// 类名常量（与既有实现保持一致）
-// ============================================
-
-const CLASS_NAMES = {
-  PLAYER_CMD_DM_WRAP: 'player-cmd-dm-wrap',
-  PLAYER_CMD_DM_INSIDE: 'player-cmd-dm-inside',
-  HL_GUIDE_THREE: 'hl-guide-three',
-  HL_GUIDE_THREE_LIKE: 'hl-guide-three-like',
-  HL_GUIDE_THREE_COIN: 'hl-guide-three-coin',
-  HL_GUIDE_THREE_COLLECT: 'hl-guide-three-collect',
-  HL_GUIDE_FOLLOW: 'hl-guide-follow',
-  HL_GUIDE_FOLLOW_0: 'hl-guide-follow-0',
-  HL_GUIDE_FOLLOW_1: 'hl-guide-follow-1',
-  HL_LINK: 'hl-link',
-  HL_CIRCLE: 'hl-circle',
-  HL_LINK_LEFT: 'hl-link-left',
-  HL_LINK_ICON: 'hl-link-icon',
-  HL_LINK_MSG: 'hl-link-msg',
-  HL_LINK_LINE: 'hl-link-line',
-  HL_LINK_RIGHT: 'hl-link-right',
-  HL_LINK_WATCHLATER: 'hl-link-watchlater',
-  HL_LINK_WATCHLATER_ICON: 'hl-link-watchlater-icon',
-  HL_VOTE: 'hl-vote',
-  HL_VOTE_QUESTION: 'hl-vote-question',
-  HL_VOTE_AN: 'hl-vote-an',
-  HL_VOTE_AN_BG: 'hl-vote-an-bg',
-  HL_VOTE_AN_BG_BUFFER: 'hl-vote-an-bg-buffer',
-  HL_VOTE_AN_TEXT: 'hl-vote-an-text',
-  HL_VOTE_AN_TEXT_INDEX: 'hl-vote-an-text-index',
-  HL_VOTE_AN_TEXT_DOC: 'hl-vote-an-text-doc',
-  HL_SCORE: 'hl-score',
-  HL_SCORE_TITLE: 'score-title',
-  HL_SCORE_AREA: 'hl-score-area',
-  HL_SCORE_AREA_ITEM: 'hl-score-area-item',
-  HL_EDITOR: 'hl-editor',
-  HL_EDITOR_NO_GUIDE_THREE: 'hl-editor-no-guide-three',
-  HL_EDITOR_NO_FOLLOW: 'hl-editor-no-follow',
-  HL_HIDE: 'hl-hide',
-  HL_CARD_HIDE: 'hl-card-hide',
-} as const;
+/** 互动插件完整 API 接口 */
+export interface InteractionPluginAPI extends Plugin {
+  /** 添加引导卡片 */
+  addGuide(item: InteractionGuideThree): void;
+  /** 添加链接卡片 */
+  addLink(item: InteractionLink): void;
+  /** 添加投票卡片 */
+  addVote(item: InteractionVote): void;
+  /** 添加评分卡片 */
+  addScore(item: InteractionScore): void;
+  /** 获取容器 */
+  getContainer(): HTMLElement | null;
+  /** 关闭卡片 */
+  closeCard(type: CardType, index: number): void;
+  /** 获取状态 */
+  getStatus(): InteractionCard;
+  /** 更新数据 */
+  updateData(data: Partial<InteractionCard>): void;
+}
 
 // ============================================
 // 交互插件类
 // ============================================
 
-class InteractionPluginClass implements Plugin {
+class InteractionPluginClass implements InteractionPluginAPI {
   readonly name = 'interaction';
   readonly version = '1.0.0';
   readonly description = '互动命令插件';
+  readonly options?: PluginOptions;
 
   private container: HTMLElement | null = null;
-  private cmdDmWrapElement: HTMLDivElement | null = null;
-  private dmInsideElement: HTMLDivElement | null = null;
+  private dmInsideElement: HTMLElement | null = null;
 
   private config: InteractionResolvedConfig;
   private interactCard: InteractionCard = {
@@ -215,10 +109,22 @@ class InteractionPluginClass implements Plugin {
     voteList: [],
     scoreList: [],
   };
-  private currentTime = 0;
 
-  // 事件发射器
-  private emit: ((event: string, data?: unknown) => void) | null = null;
+  // 子插件实例列表
+  private guidePlugins: GuidePlugin[] = [];
+  private linkPlugins: LinkPlugin[] = [];
+  private votePlugins: VotePlugin[] = [];
+  private scorePlugins: ScorePlugin[] = [];
+
+  // 拖拽清理函数列表
+  private dragCleanups: DragCleanup[] = [];
+
+  // 时间追踪（用于 diffAlgorithm）
+  private currentTime = 0;
+  private prevTime = 0;
+
+  // 事件取消订阅
+  private unsubscribers: Array<() => void> = [];
 
   constructor(config?: InteractionPluginConfig) {
     this.config = {
@@ -238,448 +144,402 @@ class InteractionPluginClass implements Plugin {
     // 初始化数据
     if (config?.data) {
       this.interactCard = {
-        guideList: config.data.guideList || [],
-        linkList: config.data.linkList || [],
-        voteList: config.data.voteList || [],
-        scoreList: config.data.scoreList || [],
+        guideList: config.data.guideList ?? [],
+        linkList: config.data.linkList ?? [],
+        voteList: config.data.voteList ?? [],
+        scoreList: config.data.scoreList ?? [],
       };
     }
+
+    this.options = undefined;
   }
 
-  install(player: unknown): void {
-    const playerContainer = hasContainerProperty(player) ? player.container : undefined;
-    const playerEvents = hasPlayerEvents(player) ? player.events : undefined;
+  install(player: VideoPlayer): void {
+    if (!isBrowser()) return;
 
-    if (playerContainer) {
-      this.container = playerContainer;
-      this.createContainer();
-    }
+    const events: PlayerEventBus = player.events;
 
-    // 保存事件发射器
-    if (playerEvents) {
-      this.emit = (event: string, data?: unknown) => playerEvents.emit(event, data);
+    const unsubMounted = events.on(PlayerEventEnum.MOUNTED, (data): void => {
+      if (data.container) {
+        this.container = data.container;
+        // 查找 .player-cmd-dm-inside 容器（不自行创建）
+        this.dmInsideElement = data.container.querySelector('.player-cmd-dm-inside') ?? null;
 
-      // 监听播放器事件
-      playerEvents.on('player:mounted', (data: unknown) => {
-        if (hasContainerProperty(data) && data.container && !this.container) {
-          this.container = data.container;
-          this.createContainer();
+        // 渲染初始数据
+        if (this.dmInsideElement) {
+          this.renderInitialData();
         }
+      }
+    });
+    this.unsubscribers.push(unsubMounted);
+
+    // 订阅 TIME_UPDATE 事件：使用 diffAlgorithm 更新卡片可见性
+    const unsubTimeUpdate = events.on(PlayerEventEnum.TIME_UPDATE, (data): void => {
+      this.handleTimeUpdate(data.time);
+    });
+    this.unsubscribers.push(unsubTimeUpdate);
+
+    // 订阅 INTERACTION_LIKE 事件
+    const unsubLike = events.on(PlayerEventEnum.INTERACTION_LIKE, (): void => {
+      this.config.onLike?.();
+    });
+    this.unsubscribers.push(unsubLike);
+
+    // 订阅 INTERACTION_COIN 事件
+    const unsubCoin = events.on(PlayerEventEnum.INTERACTION_COIN, (): void => {
+      this.config.onCoin?.();
+    });
+    this.unsubscribers.push(unsubCoin);
+
+    // 订阅 INTERACTION_COLLECT 事件
+    const unsubCollect = events.on(PlayerEventEnum.INTERACTION_COLLECT, (): void => {
+      this.config.onCollect?.();
+    });
+    this.unsubscribers.push(unsubCollect);
+
+    // 订阅 INTERACTION_FOLLOW 事件
+    const unsubFollow = events.on(PlayerEventEnum.INTERACTION_FOLLOW, (): void => {
+      this.config.onFollow?.();
+    });
+    this.unsubscribers.push(unsubFollow);
+
+    // 订阅 INTERACTION_LINK_CLICK 事件
+    const unsubLinkClick = events.on(PlayerEventEnum.INTERACTION_LINK_CLICK, (): void => {
+      // 链接点击回调由子插件内部触发
+    });
+    this.unsubscribers.push(unsubLinkClick);
+
+    // 订阅 INTERACTION_VOTE_SELECT 事件
+    const unsubVoteSelect = events.on(PlayerEventEnum.INTERACTION_VOTE_SELECT, (data): void => {
+      this.config.onVoteSelect?.(data.voteIndex, data.optionIndex);
+    });
+    this.unsubscribers.push(unsubVoteSelect);
+
+    // 订阅 INTERACTION_SCORE_SELECT 事件
+    const unsubScoreSelect = events.on(PlayerEventEnum.INTERACTION_SCORE_SELECT, (data): void => {
+      this.config.onScoreSelect?.(data.scoreIndex, data.value);
+    });
+    this.unsubscribers.push(unsubScoreSelect);
+
+    // 订阅 INTERACTION_CARD_CLOSE 事件
+    const unsubCardClose = events.on(PlayerEventEnum.INTERACTION_CARD_CLOSE, (data): void => {
+      this.config.onCardClose?.(data.type as CardType, data.index);
+    });
+    this.unsubscribers.push(unsubCardClose);
+
+    // 订阅 INTERACTION_POSITION_CHANGE 事件
+    const unsubPositionChange = events.on(PlayerEventEnum.INTERACTION_POSITION_CHANGE, (data): void => {
+      this.config.onPositionChange?.({
+        type: data.type as CardType,
+        index: data.index,
+        top: data.top,
+        left: data.left,
       });
-
-      // 监听时间变更
-      playerEvents.on('video:timeUpdate', (data: unknown) => {
-        if (typeof data === 'object' && data !== null && 'currentTime' in data && typeof data.currentTime === 'number') {
-          this.currentTimeChange(data.currentTime);
-        }
-      });
-
-      // 监听交互控制事件
-      this.bindControlEvents(playerEvents);
-    }
-
-    // 发射初始化完成事件
-    this.emit?.('interaction:initialized', { data: this.interactCard });
-  }
-
-  /**
-   * 创建容器
-   */
-  private createContainer(): void {
-    if (!this.container) return;
-
-    this.cmdDmWrapElement = document.createElement('div');
-    this.cmdDmWrapElement.className = CLASS_NAMES.PLAYER_CMD_DM_WRAP;
-
-    this.dmInsideElement = document.createElement('div');
-    this.dmInsideElement.className = CLASS_NAMES.PLAYER_CMD_DM_INSIDE;
-    this.dmInsideElement.style.cssText = 'width: 100%; height: 100%;';
-
-    this.cmdDmWrapElement.appendChild(this.dmInsideElement);
-    this.container.appendChild(this.cmdDmWrapElement);
-
-    // 渲染初始数据
-    this.renderInitialData();
-  }
-
-  /**
-   * 渲染初始数据
-   */
-  private renderInitialData(): void {
-    this.interactCard.guideList.forEach((item, index) => {
-      this.addGuideThree(item, index);
     });
-    this.interactCard.linkList.forEach((item, index) => {
-      this.addLink(item, index);
-    });
-    this.interactCard.voteList.forEach((item, index) => {
-      this.addVote(item, index);
-    });
-    this.interactCard.scoreList.forEach((item, index) => {
-      this.addScore(item, index);
-    });
-  }
-
-  /**
-   * 绑定控制事件
-   */
-  private bindControlEvents(events: { on: (event: string, handler: (data: unknown) => void) => () => void }): void {
-    // 添加点赞关注
-    events.on('interaction:addGuide', (data: unknown) => {
-      if (isGuideItemData(data)) {
-        this.addGuideThree(data.item);
-      }
-    });
-
-    // 添加链接
-    events.on('interaction:addLink', (data: unknown) => {
-      if (isLinkItemData(data)) {
-        this.addLink(data.item);
-      }
-    });
-
-    // 添加投票
-    events.on('interaction:addVote', (data: unknown) => {
-      if (isVoteItemData(data)) {
-        this.addVote(data.item);
-      }
-    });
-
-    // 添加评分
-    events.on('interaction:addScore', (data: unknown) => {
-      if (isScoreItemData(data)) {
-        this.addScore(data.item);
-      }
-    });
-
-    // 移除卡片
-    events.on('interaction:removeCard', (data: unknown) => {
-      if (hasTypeAndIndex(data) && typeof data.index === 'number') {
-        this.removeCard(data.type, data.index);
-      }
-    });
-
-    // 更新时间
-    events.on('interaction:currentTimeChange', (data: unknown) => {
-      if (typeof data === 'object' && data !== null && 'currentTime' in data && typeof data.currentTime === 'number') {
-        this.currentTimeChange(data.currentTime);
-      }
-    });
-
-    // 获取状态
-    events.on('interaction:getStatus', () => {
-      this.emit?.('interaction:status', this.getStatus());
-    });
+    this.unsubscribers.push(unsubPositionChange);
   }
 
   uninstall(): void {
-    // 清理所有卡片元素
-    this.interactCard.guideList.forEach((item) => {
-      if (item.element?.parentNode) {
-        item.element.parentNode.removeChild(item.element);
-      }
-    });
-    this.interactCard.linkList.forEach((item) => {
-      if (item.element?.parentNode) {
-        item.element.parentNode.removeChild(item.element);
-      }
-    });
-    this.interactCard.voteList.forEach((item) => {
-      if (item.element?.parentNode) {
-        item.element.parentNode.removeChild(item.element);
-      }
-    });
-    this.interactCard.scoreList.forEach((item) => {
-      if (item.element?.parentNode) {
-        item.element.parentNode.removeChild(item.element);
-      }
-    });
+    // 取消所有事件订阅
+    this.unsubscribers.forEach(unsub => unsub());
+    this.unsubscribers = [];
 
-    // 移除容器
-    if (this.cmdDmWrapElement && this.container) {
-      this.container.removeChild(this.cmdDmWrapElement);
-    }
+    // 清理拖拽
+    this.dragCleanups.forEach(cleanup => cleanup());
+    this.dragCleanups = [];
 
-    this.container = null;
-    this.cmdDmWrapElement = null;
+    // 销毁所有子插件
+    this.guidePlugins.forEach(p => p.destroy());
+    this.linkPlugins.forEach(p => p.destroy());
+    this.votePlugins.forEach(p => p.destroy());
+    this.scorePlugins.forEach(p => p.destroy());
+
+    this.guidePlugins = [];
+    this.linkPlugins = [];
+    this.votePlugins = [];
+    this.scorePlugins = [];
+
     this.dmInsideElement = null;
-    this.emit = null;
+    this.container = null;
   }
 
   // ==================== 渲染方法 ====================
 
   /**
-   * 获取评分图标
+   * 渲染初始数据
    */
-  private getScoreIcon(scoreType: InteractionType): string {
-    switch (scoreType) {
-      case 1:
-        return StarIcon;
-      case 2:
-        return LoveIcon;
-      case 3:
-        return LemonIcon;
-      default:
-        return StarIcon;
+  private renderInitialData(): void {
+    if (!this.dmInsideElement) return;
+
+    this.interactCard.guideList.forEach((item): void => {
+      this.addGuide(item);
+    });
+    this.interactCard.linkList.forEach((item): void => {
+      this.addLink(item);
+    });
+    this.interactCard.voteList.forEach((item): void => {
+      this.addVote(item);
+    });
+    this.interactCard.scoreList.forEach((item): void => {
+      this.addScore(item);
+    });
+  }
+
+  /**
+   * 添加点赞关注卡片（使用 GuidePlugin 子插件）
+   */
+  addGuide(item: InteractionGuideThree): void {
+    if (!this.dmInsideElement) return;
+
+    const plugin = new GuidePlugin(item);
+    plugin.render(this.dmInsideElement);
+    this.guidePlugins.push(plugin);
+
+    // 在编辑模式下绑定拖拽
+    if (this.config.isEdit) {
+      const element = this.getLastGuideElement();
+      if (element) {
+        const index = this.guidePlugins.length - 1;
+        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
+          item.top = top;
+          item.left = left;
+          this.config.onPositionChange?.({
+            type: 'guideThree',
+            index,
+            top,
+            left,
+          });
+        });
+        this.dragCleanups.push(cleanup);
+      }
     }
   }
 
   /**
-   * 初始化编辑器类名
+   * 添加外链卡片（使用 LinkPlugin 子插件）
    */
-  private initEditorClassName(type: number): string {
-    let className = `${CLASS_NAMES.HL_EDITOR} ${CLASS_NAMES.HL_CARD_HIDE}`;
-    if (type === 2) {
-      className += ` ${CLASS_NAMES.HL_EDITOR_NO_FOLLOW}`;
-    } else if (type === 3) {
-      className += ` ${CLASS_NAMES.HL_EDITOR_NO_GUIDE_THREE}`;
+  addLink(item: InteractionLink): void {
+    if (!this.dmInsideElement) return;
+
+    const plugin = new LinkPlugin(item);
+    plugin.render(this.dmInsideElement);
+    this.linkPlugins.push(plugin);
+
+    // 在编辑模式下绑定拖拽
+    if (this.config.isEdit) {
+      const element = this.getLastLinkElement();
+      if (element) {
+        const index = this.linkPlugins.length - 1;
+        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
+          item.top = top;
+          item.left = left;
+          this.config.onPositionChange?.({
+            type: 'link',
+            index,
+            top,
+            left,
+          });
+        });
+        this.dragCleanups.push(cleanup);
+      }
     }
-    return className;
   }
 
   /**
-   * 创建DOM元素
+   * 添加投票卡片（使用 VotePlugin 子插件）
    */
-  private createElement(html: string): HTMLDivElement {
-    const div = document.createElement('div');
-    div.innerHTML = html.trim();
-    const firstChild = div.firstChild;
-    if (firstChild instanceof HTMLDivElement) {
-      return firstChild;
+  addVote(item: InteractionVote): void {
+    if (!this.dmInsideElement) return;
+
+    const plugin = new VotePlugin(item);
+    plugin.render(this.dmInsideElement);
+    this.votePlugins.push(plugin);
+
+    // 在编辑模式下绑定拖拽
+    if (this.config.isEdit) {
+      const element = this.getLastVoteElement();
+      if (element) {
+        const index = this.votePlugins.length - 1;
+        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
+          item.top = top;
+          item.left = left;
+          this.config.onPositionChange?.({
+            type: 'vote',
+            index,
+            top,
+            left,
+          });
+        });
+        this.dragCleanups.push(cleanup);
+      }
     }
-    return document.createElement('div');
   }
 
   /**
-   * 添加点赞关注卡片
+   * 添加评分卡片（使用 ScorePlugin 子插件）
    */
-  addGuideThree(item: InteractionGuideThree, index?: number): HTMLDivElement {
-    const className = this.initEditorClassName(item.type || 1);
-    const html = `
-      <div class="${className}" style="--top: ${item.top}%; --left: ${item.left}%;">
-        <div class="${CLASS_NAMES.HL_GUIDE_THREE}">
-          <span class="${CLASS_NAMES.HL_GUIDE_THREE_LIKE} is_active">
-            ${FillLikeIcon}
-          </span>
-          <span class="${CLASS_NAMES.HL_GUIDE_THREE_COIN}">
-            ${FillCoinIcon}
-          </span>
-          <span class="${CLASS_NAMES.HL_GUIDE_THREE_COLLECT}">
-            ${FillCollectIcon}
-          </span>
-        </div>
-        <div class="${CLASS_NAMES.HL_GUIDE_FOLLOW} no-follow">
-          <span class="${CLASS_NAMES.HL_GUIDE_FOLLOW_0}">
-            ${PlusIcon}
-            <span>关注</span>
-          </span>
-          <span class="${CLASS_NAMES.HL_GUIDE_FOLLOW_1}">已关注</span>
-        </div>
-      </div>
-    `;
+  addScore(item: InteractionScore): void {
+    if (!this.dmInsideElement) return;
 
-    const element = this.createElement(html);
-    this.dmInsideElement?.appendChild(element);
+    const plugin = new ScorePlugin(item);
+    plugin.render(this.dmInsideElement);
+    this.scorePlugins.push(plugin);
 
-    // 绑定事件
-    const likeBtn = element.querySelector(`.${CLASS_NAMES.HL_GUIDE_THREE_LIKE}`);
-    const coinBtn = element.querySelector(`.${CLASS_NAMES.HL_GUIDE_THREE_COIN}`);
-    const collectBtn = element.querySelector(`.${CLASS_NAMES.HL_GUIDE_THREE_COLLECT}`);
-    const followBtn = element.querySelector(`.${CLASS_NAMES.HL_GUIDE_FOLLOW_0}`);
-
-    likeBtn?.addEventListener('click', () => {
-      this.config.onLike?.();
-      this.emit?.('interaction:like', {});
-    });
-
-    coinBtn?.addEventListener('click', () => {
-      this.config.onCoin?.();
-      this.emit?.('interaction:coin', {});
-    });
-
-    collectBtn?.addEventListener('click', () => {
-      this.config.onCollect?.();
-      this.emit?.('interaction:collect', {});
-    });
-
-    followBtn?.addEventListener('click', () => {
-      this.config.onFollow?.();
-      this.emit?.('interaction:follow', {});
-    });
-
-    const newItem: InteractionGuideThree = { ...item, element };
-    if (index !== undefined) {
-      this.interactCard.guideList[index] = newItem;
-    } else {
-      this.interactCard.guideList.push(newItem);
+    // 在编辑模式下绑定拖拽
+    if (this.config.isEdit) {
+      const element = this.getLastScoreElement();
+      if (element) {
+        const index = this.scorePlugins.length - 1;
+        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
+          item.top = top;
+          item.left = left;
+          this.config.onPositionChange?.({
+            type: 'score',
+            index,
+            top,
+            left,
+          });
+        });
+        this.dragCleanups.push(cleanup);
+      }
     }
+  }
 
-    return element;
+  // ==================== 时间更新与 diffAlgorithm ====================
+
+  /**
+   * 处理时间更新：使用 diffAlgorithm 增量更新卡片可见性
+   * 使用 binarySearchByTime 定位起始索引，updateCardsDiff 增量更新
+   */
+  private handleTimeUpdate(currentTime: number): void {
+    this.prevTime = this.currentTime;
+    this.currentTime = currentTime;
+
+    // 使用 binarySearchByTime 快速定位当前时间点在各类卡片列表中的位置
+    // 用于日志和调试追踪
+    const guideStartIndex = binarySearchByTime(this.interactCard.guideList, this.currentTime);
+    const linkStartIndex = binarySearchByTime(this.interactCard.linkList, this.currentTime);
+    const voteStartIndex = binarySearchByTime(this.interactCard.voteList, this.currentTime);
+    const scoreStartIndex = binarySearchByTime(this.interactCard.scoreList, this.currentTime);
+
+    // 使用 updateCardsDiff 对各类卡片进行增量 diff 更新
+    updateCardsDiff(
+      this.interactCard.guideList,
+      this.currentTime,
+      this.prevTime,
+      (card: InteractionGuideThree): void => {
+        const index = this.interactCard.guideList.indexOf(card);
+        if (index >= guideStartIndex && index < this.guidePlugins.length) {
+          this.guidePlugins[index].updateTime(this.currentTime);
+        }
+      }
+    );
+
+    updateCardsDiff(
+      this.interactCard.linkList,
+      this.currentTime,
+      this.prevTime,
+      (card: InteractionLink): void => {
+        const index = this.interactCard.linkList.indexOf(card);
+        if (index >= linkStartIndex && index < this.linkPlugins.length) {
+          this.linkPlugins[index].updateTime(this.currentTime);
+        }
+      }
+    );
+
+    updateCardsDiff(
+      this.interactCard.voteList,
+      this.currentTime,
+      this.prevTime,
+      (card: InteractionVote): void => {
+        const index = this.interactCard.voteList.indexOf(card);
+        if (index >= voteStartIndex && index < this.votePlugins.length) {
+          this.votePlugins[index].updateTime(this.currentTime);
+        }
+      }
+    );
+
+    updateCardsDiff(
+      this.interactCard.scoreList,
+      this.currentTime,
+      this.prevTime,
+      (card: InteractionScore): void => {
+        const index = this.interactCard.scoreList.indexOf(card);
+        if (index >= scoreStartIndex && index < this.scorePlugins.length) {
+          this.scorePlugins[index].updateTime(this.currentTime);
+        }
+      }
+    );
+  }
+
+  // ==================== 辅助方法 ====================
+
+  /**
+   * 获取最后一个 GuidePlugin 渲染的元素
+   */
+  private getLastGuideElement(): HTMLDivElement | null {
+    if (this.guidePlugins.length === 0) return null;
+    return this.getSubPluginElement(this.guidePlugins[this.guidePlugins.length - 1]);
   }
 
   /**
-   * 添加链接卡片
+   * 获取最后一个 LinkPlugin 渲染的元素
    */
-  addLink(item: InteractionLink, index?: number): HTMLDivElement {
-    const html = `
-      <div class="${CLASS_NAMES.HL_LINK} ${CLASS_NAMES.HL_CARD_HIDE}" style="--top: ${item.top}%; --left: ${item.left}%;">
-        <span class="${CLASS_NAMES.HL_CIRCLE}"></span>
-        <div class="${CLASS_NAMES.HL_LINK_LEFT}">
-          <div class="${CLASS_NAMES.HL_LINK_ICON}"></div>
-          <div class="${CLASS_NAMES.HL_LINK_MSG}">${item.link_content || '这是一个什么视频'}</div>
-        </div>
-        <div class="${CLASS_NAMES.HL_LINK_LINE}"></div>
-        <div class="${CLASS_NAMES.HL_LINK_RIGHT}">
-          <div class="${CLASS_NAMES.HL_LINK_WATCHLATER}">
-            <span class="${CLASS_NAMES.HL_LINK_WATCHLATER_ICON}">${SeeLaterIcon}</span>
-            <span>稍后再看</span>
-          </div>
-        </div>
-      </div>
-    `;
-
-    const element = this.createElement(html);
-    this.dmInsideElement?.appendChild(element);
-
-    // 绑定点击事件
-    element.addEventListener('click', () => {
-      this.config.onLinkClick?.(item);
-      this.emit?.('interaction:linkClick', { item });
-    });
-
-    // 关闭按钮事件
-    if (!this.config.isEdit) {
-      const closeBtn = element.querySelector(`.${CLASS_NAMES.HL_CIRCLE}`);
-      closeBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const idx = index ?? this.interactCard.linkList.length;
-        this.closeCard('link', idx);
-      });
-    }
-
-    const newItem: InteractionLink = { ...item, element };
-    if (index !== undefined) {
-      this.interactCard.linkList[index] = newItem;
-    } else {
-      this.interactCard.linkList.push(newItem);
-    }
-
-    return element;
+  private getLastLinkElement(): HTMLDivElement | null {
+    if (this.linkPlugins.length === 0) return null;
+    return this.getSubPluginElement(this.linkPlugins[this.linkPlugins.length - 1]);
   }
 
   /**
-   * 添加投票卡片
+   * 获取最后一个 VotePlugin 渲染的元素
    */
-  addVote(item: InteractionVote, index?: number): HTMLDivElement {
-    const optionsHtml = item.options.map((opt, idx) => `
-      <div class="${CLASS_NAMES.HL_VOTE_AN} hl-vote-an-flag-1" data-index="${idx}">
-        <div class="${CLASS_NAMES.HL_VOTE_AN_BG}">
-          <div class="${CLASS_NAMES.HL_VOTE_AN_BG_BUFFER}"></div>
-        </div>
-        <div class="${CLASS_NAMES.HL_VOTE_AN_TEXT}">
-          <div class="${CLASS_NAMES.HL_VOTE_AN_TEXT_INDEX}">${String.fromCharCode(65 + idx)}</div>
-          <div class="${CLASS_NAMES.HL_VOTE_AN_TEXT_DOC}">${opt.optionText}</div>
-        </div>
-      </div>
-    `).join('');
-
-    const html = `
-      <div class="${CLASS_NAMES.HL_VOTE}" style="--top: ${item.top}%; --left: ${item.left}%;">
-        <span class="${CLASS_NAMES.HL_CIRCLE}"></span>
-        <div class="${CLASS_NAMES.HL_VOTE_QUESTION}">${item.question}</div>
-        ${optionsHtml}
-      </div>
-    `;
-
-    const element = this.createElement(html);
-    this.dmInsideElement?.appendChild(element);
-
-    // 绑定选项点击事件
-    const optionElements = element.querySelectorAll(`.${CLASS_NAMES.HL_VOTE_AN}`);
-    optionElements.forEach((optEl, idx) => {
-      optEl.addEventListener('click', () => {
-        const itemIndex = index ?? this.interactCard.voteList.length - 1;
-        this.config.onVoteSelect?.(itemIndex, idx);
-        this.emit?.('interaction:voteSelect', { voteIndex: itemIndex, optionIndex: idx });
-      });
-    });
-
-    // 关闭按钮事件
-    if (!this.config.isEdit) {
-      const closeBtn = element.querySelector(`.${CLASS_NAMES.HL_CIRCLE}`);
-      closeBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const idx = index ?? this.interactCard.voteList.length;
-        this.closeCard('vote', idx);
-      });
-    }
-
-    const newItem: InteractionVote = { ...item, element };
-    if (index !== undefined) {
-      this.interactCard.voteList[index] = newItem;
-    } else {
-      this.interactCard.voteList.push(newItem);
-    }
-
-    return element;
+  private getLastVoteElement(): HTMLDivElement | null {
+    if (this.votePlugins.length === 0) return null;
+    return this.getSubPluginElement(this.votePlugins[this.votePlugins.length - 1]);
   }
 
   /**
-   * 添加评分卡片
+   * 获取最后一个 ScorePlugin 渲染的元素
    */
-  addScore(item: InteractionScore, index?: number): HTMLDivElement {
-    const scoreItems = Array.from({ length: 5 }, (_, i) => `
-      <div class="${CLASS_NAMES.HL_SCORE_AREA_ITEM}" data-val="${i + 1}">
-        <span>${this.getScoreIcon(item.scoreType)}</span>
-        <span>5</span>
-      </div>
-    `).join('');
-
-    const html = `
-      <div class="${CLASS_NAMES.HL_SCORE} ${CLASS_NAMES.HL_CARD_HIDE}" style="--top: ${item.top}%; --left: ${item.left}%; --scale: 1;">
-        <span class="${CLASS_NAMES.HL_CIRCLE}"></span>
-        <div class="${CLASS_NAMES.HL_SCORE_TITLE}">${item.title}</div>
-        <div class="${CLASS_NAMES.HL_SCORE_AREA}">${scoreItems}</div>
-        <div class="hl-score-result">平均 <span style="color: undefined;">NaN</span></div>
-        <div class="hl-score-count">0人参与</div>
-      </div>
-    `;
-
-    const element = this.createElement(html);
-    this.dmInsideElement?.appendChild(element);
-
-    // 绑定评分项点击事件
-    const scoreElements = element.querySelectorAll(`.${CLASS_NAMES.HL_SCORE_AREA_ITEM}`);
-    scoreElements.forEach((scoreEl, idx) => {
-      scoreEl.addEventListener('click', () => {
-        const itemIndex = index ?? this.interactCard.scoreList.length - 1;
-        const value = idx + 1;
-        this.config.onScoreSelect?.(itemIndex, value);
-        this.emit?.('interaction:scoreSelect', { scoreIndex: itemIndex, value });
-      });
-    });
-
-    // 关闭按钮事件
-    if (!this.config.isEdit) {
-      const closeBtn = element.querySelector(`.${CLASS_NAMES.HL_CIRCLE}`);
-      closeBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const idx = index ?? this.interactCard.scoreList.length;
-        this.closeCard('score', idx);
-      });
-    }
-
-    const newItem: InteractionScore = { ...item, element };
-    if (index !== undefined) {
-      this.interactCard.scoreList[index] = newItem;
-    } else {
-      this.interactCard.scoreList.push(newItem);
-    }
-
-    return element;
+  private getLastScoreElement(): HTMLDivElement | null {
+    if (this.scorePlugins.length === 0) return null;
+    return this.getSubPluginElement(this.scorePlugins[this.scorePlugins.length - 1]);
   }
 
-  // ==================== 显示控制 ====================
+  /**
+   * 从子插件获取其渲染的 DOM 元素
+   * 通过子插件的 element 属性获取其渲染的根元素
+   */
+  private getSubPluginElement(plugin: InteractionSubPlugin): HTMLDivElement | null {
+    // 子插件渲染后会在容器中创建元素，通过子插件类型和容器查找对应元素
+    const className = this.getSubPluginClassName(plugin);
+    if (!className || !this.dmInsideElement) return null;
+    const elements = this.dmInsideElement.querySelectorAll(`.${className}`);
+    const lastElement = elements[elements.length - 1];
+    return lastElement instanceof HTMLDivElement ? lastElement : null;
+  }
+
+  /**
+   * 根据子插件类型获取对应的 CSS 类名
+   */
+  private getSubPluginClassName(plugin: InteractionSubPlugin): string {
+    switch (plugin.type) {
+      case 'guide': return 'hl-guide';
+      case 'link': return 'hl-link';
+      case 'vote': return 'hl-vote';
+      case 'score': return 'hl-score';
+    }
+  }
+
+  // ==================== 公共 API ====================
+
+  /**
+   * 获取互动层容器元素
+   * @returns 容器元素，未挂载返回 null
+   */
+  getContainer(): HTMLElement | null {
+    return this.container;
+  }
 
   /**
    * 关闭卡片
@@ -702,91 +562,9 @@ class InteractionPluginClass implements Plugin {
     if (item) {
       item.isClose = true;
       item.closeTime = this.currentTime;
-      item.element?.classList.add(CLASS_NAMES.HL_CARD_HIDE);
       this.config.onCardClose?.(type, index);
-      this.emit?.('interaction:cardClose', { type, index });
     }
   }
-
-  /**
-   * 移除卡片
-   */
-  removeCard(type: CardType, index: number): void {
-    let list: unknown[] = [];
-    switch (type) {
-      case 'guideThree':
-        list = this.interactCard.guideList;
-        break;
-      case 'link':
-        list = this.interactCard.linkList;
-        break;
-      case 'vote':
-        list = this.interactCard.voteList;
-        break;
-      case 'score':
-        list = this.interactCard.scoreList;
-        break;
-    }
-
-    const item = list[index];
-    if (hasElementProperty(item) && item.element?.parentNode) {
-      item.element.parentNode.removeChild(item.element);
-    }
-    list.splice(index, 1);
-  }
-
-  /**
-   * 当前时间变更处理
-   */
-  currentTimeChange(currentTime: number): void {
-    this.currentTime = currentTime;
-
-    // 更新所有卡片的显示状态
-    this.displayItems(this.interactCard.guideList, currentTime);
-    this.displayItems(this.interactCard.linkList, currentTime);
-    this.displayItems(this.interactCard.voteList, currentTime);
-    this.displayItems(this.interactCard.scoreList, currentTime);
-
-    this.emit?.('interaction:currentTimeChange', { currentTime });
-  }
-
-  /**
-   * 显示项目
-   */
-  private displayItems<T extends { timeStart?: number; timeEnd?: number; closeTime?: number; isClose?: boolean; element?: HTMLDivElement }>(
-    list: T[],
-    currTimePoint: number
-  ): void {
-    list.forEach((item) => {
-      // 处理关闭时间逻辑
-      if (item.closeTime !== undefined && item.closeTime > currTimePoint) {
-        item.isClose = false;
-      }
-
-      // 如果已关闭且未到关闭时间，跳过
-      if (item.closeTime !== undefined && item.closeTime <= currTimePoint && item.isClose === true) {
-        return;
-      }
-
-      // 根据时间范围控制显示状态
-      if (item.timeStart !== undefined && item.timeEnd !== undefined) {
-        if (currTimePoint < item.timeEnd && item.timeStart <= currTimePoint) {
-          // 在显示时间范围内：完全显示
-          item.element?.classList.remove(CLASS_NAMES.HL_CARD_HIDE, CLASS_NAMES.HL_HIDE);
-        } else if (item.timeEnd - 0.6 <= currTimePoint && item.timeEnd + 0.6 > currTimePoint) {
-          // 在消失动画时间内：显示消失动画
-          item.element?.classList.remove(CLASS_NAMES.HL_CARD_HIDE);
-          item.element?.classList.add(CLASS_NAMES.HL_HIDE);
-        } else if (currTimePoint < item.timeStart - 0.6 || item.timeEnd + 0.6 < currTimePoint) {
-          // 在显示范围外：完全隐藏
-          item.element?.classList.remove(CLASS_NAMES.HL_HIDE);
-          item.element?.classList.add(CLASS_NAMES.HL_CARD_HIDE);
-        }
-      }
-    });
-  }
-
-  // ==================== 公共 API ====================
 
   /**
    * 获取状态
@@ -799,6 +577,22 @@ class InteractionPluginClass implements Plugin {
    * 更新数据
    */
   updateData(data: Partial<InteractionCard>): void {
+    // 销毁旧的子插件
+    this.guidePlugins.forEach(p => p.destroy());
+    this.linkPlugins.forEach(p => p.destroy());
+    this.votePlugins.forEach(p => p.destroy());
+    this.scorePlugins.forEach(p => p.destroy());
+
+    this.guidePlugins = [];
+    this.linkPlugins = [];
+    this.votePlugins = [];
+    this.scorePlugins = [];
+
+    // 清理拖拽
+    this.dragCleanups.forEach(cleanup => cleanup());
+    this.dragCleanups = [];
+
+    // 更新数据
     if (data.guideList) {
       this.interactCard.guideList = data.guideList;
     }
@@ -811,13 +605,30 @@ class InteractionPluginClass implements Plugin {
     if (data.scoreList) {
       this.interactCard.scoreList = data.scoreList;
     }
-    this.emit?.('interaction:dataUpdate', { data: this.interactCard });
+
+    // 重新渲染
+    this.renderInitialData();
   }
 }
 
 /**
  * 交互插件工厂函数
+ *
+ * @param config - 插件配置
+ * @returns Plugin 实例
+ *
+ * @example
+ * plugins: [
+ *   InteractionPlugin({
+ *     isEdit: false,
+ *     onLike: () => console.log('liked'),
+ *     onVoteSelect: (voteIndex, optionIndex) => console.log(voteIndex, optionIndex)
+ *   })
+ * ]
  */
-export function InteractionPlugin(config?: InteractionPluginConfig): Plugin {
+export function InteractionPlugin(config?: InteractionPluginConfig): InteractionPluginAPI {
   return new InteractionPluginClass(config);
 }
+
+// 重新导出类型
+export type { InteractionPluginConfig } from './types';

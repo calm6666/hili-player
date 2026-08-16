@@ -7,6 +7,8 @@
  */
 
 import type { VideoPlayer } from '@/hili-player/index';
+import type { PlayerEventBus } from '@/core/events';
+export type { PlayerEventBus };
 
 /**
  * 插件接口
@@ -47,6 +49,12 @@ export interface Plugin {
    * 插件被禁用时调用
    */
   disable?(): void;
+
+  /**
+   * 加载流媒体（可选，仅流媒体插件实现）
+   * @param config - 流媒体配置
+   */
+  load?(config: unknown): void;
 }
 
 /**
@@ -85,34 +93,6 @@ export interface StateManager {
 }
 
 /**
- * 事件总线接口
- * 提供跨组件/插件的事件通信机制
- */
-export interface EventBus {
-  /**
-   * 监听事件
-   * @param event - 事件名称
-   * @param handler - 事件处理函数
-   * @returns 取消监听的函数
-   */
-  on<T>(event: string, handler: (payload: T) => void): () => void;
-
-  /**
-   * 取消监听事件
-   * @param event - 事件名称
-   * @param handler - 事件处理函数
-   */
-  off<T>(event: string, handler: (payload: T) => void): void;
-
-  /**
-   * 触发事件
-   * @param event - 事件名称
-   * @param payload - 事件数据（可选）
-   */
-  emit<T>(event: string, payload?: T): void;
-}
-
-/**
  * 钩子系统接口
  * 提供可扩展的钩子机制
  */
@@ -144,7 +124,7 @@ export interface PluginContext {
   /** 状态管理器 */
   state: StateManager;
   /** 事件总线 */
-  events: EventBus;
+  events: PlayerEventBus;
   /** 钩子系统 */
   hooks: HookSystem;
   /** 日志输出函数 */

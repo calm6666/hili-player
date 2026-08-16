@@ -56,11 +56,19 @@ export interface StreamStats {
 }
 
 /**
+ * 清单源对象类型
+ * 用于对象注入模式，当 StreamConfig.url 为对象时使用
+ * 可以是 MediaManifest 格式或直接包含 variants/audioGroups 的对象
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export type MediaManifestSource = object;
+
+/**
  * 流媒体配置接口
  */
 export interface StreamConfig {
-  /** 流媒体 URL */
-  url: string;
+  /** 流媒体 URL 或清单对象（用于对象注入模式） */
+  url: string | MediaManifestSource;
   /** 流媒体格式 */
   format: StreamFormatEnum;
   /** 是否直播 */
@@ -68,7 +76,7 @@ export interface StreamConfig {
   /** 开始播放时间 */
   startTime?: number;
   /** 自定义配置 */
-  custom?: Record<string, unknown>;
+  custom?: Record<string, string | number | boolean | object | null>;
 }
 
 /**

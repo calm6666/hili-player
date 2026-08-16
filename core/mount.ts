@@ -7,8 +7,43 @@
  * 支持服务端渲染(SSR)环境
  */
 
-import type { VNode, VNodeAttrs, Lifecycle } from '@/types';
-import { isBrowser } from '@/utils';
+import type {
+  VNode,
+  VNodeAttrs,
+  Lifecycle,
+  Ref,
+  RefValue,
+  DirectiveFn,
+} from "@/types";
+import { isBrowser } from "@/utils";
+import { safeCall, ErrorSource, isDev } from "./warning";
+import { applyStyle, normalizeClass } from "./normalize";
+
+function isRefObject(value: unknown): value is Ref<unknown> {
+  return typeof value === "object" && value !== null && "current" in value;
+}
+
+/**
+ * 需要直接赋值到 DOM property 的属性白名单
+ * 这些属性用 setAttribute 设置后行为异常或不生效：
+ * - value：setAttribute 不会更新当前值，且不影响 form reset
+ * - checked/selected：setAttribute 设置的是默认值而非当前值
+ * - disabled/readOnly：setAttribute 会被视为 true（即使值为 false）
+ * - textContent/innerHTML：setAttribute 无法设置这些 property
+ */
+const DOM_PROPERTIES = new Set<string>([
+  "value",
+  "checked",
+  "selected",
+  "disabled",
+  "readOnly",
+  "defaultValue",
+  "defaultChecked",
+  "defaultSelected",
+  "indeterminate",
+  "textContent",
+  "innerHTML",
+]);
 
 /**
  * 将虚拟节点挂载到容器元素
@@ -27,9 +62,19 @@ export function mount(vnode: VNode | string, container: HTMLElement): void {
    * 仅触发生命周期钩子（如果存在）
    */
   if (!isBrowser()) {
-    invokeLifecycle(vnode, 'onBeforeMount');
-    invokeLifecycle(vnode, 'onMounted');
+    invokeLifecycle(vnode, "onBeforeMount");
+    invokeLifecycle(vnode, "onMounted");
     return;
+  }
+
+  /**
+   * 开发环境检测重复挂载
+   * 同一 VNode 被多次 mount 会导致状态污染和事件监听累积
+   */
+  if (typeof vnode === "object" && vnode._mounted && isDev()) {
+    console.warn(
+      "[HiliFramework/mount] 检测到 VNode 重复挂载，同一 VNode 对象不应被多次 mount",
+    );
   }
 
   /**
@@ -39,16 +84,29 @@ export function mount(vnode: VNode | string, container: HTMLElement): void {
   const el = materialize(vnode);
 
   /**
+   * 触发 onBeforeMount 生命周期钩子
+   * 在 DOM 插入容器之前调用，此时组件可做最后的修改/拦截
+   * 与 Vue3 的 onBeforeMount 语义一致：DOM 即将挂载但尚未插入文档
+   */
+  invokeLifecycle(vnode, "onBeforeMount");
+
+  /**
    * 将生成的 DOM 插入容器
    */
   container.appendChild(el);
 
   /**
-   * 触发生命周期钩子
-   * 先触发 onBeforeMount，再触发 onMounted
+   * 标记 VNode 已挂载
    */
-  invokeLifecycle(vnode, 'onBeforeMount');
-  invokeLifecycle(vnode, 'onMounted');
+  if (typeof vnode === "object") {
+    vnode._mounted = true;
+  }
+
+  /**
+   * 触发 onMounted 生命周期钩子
+   * DOM 已插入容器，组件可以安全地访问 DOM 元素
+   */
+  invokeLifecycle(vnode, "onMounted");
 }
 
 /**
@@ -72,8 +130,24 @@ export function materialize(vnode: VNode | string): Node {
    * 处理文本节点
    * 字符串直接创建为文本节点
    */
-  if (typeof vnode === 'string') {
+  if (typeof vnode === "string") {
     return document.createTextNode(vnode);
+  }
+
+  /**
+   * Fragment 片段处理
+   * fragment 标签不产生真实 DOM 元素，只创建 DocumentFragment 包裹子节点
+   * 与 SSR 中的 renderElementToString 行为一致
+   */
+  if (String(vnode.tag).toLowerCase() === "fragment") {
+    const fragment = document.createDocumentFragment();
+    for (const child of vnode.children) {
+      if (typeof child !== "string" && child.__parent === undefined) {
+        child.__parent = vnode;
+      }
+      fragment.appendChild(materialize(child));
+    }
+    return fragment;
   }
 
   /**
@@ -86,23 +160,36 @@ export function materialize(vnode: VNode | string): Node {
    * 创建元素节点
    * 根据是否有命名空间选择创建方法
    */
-  const el = ns !== undefined
-    ? document.createElementNS(ns, vnode.tag as string)
-    : document.createElement(vnode.tag as string);
+  const el =
+    ns !== undefined
+      ? document.createElementNS(ns, String(vnode.tag))
+      : document.createElement(String(vnode.tag));
 
   /**
    * 应用属性到元素
    * 包括 HTML 属性、事件监听、指令等
+   * 注意：SVG 元素（如 <path>）是 SVGElement 而非 HTMLElement，
+   * 必须用 el instanceof Element 判断，否则 SVG 元素的属性（如 d、viewBox）
+   * 永远不会被设置，导致 SVG 渲染为空标签
    */
-  applyAttrs(el as HTMLElement, vnode.attrs, vnode);
+  const domEl = el instanceof Element ? el : undefined;
+  if (domEl) {
+    applyAttrs(domEl, vnode.attrs, vnode);
+  }
 
   /**
    * 递归物化并挂载子节点
    * 使用 DocumentFragment 批量插入，减少重排次数
+   *
+   * __parent 由 h() 在创建 VNode 时设置，这里只在未设置时补充
+   * 避免多次 mount 同一 VNode 树时覆盖已有的 __parent 链
    */
   if (vnode.children.length > 0) {
     const fragment = document.createDocumentFragment();
     for (const child of vnode.children) {
+      if (typeof child !== "string" && child.__parent === undefined) {
+        child.__parent = vnode;
+      }
       fragment.appendChild(materialize(child));
     }
     el.appendChild(fragment);
@@ -111,8 +198,11 @@ export function materialize(vnode: VNode | string): Node {
   /**
    * 保存真实 DOM 引用到虚拟节点
    * 便于后续直接操作
+   * SVG 元素也保存引用（SVGElement 继承自 Element）
    */
-  vnode.el = el as HTMLElement;
+  if (domEl) {
+    vnode.el = domEl;
+  }
 
   return el;
 }
@@ -128,8 +218,8 @@ function createMockNode(vnode: VNode | string): Node {
   /**
    * 文本节点直接返回空文本节点模拟
    */
-  if (typeof vnode === 'string') {
-    return { nodeType: Node.TEXT_NODE, textContent: vnode } as unknown as Node;
+  if (typeof vnode === "string") {
+    return { nodeType: Node.TEXT_NODE, textContent: vnode } as Node;
   }
 
   /**
@@ -157,7 +247,7 @@ function createMockNode(vnode: VNode | string): Node {
       toggle: () => false,
       contains: () => false,
     },
-  } as unknown as HTMLElement;
+  } as unknown as Element | HTMLElement | SVGElement;
 
   /**
    * 保存模拟 DOM 引用到虚拟节点
@@ -173,28 +263,30 @@ function createMockNode(vnode: VNode | string): Node {
     }
   }
 
-  return mockEl as unknown as Node;
+  return mockEl;
+}
+
+// 类型守卫：将 entry 收窄为 [DirectiveFn, unknown]
+function isDirectiveEntry(value: unknown): value is [DirectiveFn, unknown] {
+  return (
+    Array.isArray(value) && value.length >= 2 && typeof value[0] === "function"
+  );
 }
 
 /**
  * 应用属性到 DOM 元素
  * 处理各种类型的属性：普通属性、事件、样式、指令、ref 等
+ * 支持 HTML 元素和 SVG 元素（SVGElement 继承自 Element）
  *
- * @param el - 目标 DOM 元素
+ * @param el - 目标 DOM 元素（HTMLElement 或 SVGElement）
  * @param attrs - 属性对象
  * @param vnode - 所属虚拟节点（用于存储清理函数）
  */
 export function applyAttrs(
-  el: HTMLElement,
+  el: Element | HTMLElement | SVGElement,
   attrs: VNodeAttrs,
-  vnode: VNode
+  vnode: VNode,
 ): void {
-  /**
-   * 判断是否为 SVG 元素
-   * SVG 元素需要使用 setAttribute 设置属性
-   */
-  const isSvg = el.namespaceURI === 'http://www.w3.org/2000/svg';
-
   /**
    * 清理函数数组
    * 用于存储事件监听和指令的清理函数
@@ -202,28 +294,44 @@ export function applyAttrs(
   const cleanups: (() => void)[] = [];
 
   /**
-   * 第一步：先处理 ref
-   * 支持两种形式：
-   * 1. 回调函数：ref: (el) => { element = el }
-   * 2. 直接绑定对象：ref: elementRef，其中 elementRef = { current: null }
-   *    h函数内部会将 el 赋值给 elementRef.current
-   *
-   * 确保在事件绑定前，ref 已经被设置
-   * 这样事件处理函数中可以使用 ref 获取的元素
+   * 第一步：优先处理编译期预分类的 __ref（如果存在）
+   * 编译期：vite-plugin-hili-compile 将 ref 重命名为 __ref
+   * 运行时：优先读取 __ref，fallback 到 ref
    */
-  const refValue = attrs.ref;
+  const refValue = attrs.__ref ?? attrs.ref;
   if (refValue !== undefined && refValue !== null) {
-    if (typeof refValue === 'function') {
-      // 回调函数形式
-      (refValue as (el: HTMLElement) => void)(el);
-    } else if (typeof refValue === 'object' && 'current' in refValue) {
-      // 直接绑定对象形式 { current: null }
-      (refValue as { current: HTMLElement | null }).current = el;
+    if (typeof refValue === "function") {
+      (refValue as RefValue)(el, vnode);
+    } else if (isRefObject(refValue)) {
+      refValue.current = el;
     }
   }
 
   /**
-   * 第二步：处理其他属性
+   * 第二步：优先处理编译期预分类的 __events（如果存在）
+   * 编译期：vite-plugin-hili-compile 将 onXxx 事件提取为 __events 对象
+   * 运行时：直接遍历 __events 绑定事件，跳过属性遍历中的 startsWith 判断
+   */
+  const eventsValue = attrs.__events;
+  if (
+    eventsValue !== undefined &&
+    eventsValue !== null &&
+    typeof eventsValue === "object"
+  ) {
+    const events = eventsValue as Record<string, EventListener>;
+    for (const eventName in events) {
+      if (Object.prototype.hasOwnProperty.call(events, eventName)) {
+        const handler = events[eventName];
+        if (typeof handler === "function") {
+          el.addEventListener(eventName, handler);
+          cleanups.push(() => el.removeEventListener(eventName, handler));
+        }
+      }
+    }
+  }
+
+  /**
+   * 第三步：处理其他属性
    */
   for (const key in attrs) {
     if (!Object.prototype.hasOwnProperty.call(attrs, key)) continue;
@@ -236,66 +344,79 @@ export function applyAttrs(
     if (value === null || value === undefined) continue;
 
     /**
-     * 跳过已处理的 ref
+     * 跳过已处理的 ref / __ref / __events
      */
-    if (key === 'ref') continue;
+    if (key === "ref" || key === "__ref" || key === "__events") continue;
 
     /**
      * 处理指令数组
      * 二维数组格式：[[directiveFn, value], ...]
      * 每个指令执行后可能返回清理函数
      */
-    if (key === 'directives' && Array.isArray(value)) {
-      for (const [dir, val] of value as [((el: HTMLElement, val: unknown) => (() => void) | undefined), unknown][]) {
-        const cleanup = dir(el, val);
-        if (cleanup !== undefined) cleanups.push(cleanup);
+    if (key === "directives" && Array.isArray(value)) {
+      for (const entry of value) {
+        if (!isDirectiveEntry(entry)) continue; // 类型收窄，过滤非法 entry
+        const [dir, val] = entry; // 安全解构，不再有 any 报错
+        const cleanup = dir(el, val); //,安全调用
+        if (cleanup !== undefined) {
+          cleanups.push(cleanup);
+        }
       }
-    }
-    /**
-     * 处理 SVG 内容注入
-     * 安全地解析并插入 SVG 字符串
-     */
-    else if (key === 'svgContent' && typeof value === 'string') {
+    } else if (key === "svgContent" && typeof value === "string") {
+      /**
+       * 处理 SVG 内容注入
+       * 安全地解析并插入 SVG 字符串
+       */
       const fragment = parseSafeSVG(value);
       el.appendChild(fragment);
-    }
-    /**
-     * 处理事件监听
-     * 以 'on' 开头的属性视为事件处理函数
-     */
-    else if (key.startsWith('on') && typeof value === 'function') {
+    } else if (key === "style") {
+      if ("style" in el) {
+        const raw = attrs[key];
+        if (typeof raw === "string" || (typeof raw === "object" && raw !== null && !Array.isArray(raw))) {
+          applyStyle(el as HTMLElement | SVGElement, raw);
+        }
+      }
+    } else if (key.startsWith("on") && typeof value === "function") {
       const event = key.slice(2).toLowerCase();
-      const handler = value as EventListener;
+      const handler: EventListener = <EventListener>value;
       el.addEventListener(event, handler);
       cleanups.push(() => el.removeEventListener(event, handler));
-    }
-    /**
-     * 处理样式对象
-     * 支持传入对象形式的内联样式
-     */
-    else if (key === 'style' && typeof value === 'object' && !Array.isArray(value)) {
-      Object.assign(el.style, value as Record<string, string>);
-    }
-    /**
-     * 处理 className（映射为 class）
-     */
-    else if (key === 'className') {
-      el.setAttribute('class', String(value));
-    }
-    /**
-     * 处理普通属性
-     * SVG 元素或 class 属性使用 setAttribute
-     * 其他属性优先使用 DOM 属性，不存在则使用 setAttribute
-     */
-    else {
-      if (isSvg || key === 'class') {
-        el.setAttribute(key, String(value));
-      } else if (key in el) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        (el as unknown as Record<string, unknown>)[key] = value;
+    } else if (key === "className" || key === "class") {
+      /**
+       * 处理 class / className（统一入口，支持字符串/数组/对象）
+       *
+       * normalizeClass 处理：
+       * - 'foo bar'              → 'foo bar'
+       * - ['foo', { active: true }] → 'foo active'
+       * - { active: true, hidden: false } → 'active'
+       * - null / undefined       → ''（不设置属性）
+       */
+      const cls = normalizeClass(value as Parameters<typeof normalizeClass>[0]);
+      if (cls) {
+        el.setAttribute("class", cls);
       } else {
+        el.removeAttribute("class");
+      }
+    } else if (DOM_PROPERTIES.has(key)) {
+      /**
+       * 处理需要直接赋值的 DOM property
+       * value/checked/selected 等属性用 setAttribute 不生效或行为异常，
+       * 必须直接赋值到 DOM 元素的对应 property 上
+       * 参考 React 的实现：对这些属性使用 el[key] = value
+       */
+      try {
+        (el as unknown as Record<string, unknown>)[key] = value;
+      } catch {
+        /** 某些只读 property 赋值会抛异常，fallback 到 setAttribute */
         el.setAttribute(key, String(value));
       }
+    } else {
+      /**
+       * 处理普通属性
+       * SVG 元素或 class 属性使用 setAttribute
+       * 其他属性优先使用 DOM 属性，不存在则使用 setAttribute
+       */
+      el.setAttribute(key, String(value));
     }
   }
 
@@ -318,13 +439,13 @@ function parseSafeSVG(svgString: string): DocumentFragment {
    * 使用 DOMParser 解析 SVG 字符串
    */
   const parser = new DOMParser();
-  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const doc = parser.parseFromString(svgString, "image/svg+xml");
   const root = doc.documentElement;
 
   /**
    * 检查解析结果是否为有效的 SVG
    */
-  if (root === null || root.nodeName.toLowerCase() !== 'svg') {
+  if (root === null || root.nodeName.toLowerCase() !== "svg") {
     return document.createDocumentFragment();
   }
 
@@ -347,8 +468,8 @@ function parseSafeSVG(svgString: string): DocumentFragment {
  * @param node - 要检查的节点
  */
 function removeUnsafeNodes(node: Node): void {
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    const el = node as Element;
+  if (node.nodeType === Node.ELEMENT_NODE && node instanceof Element) {
+    const el = node;
     const tagName = el.tagName.toLowerCase();
 
     /**
@@ -357,7 +478,7 @@ function removeUnsafeNodes(node: Node): void {
      * use: 可能引用外部资源
      * foreignObject: 可嵌入 HTML
      */
-    if (['script', 'use', 'foreignobject'].includes(tagName)) {
+    if (["script", "use", "foreignobject"].includes(tagName)) {
       el.parentNode?.removeChild(el);
       return;
     }
@@ -365,15 +486,16 @@ function removeUnsafeNodes(node: Node): void {
     /**
      * 移除危险属性
      * - 事件处理器（on*）
-     * - javascript: 协议的 href
+     * - javascript: 协议的 href/xlink:href（包括 image 标签的外部资源引用）
      */
-    Array.from(el.attributes).forEach(attr => {
+    Array.from(el.attributes).forEach((attr) => {
       const attrName = attr.name.toLowerCase();
       const attrValue = attr.value.toLowerCase();
 
       if (
-        attrName.startsWith('on') ||
-        (attrName === 'href' && attrValue.startsWith('javascript:'))
+        attrName.startsWith("on") ||
+        ((attrName === "href" || attrName === "xlink:href") &&
+          attrValue.startsWith("javascript:"))
       ) {
         el.removeAttribute(attr.name);
       }
@@ -396,21 +518,31 @@ export function destroy(vnode: VNode | string): void {
   /**
    * 字符串节点无需处理
    */
-  if (typeof vnode === 'string') return;
+  if (typeof vnode === "string") return;
 
   /**
    * 触发销毁前生命周期钩子
+   * 只处理当前节点，不递归（递归由 destroy 自身的递归处理）
+   * 避免与 destroy 的递归叠加导致子节点生命周期被重复调用
    */
-  invokeLifecycle(vnode, 'onBeforeDestroy');
+  processLifecycleForNode(vnode, "onBeforeDestroy");
 
   /**
    * 执行所有清理函数
    * 包括事件监听移除和指令清理
    */
-  vnode._cleanups?.forEach(fn => fn());
+  vnode._cleanups?.forEach((fn) => fn());
+
+  /**
+   * 执行 useState 订阅的取消订阅函数
+   * 避免组件销毁后状态变化仍触发 updater
+   */
+  vnode.lifecycle?._stateCleanups?.forEach((fn) => fn());
 
   /**
    * 递归销毁子节点
+   * 子节点的 onBeforeDestroy/onDestroyed 在各自的 destroy() 中调用
+   * 销毁顺序：子先父后（子组件先从 DOM 移除，父组件后移除）
    */
   for (const child of vnode.children) {
     destroy(child);
@@ -418,39 +550,375 @@ export function destroy(vnode: VNode | string): void {
 
   /**
    * 从 DOM 中移除元素
+   * 使用 try-catch 防止子节点已被手动移除时抛异常
    */
   if (vnode.el?.parentNode !== null && vnode.el?.parentNode !== undefined) {
-    vnode.el.parentNode.removeChild(vnode.el);
+    try {
+      vnode.el.parentNode.removeChild(vnode.el);
+    } catch {
+      /** 节点已被手动移除，忽略错误 */
+    }
   }
 
   /**
    * 触发销毁完成生命周期钩子
+   * 只处理当前节点，不递归
    */
-  invokeLifecycle(vnode, 'onDestroyed');
+  processLifecycleForNode(vnode, "onDestroyed");
+}
+
+/**
+ * 处理单个节点的生命周期钩子和 ref 设置
+ * 不递归子节点，由调用方控制递归顺序
+ *
+ * @param vnode - 虚拟节点
+ * @param method - 生命周期方法名
+ */
+function processLifecycleForNode(vnode: VNode, method: keyof Lifecycle): void {
+  if (vnode.lifecycle?.[method]) {
+    /**
+     * 在调用 onMounted 之前，将组件根 DOM 元素设置到 lifecycle.el
+     * 这样组件在 onMounted 钩子中可以通过 lifecycle.el 访问自己的根元素
+     * 用于手动 DOM 更新（框架没有响应式，状态变化后需要手动操作 DOM）
+     *
+     * 与 Vue3 的区别：Vue3 有响应式系统自动更新 DOM，本框架需要手动更新
+     * lifecycle.el 让组件能自行处理 DOM 更新
+     */
+    if (
+      method === "onMounted" &&
+      vnode.el &&
+      vnode.lifecycle &&
+      vnode.el instanceof Element
+    ) {
+      vnode.lifecycle.el = vnode.el;
+    }
+
+    safeCall(
+      () => vnode.lifecycle![method]!(),
+      ErrorSource.LIFECYCLE,
+      `生命周期钩子执行失败: ${method}`,
+    );
+  }
+
+  /**
+   * 组件实例 ref 处理
+   * onMounted 后：将组件暴露的 API 或根 DOM 元素赋值给 ref.current
+   * onDestroyed 后：清空 ref.current 防止悬挂引用
+   *
+   * 与 Vue3 行为一致：
+   *   - 如果组件调用了 expose()，ref.current = 暴露的 API 对象
+   *   - 如果组件没有 expose()，ref.current = 组件根 DOM 元素（lifecycle.el）
+   *   - Vue3 中没有 expose 时 ref 指向组件实例
+   *
+   * ref 清空时机：onDestroyed（组件完全销毁后清空）
+   * 与 Vue3 一致：onUnmounted 之后 ref 才被清空
+   */
+  if (vnode.lifecycle) {
+    if (method === "onMounted" && vnode.lifecycle._ref) {
+      const refObj = vnode.lifecycle._ref;
+      if (typeof refObj === "object" && "current" in refObj) {
+        /**
+         * ref 赋值规则（与 Vue3 一致）：
+         * 1. 组件调用了 expose() → ref.current = 暴露的 API 对象
+         * 2. 组件未调用 expose() → ref.current = 组件根 DOM 元素（lifecycle.el ?? vnode.el）
+         * 3. 普通 DOM 元素 → ref.current = DOM 元素（由 applyAttrs/hydrateNode 处理）
+         */
+        if (vnode.lifecycle._exposed !== undefined) {
+          refObj.current = vnode.lifecycle._exposed;
+        } else {
+          /** 未 expose 时 fallback 到组件根 DOM 元素 */
+          const fallbackEl = vnode.lifecycle.el ?? vnode.el ?? null;
+          refObj.current = fallbackEl as unknown;
+        }
+      }
+    }
+    if (method === "onDestroyed" && vnode.lifecycle._ref) {
+      const refObj = vnode.lifecycle._ref;
+      if (typeof refObj === "object" && "current" in refObj) {
+        refObj.current = null;
+      }
+    }
+  }
 }
 
 /**
  * 调用生命周期钩子
  * 递归遍历虚拟节点树，调用指定生命周期方法
  *
+ * 递归顺序（与 Vue3 一致）：
+ *   - onBeforeMount / onBeforeDestroy：父先子后（父组件先收到通知）
+ *   - onMounted / onDestroyed：子先父后（子组件先完成挂载/销毁）
+ *
+ * 这确保了：
+ *   - 父组件 onMounted 时，所有子组件已经挂载完成，ref 已设置
+ *   - 父组件 onBeforeDestroy 时，子组件还未销毁，仍可访问
+ *
  * @param vnode - 虚拟节点
  * @param method - 生命周期方法名
  */
 export function invokeLifecycle(
   vnode: VNode | string,
-  method: keyof Lifecycle
+  method: keyof Lifecycle,
 ): void {
-  if (typeof vnode === 'string') return;
+  if (typeof vnode === "string") return;
 
-  /**
-   * 调用当前节点的生命周期方法
-   */
-  vnode.lifecycle?.[method]?.();
+  const isBeforePhase =
+    method === "onBeforeMount" || method === "onBeforeDestroy";
 
-  /**
-   * 递归调用子节点的生命周期方法
-   */
-  for (const child of vnode.children) {
-    invokeLifecycle(child, method);
+  if (isBeforePhase) {
+    /**
+     * onBeforeMount / onBeforeDestroy：先处理当前节点，再递归子节点
+     * 父组件先收到通知，子组件后收到通知
+     */
+    processLifecycleForNode(vnode, method);
+    for (const child of vnode.children) {
+      invokeLifecycle(child, method);
+    }
+  } else {
+    /**
+     * onMounted / onDestroyed：先递归子节点，再处理当前节点
+     * 子组件先完成挂载/销毁，父组件后完成
+     * 这确保父组件 onMounted 时可以访问子组件的 ref
+     */
+    for (const child of vnode.children) {
+      invokeLifecycle(child, method);
+    }
+    processLifecycleForNode(vnode, method);
   }
+}
+
+/**
+ * 客户端水合
+ * 将服务端渲染的 DOM 与虚拟节点关联，绑定事件、ref、生命周期
+ * 不重新创建 DOM，而是复用已有的 DOM 结构
+ *
+ * 水合流程（与 mount 等价，但复用已有 DOM）：
+ *   1. 遍历 VNode 树，匹配已有 DOM 节点
+ *   2. 将 el 存储到 vnode.el（后续 useState updater 等需要访问）
+ *   3. 绑定 ref（回调 ref 和对象 ref）
+ *   4. 绑定事件监听器（onClick → addEventListener）
+ *   5. 收集清理函数（事件移除等，销毁时调用）
+ *   6. 调用生命周期钩子（onBeforeMount → onMounted）
+ *
+ * @param vnode - 虚拟节点
+ * @param container - 已有的 DOM 容器（包含服务端渲染的 HTML）
+ */
+export function hydrate(vnode: VNode | string, container: HTMLElement): void {
+  if (!isBrowser()) return;
+
+  if (typeof vnode === "string") return;
+
+  /**
+   * 从容器的第一个子节点开始顺序水合。
+   *
+   * 这里不能只找第一个 Element：
+   * - Fragment 会直接输出多个兄弟节点
+   * - 文本节点也可能是根节点或子节点
+   *
+   * hydrateNode() 会返回“下一个未消费的 DOM 节点”，
+   * 这样才能按 SSR 输出顺序把整棵树完整对齐。
+   */
+  const firstChild = container.firstChild;
+  if (firstChild) {
+    hydrateNode(vnode, firstChild);
+  }
+
+  /**
+   * 触发生命周期钩子
+   * 水合完成后，与 mount 一样触发 onBeforeMount 和 onMounted
+   * 这样组件的 onMounted 钩子可以安全地访问 DOM 元素
+   */
+  invokeLifecycle(vnode, "onBeforeMount");
+  invokeLifecycle(vnode, "onMounted");
+}
+
+/**
+ * 递归水合单个节点
+ * 将 VNode 与已有 DOM 元素关联：存储 el、绑定 ref/事件、收集清理函数
+ *
+ * 水合时不重新设置属性（属性已在 SSR 中设置），只绑定事件和 ref
+ *
+ * @param vnode - 虚拟节点
+ * @param el - 对应的已有 DOM 元素
+ */
+function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
+  /**
+   * 组件类型 VNode：组件函数已经在 h() 中执行过
+   * 组件返回的 VNode 存储在 vnode 的结构中
+   * 需要找到组件返回的实际 VNode，然后递归水合其子树
+   */
+  if (typeof vnode.tag === "function") {
+    /**
+     * 存储组件 VNode 的 el 引用
+     * 组件 VNode 的 el 指向其返回的根 DOM 元素
+     */
+    vnode.el = el instanceof Element ? el : undefined;
+
+    /**
+     * 组件 VNode 的 children 中包含组件返回的实际 VNode
+     * 需要递归水合这些子 VNode
+     * 注意：defineComponent 返回的 VNode 结构中，
+     * 组件返回的 VNode 就是 vnode 本身（tag 已经被替换为实际标签）
+     * 但函数组件的 vnode.tag 仍然是函数，需要跳过组件层直接水合子节点
+     */
+    const children = vnode.children || [];
+    let domChild: ChildNode | null = el.firstChild;
+    for (const child of children) {
+      if (typeof child === "string") {
+        domChild = domChild?.nextSibling ?? null;
+        continue;
+      }
+      if (child && domChild) {
+        domChild = hydrateNode(child, domChild);
+      }
+    }
+    return el.nextSibling;
+  }
+
+  /**
+   * Fragment 不对应真实 DOM 节点，它直接消费一段连续的兄弟节点。
+   * 这里必须顺序递归并返回最后一个子节点之后的节点，
+   * 否则多根 SSR 输出只能绑定到第一个子节点。
+   */
+  if (String(vnode.tag).toLowerCase() === "fragment") {
+    let current: ChildNode | null = el;
+    for (const child of vnode.children || []) {
+      if (!current) break;
+      if (typeof child === "string") {
+        current = current.nextSibling;
+        continue;
+      }
+      current = hydrateNode(child, current);
+    }
+    return current;
+  }
+
+  /**
+   * 原生元素：存储 el、绑定 ref、绑定事件、收集清理函数
+   * 与 mount 中的 applyAttrs 逻辑等价，但不设置属性（属性已在 SSR 中设置）
+   *
+   * 使用 instanceof Element 判断，覆盖 HTMLElement 和 SVGElement
+   * （SVGElement 继承自 Element，SVGAElement 只是 <a> 元素的类型）
+   */
+  if (el instanceof Element) {
+    /**
+     * Mismatch 检测：检查 VNode.tag 与 DOM tagName 是否匹配
+     * SSR 和客户端渲染结果不一致时，开发环境输出警告
+     * 不匹配时不中断水合，继续绑定事件和 ref
+     */
+    const vnodeTag = String(vnode.tag).toLowerCase();
+    const domTag = el.tagName.toLowerCase();
+    if (vnodeTag !== "fragment" && vnodeTag !== domTag) {
+      if (isDev()) {
+        console.warn(
+          `[HiliFramework/hydrate] 标签不匹配: VNode 标签 "${vnodeTag}" 与 DOM 标签 "${domTag}" 不一致`,
+        );
+      }
+    }
+
+    /** 存储 DOM 引用到 vnode，后续 useState updater 等需要访问 */
+    vnode.el = el;
+
+    const attrs = vnode.attrs || {};
+
+    /**
+     * 清理函数数组
+     * 收集事件监听的移除函数，销毁时统一调用
+     */
+    const cleanups: (() => void)[] = [];
+
+    /**
+     * 绑定 ref
+     * 支持两种形式：
+     * 1. 回调函数：ref: (el, vnode) => { element = el }
+     * 2. 直接绑定对象：ref: elementRef，其中 elementRef = { current: null }
+     *
+     * 回调 ref 传递 vnode 作为第二个参数，与 mount 中的 applyAttrs 保持一致
+     */
+    const refValue = attrs.ref;
+    if (refValue !== undefined && refValue !== null) {
+      if (typeof refValue === "function") {
+        (refValue as RefValue)(el, vnode);
+      } else if (isRefObject(refValue)) {
+        refValue.current = el;
+      }
+    }
+
+    /**
+     * 绑定事件监听器
+     * SSR 输出的 HTML 中没有事件（onclick 等不序列化到 HTML）
+     * 水合时必须重新绑定所有事件监听器
+     *
+     * ★ 优先使用编译期预分类的 __events（与 applyAttrs 一致）
+     * 编译器将 onXxx → __events: { xxx: handler }，跳过 startsWith+typeof 检查
+     */
+    const preClassifiedEvents = attrs.__events as Record<string, EventListener> | undefined;
+    if (preClassifiedEvents) {
+      for (const eventName in preClassifiedEvents) {
+        if (!Object.prototype.hasOwnProperty.call(preClassifiedEvents, eventName)) continue;
+        const handler = preClassifiedEvents[eventName];
+        if (typeof handler === "function") {
+          el.addEventListener(eventName, handler);
+          cleanups.push(() => el.removeEventListener(eventName, handler));
+        }
+      }
+    } else {
+      // fallback：未编译代码，遍历 attrs 按 onXxx 约定查找
+      for (const key in attrs) {
+        if (!Object.prototype.hasOwnProperty.call(attrs, key)) continue;
+        if (!key.startsWith("on") || typeof attrs[key] !== "function") continue;
+
+        const eventType = key.slice(2).toLowerCase();
+        const handler: EventListener = attrs[key] as EventListener;
+        el.addEventListener(eventType, handler);
+        cleanups.push(() => el.removeEventListener(eventType, handler));
+      }
+    }
+
+    /**
+     * 处理指令（与 mount 中的 applyAttrs 逻辑一致）
+     * 水合时也需要执行指令，否则指令不生效
+     */
+    if (attrs.directives && Array.isArray(attrs.directives)) {
+      for (const entry of attrs.directives) {
+        if (!isDirectiveEntry(entry)) continue;
+        const [dir, val] = entry;
+        const cleanup = dir(el, val);
+        if (cleanup !== undefined) {
+          cleanups.push(cleanup);
+        }
+      }
+    }
+
+    /**
+     * 保存清理函数到虚拟节点
+     * 销毁时统一调用，移除所有事件监听和指令清理
+     */
+    vnode._cleanups = cleanups;
+
+    /**
+     * 处理组件实例 ref（lifecycle._ref）
+     * 如果该元素是组件的根元素，且组件有 expose API，
+     * 在 onMounted 后将 exposed API 赋值给 ref.current
+     * 这部分在 invokeLifecycle 中处理
+     */
+  }
+
+  /**
+   * 递归水合子节点
+   * VNode 子节点与 DOM 子节点一一对应
+   */
+  const children = vnode.children || [];
+  let domChild = el.firstChild;
+
+  for (const child of children) {
+    if (typeof child === "string") {
+      domChild = domChild?.nextSibling ?? null;
+      continue;
+    }
+    if (child && domChild) {
+      domChild = hydrateNode(child, domChild);
+    }
+  }
+  return el.nextSibling;
 }

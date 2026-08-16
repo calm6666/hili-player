@@ -2,14 +2,15 @@
  * ============================================
  * 开关组件
  * ============================================
- * 使用 h 函数实现的开关组件
  */
 
-import { h, defineComponent } from '@/core';
+import { h, defineComponent, ref } from '@/core';
+import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
 /**
  * 开关尺寸类型
+ * small: 小尺寸, middle: 中尺寸, large: 大尺寸
  */
 export type SwitchSize = 'small' | 'middle' | 'large';
 
@@ -23,40 +24,43 @@ export interface SwitchProps {
   checked?: boolean;
   /** 是否禁用 */
   disabled?: boolean;
-  /** 是否加载中 */
+  /** 是否显示加载状态 */
   loading?: boolean;
-  /** 值变化回调 */
+  /** 选中状态变化时的回调函数 */
   onChange?: (checked: boolean) => void;
 }
 
 /**
  * 开关组件
- * 使用 h 函数实现，保持与原组件相同的 DOM 结构和类名
  */
-export const Switch = defineComponent<SwitchProps>((props) => {
+export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentLifecycle) => {
   /**
    * 当前选中状态
    */
   let checked = props.checked ?? false;
 
   /**
-   * 开关根元素引用
+   * 当前禁用状态
    */
-  const switchRef: { current: HTMLDivElement | null } = { current: null };
+  let disabled = props.disabled ?? false;
 
   /**
-   * 处理 change 事件
+   * 开关根元素引用
+   */
+  const switchRef = ref<HTMLDivElement>();
+
+  /**
+   * 处理开关状态切换事件
+   * 禁用状态下不响应，否则切换选中状态并更新 DOM 样式和触发回调
    */
   const handleChange = (): void => {
-    if (props.disabled) {
+    if (disabled) {
       return;
     }
 
     checked = !checked;
 
-    /**
-     * 更新 DOM 类名
-     */
+    // 更新 DOM 类名
     if (switchRef.current) {
       if (checked) {
         switchRef.current.classList.add('switch-checked');
@@ -65,25 +69,71 @@ export const Switch = defineComponent<SwitchProps>((props) => {
       }
     }
 
-    /**
-     * 触发回调
-     */
+    // 触发回调
     props.onChange?.(checked);
   };
 
   /**
    * 渲染加载图标
+   * @returns 加载图标 VNode，若非加载状态则返回 null
    */
   const renderLoadingIcon = (): VNode | null => {
     if (!props.loading) {
       return null;
     }
 
-    /**
-     * 这里可以返回加载图标
-     * 简化起见，返回一个文本节点
-     */
     return null;
+  };
+
+  // ============================================
+  // DOM 更新方法
+  // ============================================
+
+  /**
+   * 外部设置选中状态
+   * @param value - 是否选中
+   */
+  const setChecked = (value: boolean): void => {
+    checked = value;
+    if (switchRef.current) {
+      if (checked) {
+        switchRef.current.classList.add('switch-checked');
+      } else {
+        switchRef.current.classList.remove('switch-checked');
+      }
+    }
+  };
+
+  /**
+   * 外部设置禁用状态
+   * @param value - 是否禁用
+   */
+  const setDisabled = (value: boolean): void => {
+    disabled = value;
+    if (switchRef.current) {
+      if (disabled) {
+        switchRef.current.classList.add('switch-disabled');
+      } else {
+        switchRef.current.classList.remove('switch-disabled');
+      }
+    }
+  };
+
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
+  /**
+   * 组件挂载后的回调，向外暴露设置选中状态和禁用状态的方法
+   */
+  lifecycle.onMounted = (): void => {
+    lifecycle.emit?.('switchMounted', { setChecked, setDisabled });
+  };
+
+  /**
+   * 组件销毁前的回调，清理 DOM 引用
+   */
+  lifecycle.onBeforeDestroy = (): void => {
   };
 
   return h('div', {

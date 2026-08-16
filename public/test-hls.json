@@ -1,0 +1,114 @@
+{
+  "duration": 268.267979,
+  "minBufferTime": 8.3,
+  "video": [
+    {
+      "id": 0,
+      "baseUrl": "http://localhost:9000/hfs/video/1234567890123456",
+      "backupUrls": ["http://localhost:9000/hfs/video/1234567890123456", "http://localhost:9000/hfs/video/1234567890123456"],
+      "bandwidth": 10000000,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d4034",
+      "width": 3840,
+      "height": 2160,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "0-0.m4s",
+        "targetDuration": 4.170833,
+        "timescale": 60000,
+        "startNumber": 1,
+        "mediaSequence": 1,
+        "suffix": "m4s"
+      }
+    },
+    {
+      "id": 1,
+      "baseUrl": "http://localhost:9000/hfs/video/1234567890123456",
+      "backupUrls": ["http://localhost:9000/hfs/video/1234567890123456", "http://localhost:9000/hfs/video/1234567890123456"],
+      "bandwidth": 5000000,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d402a",
+      "width": 1920,
+      "height": 1088,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "1-0.m4s",
+        "targetDuration": 4.170833,
+        "timescale": 60000,
+        "startNumber": 1,
+        "mediaSequence": 1,
+        "suffix": "m4s"
+      }
+    },
+    {
+      "id": 2,
+      "baseUrl": "http://localhost:9000/hfs/video/1234567890123456",
+      "backupUrls": ["http://localhost:9000/hfs/video/1234567890123456", "http://localhost:9000/hfs/video/1234567890123456"],
+      "bandwidth": 3000000,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d4028",
+      "width": 1280,
+      "height": 736,
+      "frameRate": 59.94,
+      "sar": "1:1",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "2-0.m4s",
+        "targetDuration": 4.170833,
+        "timescale": 60000,
+        "startNumber": 1,
+        "mediaSequence": 1,
+        "suffix": "m4s"
+      }
+    },
+    {
+      "id": 3,
+      "baseUrl": "http://localhost:9000/hfs/video/1234567890123456",
+      "backupUrls": ["http://localhost:9000/hfs/video/1234567890123456", "http://localhost:9000/hfs/video/1234567890123456"],
+      "bandwidth": 1500000,
+      "mimeType": "video/mp4",
+      "codecs": "avc1.4d401f",
+      "width": 864,
+      "height": 480,
+      "frameRate": 59.94,
+      "sar": "1280:1281",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "3-0.m4s",
+        "targetDuration": 4.170833,
+        "timescale": 60000,
+        "startNumber": 1,
+        "mediaSequence": 1,
+        "suffix": "m4s"
+      }
+    }
+  ],
+  "audio": [
+    {
+      "id": 4,
+      "baseUrl": "http://localhost:9000/hfs/video/1234567890123456",
+      "backupUrls": ["http://localhost:9000/hfs/video/1234567890123456", "http://localhost:9000/hfs/video/1234567890123456"],
+      "bandwidth": 128000,
+      "mimeType": "audio/mp4",
+      "codecs": "mp4a.40.2",
+      "audioSamplingRate": 48000,
+      "channelConfig": { "value": 2 },
+      "lang": "und",
+      "role": "main",
+      "segmentInfo": {
+        "mode": "template",
+        "initialization": "4-0.m4s",
+        "targetDuration": 4.010667,
+        "timescale": 48000,
+        "startNumber": 1,
+        "mediaSequence": 1,
+        "totalCount": 67,
+        "suffix": "m4s"
+      }
+    }
+  ]
+}

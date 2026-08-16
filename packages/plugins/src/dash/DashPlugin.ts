@@ -5,114 +5,80 @@
  * 基于 dash.js 的 DASH 格式流媒体播放器插件
  *
  * 功能：
- * - 动态加载 dash.js 库
+ * - 静态导入 dash.js 库
  * - 支持自适应码率切换 (ABR)
+ * - 支持 URL 字符串和清单对象两种加载方式
+ * - 对象注入模式：将清单对象转换为 dash.js 清单对象后注入
  * - 提供缓冲、码率、帧率等实时统计信息
  * - 通过事件总线与播放器和其他插件通信
  * - 自动检测浏览器兼容性
+ * - 首帧时间追踪
  *
  * 使用方式：
- * import { DashPlugin } from '@hili-player/plugins';
+ * import { createDashPlugin } from '@hili-player/plugins';
  * const player = new VideoPlayer({
- *   plugins: [DashPlugin({ autoplay: true })]
+ *   plugins: [createDashPlugin({ autoplay: true })]
  * });
  */
 
-import type { Plugin } from '@hili-player/player';
+import { MediaPlayer } from 'dashjs';
+import type { MediaPlayerClass, ErrorEvent } from 'dashjs';
+import type { MediaManifest } from '../vendor/types';
+import { manifestToDash } from '../vendor/manifest-to-dash';
 import type { VideoPlayer } from '@hili-player/player';
-import type { StreamPlugin, StreamConfig, BufferInfo, StreamStats } from '../stream/types';
-import type { EventBus } from '@/core/eventBus';
-import { StreamPluginTypeEnum, StreamPluginEventEnum } from '../stream/enums';
+import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
+import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource } from '@/types/streamPlugin';
+import type { PluginOptions } from '@/types/plugin';
+import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
 const logger = createLogger('DashPlugin');
 
 /**
- * DASH.js 播放器实例接口
- * 定义 dash.js MediaPlayer 的核心 API
+ * 类型谓词：判断源是否为 MediaManifest 对象
+ * MediaManifest 具有 duration 和 video 字段
  */
-interface DashJsPlayer {
-  /** 初始化播放器，绑定视频元素和源 */
-  initialize(video: HTMLVideoElement, source: string, autoplay: boolean): void;
-  /** 重置播放器状态 */
-  reset(): void;
-  /** 销毁播放器实例 */
-  destroy(): void;
-  /** 跳转到指定时间 */
-  seek(time: number): void;
-  /** 绑定事件监听 */
-  on(event: string, callback: (data: unknown) => void): void;
-  /** 移除事件监听 */
-  off(event: string, callback: (data: unknown) => void): void;
-  /** 获取指定类型的码率信息列表 */
-  getBitrateInfoListFor(type: 'video' | 'audio'): Array<{
-    bitrate: number;
-    width: number;
-    height: number;
-  }>;
-  /** 获取当前画质索引 */
-  getQualityFor(type: 'video' | 'audio'): number;
-  /** 设置画质 */
-  setQualityFor(type: 'video' | 'audio', quality: number): void;
-  /** 更新播放器设置 */
-  updateSettings(settings: Record<string, unknown>): void;
-}
-
-/**
- * DASH.js 模块接口
- * 定义 dash.js 模块的静态结构
- */
-interface DashJsModule {
-  MediaPlayer: {
-    /** 创建 MediaPlayer 实例 */
-    create(): DashJsPlayer;
-  };
+function isMediaManifest(source: string | MediaManifestSource): source is MediaManifest {
+  return (
+    typeof source === 'object' &&
+    source !== null &&
+    'duration' in source &&
+    'video' in source
+  );
 }
 
 /**
  * DASH 插件配置
  */
-interface DashJsConfig {
+interface DashPluginConfig {
   /** 是否自动播放，默认 true */
   autoplay?: boolean;
   /** ABR 自适应码率配置 */
   streaming?: {
     abr?: {
-      /** 是否自动切换码率 */
-      autoSwitchBitrate?: boolean;
+      /** 是否自动切换码率（可分别设置音频/视频） */
+      autoSwitchBitrate?: boolean | { audio?: boolean; video?: boolean };
     };
     buffer?: {
       /** 是否启用快速切换 */
       fastSwitchEnabled?: boolean;
     };
   };
+  /** 插件选项 */
+  options?: PluginOptions;
 }
 
 /**
  * DASH 流媒体插件类
- * 实现 Plugin 和 StreamPlugin 接口
+ * 实现 StreamPlugin 接口（StreamPlugin 继承 Plugin）
  * 基于 dash.js 提供 DASH 格式视频播放能力
+ *
+ * 支持两种加载模式：
+ * 1. URL 字符串模式：MediaPlayer().create() → initialize(video, url, false) → attachSource(url)
+ * 2. 对象注入模式：manifestToDash(source) → 设置 url/baseUri → attachSource(dashManifest)
  */
-
-/**
- * 类型谓词函数：验证动态导入的模块是否符合 DashJsModule 接口
- * @param mod - 动态导入的模块
- * @returns 是否为 DashJsModule 类型
- */
-function isDashJsModule(mod: unknown): mod is DashJsModule {
-  return (
-    mod !== null &&
-    typeof mod === 'object' &&
-    'MediaPlayer' in mod &&
-    mod.MediaPlayer !== null &&
-    typeof mod.MediaPlayer === 'object' &&
-    'create' in mod.MediaPlayer &&
-    typeof mod.MediaPlayer.create === 'function'
-  );
-}
-
-export class DashPlugin implements Plugin, StreamPlugin {
+export class DashPlugin implements StreamPlugin {
   /** 插件名称（必须唯一） */
   readonly name = 'dash';
   /** 插件版本号 */
@@ -120,19 +86,16 @@ export class DashPlugin implements Plugin, StreamPlugin {
   /** 插件描述 */
   readonly description = 'DASH 格式流媒体播放器插件，基于 dash.js';
   /** 插件类型 */
-  readonly type = StreamPluginTypeEnum.DASH;
+  readonly type: StreamPluginTypeEnum = StreamPluginTypeEnum.DASH;
 
   /** dash.js 播放器实例 */
-  private dashPlayer: DashJsPlayer | null = null;
-
-  /** dash.js 模块引用（动态导入后缓存） */
-  private dashjs: DashJsModule | null = null;
+  private dashPlayer: MediaPlayerClass | null = null;
 
   /** 视频元素（从播放器获取） */
   videoElement: HTMLVideoElement | null = null;
 
   /** 事件总线（从播放器获取） */
-  eventBus: EventBus | null = null;
+  eventBus: PlayerEventBus | null = null;
 
   /** 播放器实例引用 */
   private player: VideoPlayer | null = null;
@@ -141,7 +104,7 @@ export class DashPlugin implements Plugin, StreamPlugin {
   private config: StreamConfig | null = null;
 
   /** 插件自定义配置 */
-  private pluginConfig: DashJsConfig;
+  private pluginConfig: DashPluginConfig;
 
   /** 统计信息缓存 */
   private stats: Partial<StreamStats> = {};
@@ -149,14 +112,26 @@ export class DashPlugin implements Plugin, StreamPlugin {
   /** 上次卡顿开始时间（用于计算卡顿总时长） */
   private lastStallTime = 0;
 
+  /** 加载开始时间戳（用于计算首帧时间） */
+  private loadStartTime = 0;
+
+  /** 是否已记录首帧时间 */
+  private firstFrameRecorded = false;
+
+  /** 首帧时间（毫秒） */
+  private firstFrameTime = 0;
+
   /** 浏览器能力检测结果 */
   private browserCapability: ReturnType<typeof BrowserCapabilityDetector.getFullCapabilityResult> | null = null;
+
+  /** 首帧事件处理器引用（用于移除监听） */
+  private firstFrameHandler: (() => void) | null = null;
 
   /**
    * 构造函数
    * @param config - DASH 插件配置
    */
-  constructor(config?: DashJsConfig) {
+  constructor(config?: DashPluginConfig) {
     this.pluginConfig = {
       autoplay: true,
       streaming: {
@@ -185,13 +160,13 @@ export class DashPlugin implements Plugin, StreamPlugin {
    * @param player - 播放器实例
    */
   install(player: VideoPlayer): void {
-    // 保存播放器实例引用
+    // 步骤 1：保存播放器引用
     this.player = player;
 
-    // 从播放器获取事件总线（公共属性）
+    // 步骤 2：获取事件总线
     this.eventBus = player.events;
 
-    // 检测浏览器能力（DASH 依赖 MSE）
+    // 步骤 3：浏览器能力检测
     this.browserCapability = BrowserCapabilityDetector.getFullCapabilityResult();
     logger.info(
       `浏览器能力检测: DASH支持=${this.browserCapability.dashSupported}, ` +
@@ -199,7 +174,7 @@ export class DashPlugin implements Plugin, StreamPlugin {
       `浏览器=${this.browserCapability.browserName} ${this.browserCapability.browserVersion}`
     );
 
-    // 如果浏览器不支持 DASH，发出警告但仍然安装（允许后续降级处理）
+    // 步骤 4：检测不通过时发出警告
     if (!this.browserCapability.dashSupported) {
       logger.warn(
         '当前浏览器不支持 DASH 协议（缺少 MSE 支持），' +
@@ -207,14 +182,11 @@ export class DashPlugin implements Plugin, StreamPlugin {
       );
     }
 
-    // 监听播放器挂载完成事件，获取视频元素
-    player.events.on('player:mounted', (data: unknown) => {
-      if (data !== null && typeof data === 'object' && 'video' in data) {
-        const video = data.video;
-        if (video instanceof HTMLVideoElement) {
-          this.videoElement = video;
-          logger.info('已获取视频元素');
-        }
+    // 步骤 5：监听播放器挂载事件，获取视频元素
+    player.events.on('player:mounted', (data) => {
+      if (data && data.video instanceof HTMLVideoElement) {
+        this.videoElement = data.video;
+        logger.info('已获取视频元素');
       }
     });
 
@@ -233,6 +205,8 @@ export class DashPlugin implements Plugin, StreamPlugin {
     this.eventBus = null;
     this.videoElement = null;
     this.browserCapability = null;
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
     logger.info('插件已卸载');
   }
 
@@ -249,22 +223,24 @@ export class DashPlugin implements Plugin, StreamPlugin {
    * @returns 是否支持 DASH
    */
   isSupported(): boolean {
-    // 优先使用安装时缓存的检测结果
     if (this.browserCapability) {
       return this.browserCapability.dashSupported;
     }
-    // 降级：实时检测
     return BrowserCapabilityDetector.isDASHSupported();
   }
 
   /**
    * 加载 DASH 流媒体
-   * 动态导入 dash.js 库，创建播放器实例并绑定到视频元素
+   * 使用静态导入的 dash.js 库，创建播放器实例并绑定到视频元素
    *
-   * @param config - 流媒体配置（包含 URL、格式等）
+   * 支持两种加载模式：
+   * 1. URL 字符串模式：MediaPlayer().create() → initialize(video, url, false) → attachSource(url)
+   * 2. 对象注入模式：manifestToDash(source) → 设置 url/baseUri → attachSource(dashManifest)
+   *
+   * @param config - 流媒体配置（包含 URL 或清单对象、格式等）
    */
   load(config: StreamConfig): void {
-    // 验证视频元素是否存在
+    // 步骤 1：校验视频元素
     if (!this.videoElement) {
       const msg = '视频元素未设置，请确保播放器已挂载到 DOM';
       logger.error(msg);
@@ -272,7 +248,7 @@ export class DashPlugin implements Plugin, StreamPlugin {
       return;
     }
 
-    // 检查浏览器兼容性
+    // 步骤 2：校验浏览器兼容性
     if (!this.isSupported()) {
       const msg = `当前浏览器不支持 DASH 播放（${this.browserCapability?.browserName || '未知'} ${this.browserCapability?.browserVersion || ''}），需要 MSE 支持`;
       logger.error(msg);
@@ -280,68 +256,182 @@ export class DashPlugin implements Plugin, StreamPlugin {
       return;
     }
 
-    // 动态导入 dash.js（按需加载，减小初始包体积）
-    import('dashjs')
-      .then((dashjs) => {
-        // 验证模块结构并缓存引用
-        if (!isDashJsModule(dashjs)) {
-          const msg = '动态导入的 dash.js 模块结构不符合预期';
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
-        this.dashjs = dashjs;
+    // 步骤 3：保存配置、重置首帧追踪
+    this.config = config;
+    this.loadStartTime = Date.now();
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
 
-        if (!this.videoElement) {
-          const msg = '视频元素已被移除，无法加载';
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
+    // 步骤 4：注册首帧时间追踪
+    this.registerFirstFrameTracking();
 
-        // 保存配置
-        this.config = config;
+    const source = config.url;
 
-        // 创建 dash.js 播放器实例
-        this.dashPlayer = this.dashjs.MediaPlayer.create();
+    // 步骤 5：创建 dash.js 播放器实例
+    this.dashPlayer = MediaPlayer().create();
 
-        // 应用用户自定义设置
-        if (this.pluginConfig.streaming) {
-          this.dashPlayer.updateSettings({
-            streaming: this.pluginConfig.streaming,
-          });
-        }
+    // 步骤 6：应用用户自定义设置
+    if (this.pluginConfig.streaming) {
+      // 将 boolean 类型的 autoSwitchBitrate 转换为 dash.js 要求的 { audio, video } 格式
+      const autoSwitchBitrate = this.pluginConfig.streaming.abr?.autoSwitchBitrate;
+      const normalizedAutoSwitchBitrate: { audio?: boolean; video?: boolean } | undefined =
+        autoSwitchBitrate === undefined
+          ? undefined
+          : typeof autoSwitchBitrate === 'boolean'
+            ? { audio: autoSwitchBitrate, video: autoSwitchBitrate }
+            : autoSwitchBitrate;
 
-        // 绑定 dash.js 内置事件
-        this.bindEvents();
+      const streamingSettings = {
+        abr: {
+          ...this.pluginConfig.streaming.abr,
+          autoSwitchBitrate: normalizedAutoSwitchBitrate,
+        },
+        buffer: this.pluginConfig.streaming.buffer,
+      };
+      this.dashPlayer.updateSettings({
+        streaming: streamingSettings,
+      });
+    }
 
-        // 初始化播放器（绑定视频元素、设置源、自动播放）
-        this.dashPlayer.initialize(
-          this.videoElement,
-          config.url,
-          this.pluginConfig.autoplay ?? true
-        );
+    // 步骤 7：绑定 dash.js 内置事件
+    this.bindEvents();
 
-        // 通知外部：加载完成
-        this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: config.url });
+    // 步骤 8：根据源类型选择加载模式
+    if (typeof source === 'string' && source.split('?')[0].toLowerCase().endsWith('.json')) {
+      // ===== JSON Manifest 模式 =====
+      // 先 fetch JSON，再转换为 dash.js 清单对象注入
+      this.loadJsonManifest(source);
+    } else if (typeof source === 'string') {
+      // ===== URL 字符串模式 =====
 
-        // 如果指定了起始时间，跳转到对应位置
-        if (config.startTime && config.startTime > 0) {
-          this.seek(config.startTime);
-        }
+      // 步骤 8a：初始化播放器（绑定视频元素、设置源、不自动播放）
+      this.dashPlayer.initialize(this.videoElement, source, false);
 
-        logger.info('DASH 流加载成功:', config.url);
-      })
-      .catch((err) => {
-        const msg = `加载 dash.js 失败: ${err instanceof Error ? err.message : String(err)}`;
+      // 步骤 8b：附加源 URL
+      this.dashPlayer.attachSource(source);
+
+      logger.info('DASH 流加载成功 (URL模式):', source);
+    } else {
+      // ===== 对象注入模式 =====
+
+      // 步骤 8c：初始化播放器（绑定视频元素、不设置源、不自动播放）
+      this.dashPlayer.initialize(this.videoElement, '', false);
+
+      // 步骤 8d：转换清单对象为 dash.js 可识别的清单对象
+      if (!isMediaManifest(source)) {
+        const msg = '清单对象缺少 duration 或 video 字段';
         logger.error(msg);
         this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-      });
+        return;
+      }
+      const dashManifest = manifestToDash(source);
+
+      // 步骤 8e：设置 url 和 baseUri（dash.js 内部依赖）
+      const pageUrl = globalThis.location?.href ?? '';
+      dashManifest.url = pageUrl;
+      dashManifest.baseUri = pageUrl.substring(0, pageUrl.lastIndexOf('/') + 1);
+
+      // 步骤 8f：注入清单对象
+      this.dashPlayer.attachSource(dashManifest);
+
+      logger.info('DASH 流加载成功 (对象注入模式): [清单对象]');
+    }
+
+    // 步骤 9：发射加载完成事件
+    this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
+
+    // 步骤 10：如果有起始时间，跳转到指定位置
+    if (config.startTime && config.startTime > 0) {
+      this.seek(config.startTime);
+    }
+  }
+
+  /**
+   * 加载 JSON Manifest 文件
+   * 先 fetch JSON，解析为 MediaManifest 对象，再转换为 dash.js 清单注入
+   *
+   * @param url - JSON manifest 文件 URL
+   */
+  private async loadJsonManifest(url: string): Promise<void> {
+    try {
+      logger.info('正在获取 JSON Manifest:', url);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const manifest = await response.json();
+
+      if (!isMediaManifest(manifest)) {
+        throw new Error('JSON 格式不是有效的 MediaManifest（缺少 duration 或 video 字段）');
+      }
+
+      // 转换为 dash.js 清单对象
+      const dashManifest = manifestToDash(manifest);
+      const pageUrl = globalThis.location?.href ?? '';
+      dashManifest.url = pageUrl;
+      dashManifest.baseUri = url.substring(0, url.lastIndexOf('/') + 1);
+
+      // 初始化 dash.js 播放器（绑定视频元素、不设置源、不自动播放）
+      if (this.videoElement) {
+        this.dashPlayer!.initialize(this.videoElement, '', false);
+      }
+
+      // 注入清单对象
+      this.dashPlayer!.attachSource(dashManifest);
+
+      logger.info('DASH 流加载成功 (JSON Manifest模式)');
+      this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url });
+    } catch (err) {
+      const msg = `加载 JSON Manifest 失败: ${err instanceof Error ? err.message : String(err)}`;
+      logger.error(msg);
+      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+    }
+  }
+
+  /**
+   * 注册首帧时间追踪
+   * 监听视频元素的 playing 事件，记录从加载开始到首帧渲染的时间
+   */
+  private registerFirstFrameTracking(): void {
+    this.removeFirstFrameTracking();
+
+    const video = this.videoElement;
+    if (!video) return;
+
+    this.firstFrameHandler = (): void => {
+      if (!this.firstFrameRecorded) {
+        this.firstFrameRecorded = true;
+        this.firstFrameTime = Date.now() - this.loadStartTime;
+        this.stats.firstFrameTime = this.firstFrameTime;
+        logger.info(`首帧时间: ${this.firstFrameTime}ms`);
+        this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      }
+    };
+
+    video.addEventListener('playing', this.firstFrameHandler);
+  }
+
+  /**
+   * 移除首帧时间追踪监听
+   */
+  private removeFirstFrameTracking(): void {
+    if (this.firstFrameHandler && this.videoElement) {
+      this.videoElement.removeEventListener('playing', this.firstFrameHandler);
+      this.firstFrameHandler = null;
+    }
   }
 
   /**
    * 绑定 dash.js 核心事件
    * 将 dash.js 的内部事件转换为统一的 StreamPlugin 事件
+   *
+   * 绑定事件列表：
+   * - streamInitialized: 流初始化完成
+   * - bufferStalled: 缓冲停滞
+   * - bufferLoaded: 缓冲加载完成
+   * - error: 播放器错误
+   * - qualityChangeRendered: 画质切换完成
+   * - fragmentLoadingCompleted: 片段加载完成
    */
   private bindEvents(): void {
     if (!this.dashPlayer) return;
@@ -370,13 +460,8 @@ export class DashPlugin implements Plugin, StreamPlugin {
     });
 
     // 播放器错误处理
-    this.dashPlayer.on('error', (data: unknown) => {
-      if (
-        data !== null &&
-        typeof data === 'object' &&
-        'error' in data && typeof data.error === 'string' &&
-        'event' in data && typeof data.event === 'string'
-      ) {
+    this.dashPlayer.on('error', (data: ErrorEvent) => {
+      if ('error' in data && typeof data.error === 'string' && 'event' in data) {
         const errorData = { error: data.error, event: data.event };
         logger.error('播放器错误:', errorData);
         this.eventBus?.emit(StreamPluginEventEnum.ERROR, errorData);
@@ -389,10 +474,19 @@ export class DashPlugin implements Plugin, StreamPlugin {
     // 画质切换完成 → 更新统计信息
     this.dashPlayer.on('qualityChangeRendered', () => {
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      const stats = this.getStats();
+      if (stats.resolution) {
+        this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, {
+          width: stats.resolution.width,
+          height: stats.resolution.height,
+          bitrate: stats.videoBitrate,
+          isAuto: !this.dashPlayer?.getSettings()?.streaming?.abr?.autoSwitchBitrate?.video === false,
+        });
+      }
     });
 
     // 片段加载完成 → 更新统计信息
-    this.dashPlayer.on('fragmentLoadingCompleted', (_data: unknown) => {
+    this.dashPlayer.on('fragmentLoadingCompleted', () => {
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
     });
   }
@@ -407,8 +501,8 @@ export class DashPlugin implements Plugin, StreamPlugin {
         .then(() => {
           this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
         })
-        .catch((err) => {
-          const msg = `播放失败: ${err instanceof Error ? err.message : String(err)}`;
+        .catch((err: Error) => {
+          const msg = `播放失败: ${err.message}`;
           logger.error(msg);
           this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
         });
@@ -443,6 +537,7 @@ export class DashPlugin implements Plugin, StreamPlugin {
    * 重置并销毁 dash.js 播放器，清理所有引用
    */
   destroy(): void {
+    this.removeFirstFrameTracking();
     if (this.dashPlayer) {
       this.dashPlayer.reset();
       this.dashPlayer.destroy();
@@ -451,6 +546,9 @@ export class DashPlugin implements Plugin, StreamPlugin {
     this.config = null;
     this.stats = {};
     this.lastStallTime = 0;
+    this.loadStartTime = 0;
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
   }
 
   /**
@@ -463,7 +561,6 @@ export class DashPlugin implements Plugin, StreamPlugin {
     const video = this.videoElement;
     const buffered = video?.buffered;
 
-    // 无缓冲数据时返回空值
     if (!video || !buffered || buffered.length === 0) {
       return { start: 0, end: 0, length: 0 };
     }
@@ -471,7 +568,6 @@ export class DashPlugin implements Plugin, StreamPlugin {
     const currentTime = video.currentTime || 0;
     let bufferEnd = 0;
 
-    // 查找包含当前播放位置的缓冲区间
     for (let i = 0; i < buffered.length; i++) {
       if (buffered.start(i) <= currentTime && buffered.end(i) >= currentTime) {
         bufferEnd = buffered.end(i);
@@ -490,28 +586,28 @@ export class DashPlugin implements Plugin, StreamPlugin {
 
   /**
    * 获取统计信息
-   * 收集当前播放器状态，包括播放时间、缓冲长度、码率、分辨率等
+   * 收集当前播放器状态，包括播放时间、缓冲长度、码率、分辨率、首帧时间等
    *
    * @returns 流媒体统计信息
    */
   getStats(): Partial<StreamStats> {
     const video = this.videoElement;
     const bufferInfo = this.getBufferInfo();
-    const videoQuality = this.dashPlayer?.getQualityFor('video');
-    const bitrates = this.dashPlayer?.getBitrateInfoListFor('video');
-    const currentBitrate = bitrates?.[videoQuality ?? 0];
+    const currentRepresentation = this.dashPlayer?.getCurrentRepresentationForType('video');
+    const throughput = this.dashPlayer?.getAverageThroughput('video') ?? 0;
 
     return {
       ...this.stats,
-      currentTime: video?.currentTime || 0,
-      duration: video?.duration || 0,
+      currentTime: this.dashPlayer?.time() ?? video?.currentTime ?? 0,
+      duration: this.dashPlayer?.duration() ?? video?.duration ?? 0,
       bufferLength: bufferInfo.length,
-      firstFrameTime: 0,
+      firstFrameTime: this.firstFrameTime,
       totalStallCount: this.stats.totalStallCount || 0,
       totalStallTime: this.stats.totalStallTime || 0,
-      videoBitrate: currentBitrate?.bitrate,
-      resolution: currentBitrate?.width && currentBitrate?.height
-        ? { width: currentBitrate.width, height: currentBitrate.height }
+      videoBitrate: currentRepresentation?.bandwidth,
+      downloadSpeed: throughput,
+      resolution: currentRepresentation?.width && currentRepresentation?.height
+        ? { width: currentRepresentation.width, height: currentRepresentation.height }
         : undefined,
     };
   }
@@ -520,21 +616,31 @@ export class DashPlugin implements Plugin, StreamPlugin {
    * 获取可用画质列表
    * 从 dash.js 获取所有可用的视频码率/分辨率列表
    *
-   * @returns 画质列表（码率 + 分辨率）
+   * @returns 画质等级列表（QualityLevel[]）
    */
-  getQualities(): Array<{ bitrate: number; width: number; height: number }> {
-    return this.dashPlayer?.getBitrateInfoListFor('video') ?? [];
+  getQualities(): QualityLevel[] {
+    const representations = this.dashPlayer?.getRepresentationsByType('video') ?? [];
+    return representations.map((rep) => ({
+      id: String(rep.index),
+      label: `${rep.width}x${rep.height}`,
+      width: rep.width,
+      height: rep.height,
+      bitrate: rep.bandwidth,
+    }));
   }
 
   /**
    * 设置播放画质
-   * 切换到指定索引的码率层级
+   * 切换到指定标识的码率层级
    *
-   * @param quality - 画质索引
+   * @param quality - 画质标识（QualityLevel.id）
    */
-  setQuality(quality: number): void {
+  setQuality(quality: string): void {
     if (this.dashPlayer) {
-      this.dashPlayer.setQualityFor('video', quality);
+      const index = Number(quality);
+      if (!isNaN(index)) {
+        this.dashPlayer.setRepresentationForTypeByIndex('video', index);
+      }
     }
   }
 
@@ -574,17 +680,17 @@ export class DashPlugin implements Plugin, StreamPlugin {
  *
  * @example
  * // 基本用法
- * player.use(DashPlugin());
+ * player.use(createDashPlugin());
  *
  * @example
  * // 自定义配置
- * player.use(DashPlugin({
+ * player.use(createDashPlugin({
  *   autoplay: false,
  *   streaming: {
  *     abr: { autoSwitchBitrate: true }
  *   }
  * }));
  */
-export function createDashPlugin(config?: DashJsConfig): DashPlugin {
+export function createDashPlugin(config?: DashPluginConfig): DashPlugin {
   return new DashPlugin(config);
 }

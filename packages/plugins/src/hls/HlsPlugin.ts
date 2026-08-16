@@ -2,108 +2,86 @@
  * ============================================
  * HLS 流媒体插件 (HlsPlugin)
  * ============================================
- * 基于 hls.js 的 HLS 格式流媒体播放器插件
+ * 基于 fork 版本 hls.js 的 HLS 格式流媒体播放器插件
  *
  * 功能：
- * - 动态加载 hls.js 库
+ * - 静态导入 fork 版本 hls.js 库（支持对象注入模式）
  * - 支持自适应码率切换 (ABR)
  * - 支持直播和点播模式
+ * - 支持 URL 字符串和清单对象两种加载方式
+ * - fork 版本通过 loadManifest() 支持对象注入模式
+ * - useLocalHls 选项支持 Safari 原生 HLS 回退
  * - 提供缓冲、码率、帧率等实时统计信息
  * - 通过事件总线与播放器和其他插件通信
  * - 自动检测浏览器兼容性（含 iOS/macOS Safari 特殊处理）
+ * - 致命错误自动恢复（recoverMediaError）
+ * - 首帧时间追踪
  *
  * 使用方式：
- * import { HlsPlugin } from '@hili-player/plugins';
+ * import { createHlsPlugin } from '@hili-player/plugins';
  * const player = new VideoPlayer({
- *   plugins: [HlsPlugin({ autoplay: true })]
+ *   plugins: [createHlsPlugin({ autoplay: true })]
  * });
  */
 
-import type { Plugin } from '@hili-player/player';
+import Hls from 'hls.js';
+import type { ManifestVariant, ManifestAudioGroup, ManifestParsedData, ErrorData, LevelSwitchedData } from 'hls.js';
+import type { MediaManifest } from '../vendor/types';
+import { manifestToHls } from '../vendor/manifest-to-hls';
 import type { VideoPlayer } from '@hili-player/player';
-import type { StreamPlugin, StreamConfig, BufferInfo, StreamStats } from '../stream/types';
-import type { EventBus } from '@/core/eventBus';
-import { StreamPluginTypeEnum, StreamPluginEventEnum } from '../stream/enums';
+import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
+import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource } from '@/types/streamPlugin';
+import type { PluginOptions } from '@/types/plugin';
+import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
 const logger = createLogger('HlsPlugin');
 
 /**
- * HLS.js 播放器实例接口
- * 定义 hls.js Hls 实例的核心 API
+ * 清单源对象类型（直接传入 ManifestVariant[] + ManifestAudioGroup[]）
  */
-interface HlsJsPlayer {
-  /** 绑定视频元素 */
-  attachMedia(video: HTMLVideoElement): void;
-  /** 加载 HLS 源 */
-  loadSource(url: string): void;
-  /** 开始加载片段 */
-  startLoad(startPosition?: number): void;
-  /** 停止加载片段 */
-  stopLoad(): void;
-  /** 销毁实例 */
-  destroy(): void;
-  /** 尝试恢复媒体错误 */
-  recoverMediaError(): void;
-  /** 监听 hls.js 事件 */
-  on(event: string, callback: (event: string, data: unknown) => void): void;
-  /** 取消监听 hls.js 事件 */
-  off(event: string, callback: (event: string, data: unknown) => void): void;
-  /** 可用画质列表（只读） */
-  readonly levels: Array<{
-    bitrate: number;
-    width: number;
-    height: number;
-  }>;
-  /** 当前播放画质索引 */
-  currentLevel: number;
-  /** 即将切换到的画质索引 */
-  readonly nextLevel: number;
-  /** 是否启用自动画质选择 */
-  readonly autoLevelEnabled: boolean;
-  /** 自动画质上限 */
-  readonly autoLevelCapping: number;
+interface ManifestSourceObject {
+  variants: ManifestVariant[];
+  audioGroups?: ManifestAudioGroup[];
+  [key: string]: string | number | boolean | ManifestVariant[] | ManifestAudioGroup[] | undefined;
 }
 
 /**
- * HLS.js 模块接口
- * 定义 hls.js 模块的静态结构
+ * 类型谓词：判断源是否为 URL 字符串
  */
-interface HlsJsModule {
-  /** 构造函数，创建 Hls 实例 */
-  new (config?: Record<string, unknown>): HlsJsPlayer;
-  /** 检测浏览器是否支持 HLS */
-  isSupported(): boolean;
-  /** 事件常量映射 */
-  Events: Record<string, string>;
-  /** 错误类型常量映射 */
-  ErrorTypes: Record<string, string>;
-  /** 错误详情常量映射 */
-  ErrorDetails: Record<string, string>;
+function isUrlString(source: string | MediaManifestSource): source is string {
+  return typeof source === 'string';
 }
 
 /**
- * 类型谓词：判断模块是否为合法的 HlsJsModule
- * 用于动态导入 hls.js 后的类型安全验证
+ * 类型谓词：判断源是否为 MediaManifest 对象
+ * MediaManifest 具有 duration 和 video 字段
  */
-function isHlsJsModule(mod: unknown): mod is HlsJsModule {
-  if (mod == null) return false;
-  if (typeof mod !== 'function') return false;
+function isMediaManifest(source: string | MediaManifestSource): source is MediaManifest {
   return (
-    'isSupported' in mod && typeof mod.isSupported === 'function' &&
-    'Events' in mod && typeof mod.Events === 'object' && mod.Events !== null &&
-    'ErrorTypes' in mod && typeof mod.ErrorTypes === 'object' && mod.ErrorTypes !== null &&
-    'ErrorDetails' in mod && typeof mod.ErrorDetails === 'object' && mod.ErrorDetails !== null
+    typeof source === 'object' &&
+    source !== null &&
+    'duration' in source &&
+    'video' in source
   );
+}
+
+/**
+ * 类型谓词：判断源是否为普通对象（ManifestSourceObject）
+ */
+function isManifestObject(source: string | MediaManifestSource): source is ManifestSourceObject {
+  return typeof source === 'object' && source !== null;
 }
 
 /**
  * HLS 插件配置
  */
-interface HlsJsConfig {
+interface HlsPluginConfig {
   /** 是否自动播放，默认 true */
   autoplay?: boolean;
+  /** 是否使用浏览器原生 HLS 支持（如 Safari），默认 false */
+  useLocalHls?: boolean;
   /** 初始画质级别（-1 为自动） */
   startLevel?: number;
   /** ABR 快速直播权重 */
@@ -118,34 +96,38 @@ interface HlsJsConfig {
   liveSyncDurationCount?: number;
   /** 片段加载超时（毫秒） */
   fragLoadingTimeOut?: number;
+  /** 插件选项 */
+  options?: PluginOptions;
 }
 
 /**
  * HLS 流媒体插件类
- * 实现 Plugin 和 StreamPlugin 接口
- * 基于 hls.js 提供 HLS 格式视频播放能力
+ * 实现 StreamPlugin 接口（StreamPlugin 继承 Plugin）
+ * 基于 fork 版本 hls.js 提供 HLS 格式视频播放能力
+ *
+ * 支持三种加载模式：
+ * 1. URL 字符串模式：new Hls() → attachMedia() → loadSource(url)
+ * 2. 对象注入模式：new Hls({ autoStartLoad: false }) → attachMedia() → 等待 MEDIA_ATTACHED → manifestToHls(source) → loadManifest(variants, audioGroups) → startLoad()
+ * 3. Safari 原生 HLS：直接设置 video.src
  */
-export class HlsPlugin implements Plugin, StreamPlugin {
+export class HlsPlugin implements StreamPlugin {
   /** 插件名称（必须唯一） */
   readonly name = 'hls';
   /** 插件版本号 */
   readonly version = '1.0.0';
   /** 插件描述 */
-  readonly description = 'HLS 格式流媒体播放器插件，基于 hls.js';
+  readonly description = 'HLS 格式流媒体播放器插件，基于 fork 版本 hls.js';
   /** 插件类型 */
-  readonly type = StreamPluginTypeEnum.HLS;
+  readonly type: StreamPluginTypeEnum = StreamPluginTypeEnum.HLS;
 
   /** hls.js 播放器实例 */
-  private hlsPlayer: HlsJsPlayer | null = null;
-
-  /** hls.js 模块引用（动态导入后缓存） */
-  private hlsjs: HlsJsModule | null = null;
+  private hlsPlayer: Hls | null = null;
 
   /** 视频元素（从播放器获取） */
   videoElement: HTMLVideoElement | null = null;
 
   /** 事件总线（从播放器获取） */
-  eventBus: EventBus | null = null;
+  eventBus: PlayerEventBus | null = null;
 
   /** 播放器实例引用 */
   private player: VideoPlayer | null = null;
@@ -154,7 +136,7 @@ export class HlsPlugin implements Plugin, StreamPlugin {
   private config: StreamConfig | null = null;
 
   /** 插件自定义配置 */
-  private pluginConfig: HlsJsConfig;
+  private pluginConfig: HlsPluginConfig;
 
   /** 统计信息缓存 */
   private stats: Partial<StreamStats> = {};
@@ -162,17 +144,30 @@ export class HlsPlugin implements Plugin, StreamPlugin {
   /** 上次卡顿开始时间（用于计算卡顿总时长） */
   private lastStallTime = 0;
 
+  /** 加载开始时间戳（用于计算首帧时间） */
+  private loadStartTime = 0;
+
+  /** 是否已记录首帧时间 */
+  private firstFrameRecorded = false;
+
+  /** 首帧时间（毫秒） */
+  private firstFrameTime = 0;
+
   /** 浏览器能力检测结果 */
   private browserCapability: ReturnType<typeof BrowserCapabilityDetector.getFullCapabilityResult> | null = null;
+
+  /** 首帧事件处理器引用（用于移除监听） */
+  private firstFrameHandler: (() => void) | null = null;
 
   /**
    * 构造函数
    * @param config - HLS 插件配置
    */
-  constructor(config?: HlsJsConfig) {
+  constructor(config?: HlsPluginConfig) {
     this.pluginConfig = {
       autoplay: true,
-      startLevel: -1,          // -1 表示自动选择画质
+      useLocalHls: false,
+      startLevel: -1,
       abrEwmaFastLive: 3.0,
       abrEwmaSlowLive: 9.0,
       maxBufferLength: 30,
@@ -197,13 +192,11 @@ export class HlsPlugin implements Plugin, StreamPlugin {
    * @param player - 播放器实例
    */
   install(player: VideoPlayer): void {
-    // 保存播放器实例引用
+    // 1. 保存播放器实例引用
     this.player = player;
-
-    // 从播放器获取事件总线（公共属性）
+    // 2. 从播放器获取事件总线（公共属性）
     this.eventBus = player.events;
-
-    // 检测浏览器能力（HLS 在 iOS 上使用原生播放，在桌面端依赖 MSE）
+    // 3. 检测浏览器能力（HLS 在 iOS 上使用原生播放，在桌面端依赖 MSE）
     this.browserCapability = BrowserCapabilityDetector.getFullCapabilityResult();
     const hlsSupport = BrowserCapabilityDetector.checkHlsjsSupport();
     logger.info(
@@ -212,10 +205,9 @@ export class HlsPlugin implements Plugin, StreamPlugin {
       `浏览器=${this.browserCapability.browserName} ${this.browserCapability.browserVersion}, ` +
       `系统=${this.browserCapability.osName} ${this.browserCapability.osVersion}`
     );
-
-    // 监听播放器挂载完成事件，获取视频元素
-    player.events.on('player:mounted', (data: unknown) => {
-      if (data && typeof data === 'object' && 'video' in data && data.video instanceof HTMLVideoElement) {
+    // 4. 监听播放器挂载完成事件，获取视频元素
+    player.events.on('player:mounted', (data) => {
+      if (data && data.video instanceof HTMLVideoElement) {
         this.videoElement = data.video;
         logger.info('已获取视频元素');
       }
@@ -236,6 +228,8 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     this.eventBus = null;
     this.videoElement = null;
     this.browserCapability = null;
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
     logger.info('插件已卸载');
   }
 
@@ -258,17 +252,21 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     }
     // 降级：实时检测
     if (typeof window === 'undefined') return false;
-    return this.hlsjs?.isSupported() ?? false;
+    return Hls.isSupported();
   }
 
   /**
    * 加载 HLS 流媒体
-   * 动态导入 hls.js 库，创建播放器实例并绑定到视频元素
+   * 使用 fork 版本 hls.js 创建播放器实例
    *
-   * @param config - 流媒体配置（包含 URL、格式等）
+   * 支持三种加载模式：
+   * 1. URL 字符串模式：new Hls() → attachMedia() → loadSource(url)
+   * 2. 对象注入模式：new Hls({ autoStartLoad: false }) → attachMedia() → 等待 MEDIA_ATTACHED → manifestToHls(source) → loadManifest(variants, audioGroups) → startLoad()
+   * 3. Safari 原生 HLS：直接设置 video.src
+   *
+   * @param config - 流媒体配置（包含 URL 或清单对象、格式等）
    */
   load(config: StreamConfig): void {
-    // 验证视频元素是否存在
     if (!this.videoElement) {
       const msg = '视频元素未设置，请确保播放器已挂载到 DOM';
       logger.error(msg);
@@ -276,84 +274,291 @@ export class HlsPlugin implements Plugin, StreamPlugin {
       return;
     }
 
-    // 动态导入 hls.js（按需加载，减小初始包体积）
-    import('hls.js')
-      .then((hlsjs) => {
-        // hls.js 的默认导出是 Hls 构造函数
-        if (!isHlsJsModule(hlsjs.default)) {
-          const msg = 'hls.js 模块结构不符合预期';
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
-        this.hlsjs = hlsjs.default;
+    this.config = config;
+    this.loadStartTime = Date.now();
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
 
-        // 检查 hls.js 自身是否支持当前浏览器
-        if (!this.hlsjs.isSupported()) {
-          const msg = `hls.js 检测到当前浏览器不支持 HLS 播放（${this.browserCapability?.browserName || '未知'} ${this.browserCapability?.browserVersion || ''}）`;
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
+    // 注册首帧时间追踪
+    this.registerFirstFrameTracking();
 
-        if (!this.videoElement) {
-          const msg = '视频元素已被移除，无法加载';
-          logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
-          return;
-        }
+    const source = config.url;
 
-        // 保存配置
-        this.config = config;
+    // Safari 原生 HLS 支持：useLocalHls 且浏览器原生支持 HLS 且源为 URL 字符串
+    if (
+      this.pluginConfig.useLocalHls &&
+      isUrlString(source) &&
+      this.videoElement.canPlayType('application/vnd.apple.mpegurl')
+    ) {
+      this.videoElement.src = source;
+      this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
 
-        // 创建 hls.js 播放器实例（传入详细配置）
-        this.hlsPlayer = new this.hlsjs({
-          startLevel: this.pluginConfig.startLevel,
-          abrEwmaFastLive: this.pluginConfig.abrEwmaFastLive,
-          abrEwmaSlowLive: this.pluginConfig.abrEwmaSlowLive,
-          maxBufferLength: this.pluginConfig.maxBufferLength,
-          maxMaxBufferLength: this.pluginConfig.maxMaxBufferLength,
-          liveSyncDurationCount: this.pluginConfig.liveSyncDurationCount,
-          fragLoadingTimeOut: this.pluginConfig.fragLoadingTimeOut,
-        });
+      if (this.pluginConfig.autoplay) {
+        this.play();
+      }
+      if (config.startTime && config.startTime > 0) {
+        this.seek(config.startTime);
+      }
 
-        // 绑定 hls.js 内置事件
-        this.bindEvents();
+      logger.info('使用原生 HLS 支持:', source);
+      return;
+    }
 
-        // 加载 HLS 源并绑定到视频元素
-        this.hlsPlayer.loadSource(config.url);
-        this.hlsPlayer.attachMedia(this.videoElement);
+    // 检查浏览器是否支持 hls.js
+    if (!Hls.isSupported()) {
+      const msg = `hls.js 检测到当前浏览器不支持 HLS 播放（${this.browserCapability?.browserName || '未知'} ${this.browserCapability?.browserVersion || ''}）`;
+      logger.error(msg);
+      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      return;
+    }
 
-        // 通知外部：加载完成
-        this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: config.url });
+    if (!this.videoElement) {
+      const msg = '视频元素已被移除，无法加载';
+      logger.error(msg);
+      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      return;
+    }
 
-        // 自动播放
-        if (this.pluginConfig.autoplay) {
-          this.play();
-        }
-
-        // 如果指定了起始时间，跳转到对应位置
-        if (config.startTime && config.startTime > 0) {
-          this.seek(config.startTime);
-        }
-
-        logger.info('HLS 流加载成功:', config.url);
-      })
-      .catch((err) => {
-        const msg = `加载 hls.js 失败: ${err instanceof Error ? err.message : String(err)}`;
-        logger.error(msg);
-        this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+    // 根据源类型选择加载方式
+    if (isUrlString(source) && source.split('?')[0].toLowerCase().endsWith('.json')) {
+      // ============================================
+      // JSON Manifest 模式
+      // ============================================
+      // 先 fetch JSON，再转换为 hls.js 清单对象注入
+      this.loadJsonManifest(source);
+    } else if (isUrlString(source)) {
+      // ============================================
+      // URL 字符串模式
+      // ============================================
+      // 1. 创建 Hls 实例（autoStartLoad 默认 true）
+      this.hlsPlayer = new Hls({
+        startLevel: this.pluginConfig.startLevel,
+        abrEwmaFastLive: this.pluginConfig.abrEwmaFastLive,
+        abrEwmaSlowLive: this.pluginConfig.abrEwmaSlowLive,
+        maxBufferLength: this.pluginConfig.maxBufferLength,
+        maxMaxBufferLength: this.pluginConfig.maxMaxBufferLength,
+        liveSyncDurationCount: this.pluginConfig.liveSyncDurationCount,
+        fragLoadingTimeOut: this.pluginConfig.fragLoadingTimeOut,
       });
+
+      // 2. 绑定视频元素
+      this.hlsPlayer.attachMedia(this.videoElement);
+
+      // 3. 加载 URL 源
+      this.hlsPlayer.loadSource(source);
+
+      // 4. 绑定 hls.js 事件
+      this.bindEvents();
+
+      logger.info('HLS 流加载成功:', source);
+    } else if (isMediaManifest(source)) {
+      // ============================================
+      // 对象注入模式（MediaManifest）
+      // ============================================
+      // 1. 创建 Hls 实例，autoStartLoad 必须设为 false
+      this.hlsPlayer = new Hls({
+        autoStartLoad: false,
+        startLevel: this.pluginConfig.startLevel,
+        abrEwmaFastLive: this.pluginConfig.abrEwmaFastLive,
+        abrEwmaSlowLive: this.pluginConfig.abrEwmaSlowLive,
+        maxBufferLength: this.pluginConfig.maxBufferLength,
+        maxMaxBufferLength: this.pluginConfig.maxMaxBufferLength,
+        liveSyncDurationCount: this.pluginConfig.liveSyncDurationCount,
+        fragLoadingTimeOut: this.pluginConfig.fragLoadingTimeOut,
+      });
+
+      // 2. 绑定视频元素
+      this.hlsPlayer.attachMedia(this.videoElement);
+
+      // 3. 绑定 hls.js 事件（在 MEDIA_ATTACHED 之前绑定，确保不遗漏事件）
+      this.bindEvents();
+
+      // 4. 等待 MEDIA_ATTACHED 事件后，转换清单并注入
+      const doManifestInjection = (): void => {
+        if (!this.hlsPlayer) return;
+
+        // 4a. 转换清单对象
+        const hlsData = manifestToHls(source as MediaManifest);
+
+        // 5. 加载清单
+        this.hlsPlayer.loadManifest(hlsData.variants, hlsData.audioGroups);
+
+        // 6. 开始加载片段
+        this.hlsPlayer.startLoad();
+
+        logger.info('HLS 流加载成功（对象注入模式）');
+      };
+
+      // 等待 MEDIA_ATTACHED 事件
+      this.hlsPlayer.once(Hls.Events.MEDIA_ATTACHED, () => {
+        doManifestInjection();
+      });
+    } else if (isManifestObject(source)) {
+      // ============================================
+      // 对象注入模式（直接传入 ManifestVariant[] + ManifestAudioGroup[]）
+      // ============================================
+      // 1. 创建 Hls 实例，autoStartLoad 必须设为 false
+      this.hlsPlayer = new Hls({
+        autoStartLoad: false,
+        startLevel: this.pluginConfig.startLevel,
+        abrEwmaFastLive: this.pluginConfig.abrEwmaFastLive,
+        abrEwmaSlowLive: this.pluginConfig.abrEwmaSlowLive,
+        maxBufferLength: this.pluginConfig.maxBufferLength,
+        maxMaxBufferLength: this.pluginConfig.maxMaxBufferLength,
+        liveSyncDurationCount: this.pluginConfig.liveSyncDurationCount,
+        fragLoadingTimeOut: this.pluginConfig.fragLoadingTimeOut,
+      });
+
+      // 2. 绑定视频元素
+      this.hlsPlayer.attachMedia(this.videoElement);
+
+      // 3. 绑定 hls.js 事件
+      this.bindEvents();
+
+      // 4. 等待 MEDIA_ATTACHED 事件后，直接注入 variants 和 audioGroups
+      const doDirectInjection = (): void => {
+        if (!this.hlsPlayer) return;
+
+        const manifestSource = source as ManifestSourceObject;
+        if (manifestSource.variants && Array.isArray(manifestSource.variants)) {
+          // 5. 加载清单
+          this.hlsPlayer.loadManifest(
+            manifestSource.variants,
+            manifestSource.audioGroups,
+          );
+
+          // 6. 开始加载片段
+          this.hlsPlayer.startLoad();
+
+          logger.info('HLS 流加载成功（对象注入模式 - 直接传入）');
+        } else {
+          const msg = '清单对象缺少 variants 字段';
+          logger.error(msg);
+          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+          return;
+        }
+      };
+
+      // 等待 MEDIA_ATTACHED 事件
+      this.hlsPlayer.once(Hls.Events.MEDIA_ATTACHED, () => {
+        doDirectInjection();
+      });
+    } else {
+      const msg = '不支持的源类型';
+      logger.error(msg);
+      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      return;
+    }
+
+    this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
+
+    if (this.pluginConfig.autoplay) {
+      this.play();
+    }
+    if (config.startTime && config.startTime > 0) {
+      this.seek(config.startTime);
+    }
+  }
+
+  /**
+   * 加载 JSON Manifest 文件
+   * 先 fetch JSON，解析为 MediaManifest 对象，再转换为 hls.js 清单注入
+   *
+   * @param url - JSON manifest 文件 URL
+   */
+  private async loadJsonManifest(url: string): Promise<void> {
+    try {
+      logger.info('正在获取 JSON Manifest:', url);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const manifest = await response.json();
+
+      if (!isMediaManifest(manifest)) {
+        throw new Error('JSON 格式不是有效的 MediaManifest（缺少 duration 或 video 字段）');
+      }
+
+      // 创建 Hls 实例（autoStartLoad 必须设为 false）
+      this.hlsPlayer = new Hls({
+        autoStartLoad: false,
+        startLevel: this.pluginConfig.startLevel,
+        abrEwmaFastLive: this.pluginConfig.abrEwmaFastLive,
+        abrEwmaSlowLive: this.pluginConfig.abrEwmaSlowLive,
+        maxBufferLength: this.pluginConfig.maxBufferLength,
+        maxMaxBufferLength: this.pluginConfig.maxMaxBufferLength,
+        liveSyncDurationCount: this.pluginConfig.liveSyncDurationCount,
+        fragLoadingTimeOut: this.pluginConfig.fragLoadingTimeOut,
+      });
+
+      this.hlsPlayer.attachMedia(this.videoElement!);
+      this.bindEvents();
+
+      // 转换清单对象
+      const hlsData = manifestToHls(manifest);
+
+      // 加载清单
+      this.hlsPlayer.loadManifest(hlsData.variants, hlsData.audioGroups);
+      this.hlsPlayer.startLoad();
+
+      logger.info('HLS 流加载成功 (JSON Manifest模式)');
+      this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url });
+    } catch (err) {
+      const msg = `加载 JSON Manifest 失败: ${err instanceof Error ? err.message : String(err)}`;
+      logger.error(msg);
+      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+    }
+  }
+
+  /**
+   * 注册首帧时间追踪
+   * 监听视频元素的 playing 事件，记录从加载开始到首帧渲染的时间
+   */
+  private registerFirstFrameTracking(): void {
+    this.removeFirstFrameTracking();
+
+    const video = this.videoElement;
+    if (!video) return;
+
+    this.firstFrameHandler = (): void => {
+      if (!this.firstFrameRecorded) {
+        this.firstFrameRecorded = true;
+        this.firstFrameTime = Date.now() - this.loadStartTime;
+        this.stats.firstFrameTime = this.firstFrameTime;
+        logger.info(`首帧时间: ${this.firstFrameTime}ms`);
+        this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      }
+    };
+
+    video.addEventListener('playing', this.firstFrameHandler);
+  }
+
+  /**
+   * 移除首帧时间追踪监听
+   */
+  private removeFirstFrameTracking(): void {
+    if (this.firstFrameHandler && this.videoElement) {
+      this.videoElement.removeEventListener('playing', this.firstFrameHandler);
+      this.firstFrameHandler = null;
+    }
   }
 
   /**
    * 绑定 hls.js 核心事件
    * 将 hls.js 的内部事件转换为统一的 StreamPlugin 事件
+   *
+   * 绑定事件列表：
+   * - MEDIA_ATTACHED: 媒体附加完成
+   * - MANIFEST_PARSED: 清单解析完成
+   * - ERROR: 播放器错误（区分致命/非致命）
+   * - FRAG_LOADED: 片段加载完成
+   * - LEVEL_SWITCHED: 画质级别切换
+   * - BUFFER_APPENDED: 片段缓冲追加完成
    */
   private bindEvents(): void {
-    if (!this.hlsPlayer || !this.hlsjs) return;
+    if (!this.hlsPlayer) return;
 
-    const Events = this.hlsjs.Events;
+    const Events = Hls.Events;
 
     // 媒体附加完成
     this.hlsPlayer.on(Events.MEDIA_ATTACHED, () => {
@@ -361,47 +566,34 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     });
 
     // 清单解析完成 → 获取可用画质信息
-    this.hlsPlayer.on(Events.MANIFEST_PARSED, (_event: unknown, data: unknown) => {
-      if (data && typeof data === 'object' && 'levels' in data && Array.isArray(data.levels)) {
+    this.hlsPlayer.on(Events.MANIFEST_PARSED, (_event: string, data: ManifestParsedData) => {
+      if (data && 'levels' in data && Array.isArray(data.levels)) {
         logger.info('清单解析完成，可用画质:', data.levels.length);
         this.eventBus?.emit(StreamPluginEventEnum.METADATA_LOADED, data);
       }
     });
 
     // 播放器错误处理（区分致命/非致命错误）
-    this.hlsPlayer.on(Events.ERROR, (_event: unknown, data: unknown) => {
-      if (
-        data && typeof data === 'object' &&
-        'type' in data && typeof data.type === 'string' &&
-        'details' in data && typeof data.details === 'string' &&
-        'fatal' in data && typeof data.fatal === 'boolean'
-      ) {
-        logger.error('播放器错误:', data);
+    this.hlsPlayer.on(Events.ERROR, (_event: string, data: ErrorData) => {
+      logger.error('播放器错误:', data);
 
-        if (data.fatal) {
-          // 致命错误：根据类型发出不同事件
-          switch (data.type) {
-            case this.hlsjs!.ErrorTypes.NETWORK_ERROR:
-              this.eventBus?.emit(StreamPluginEventEnum.NETWORK_ERROR, data);
-              // 尝试自动恢复
-              this.hlsPlayer?.recoverMediaError();
-              break;
-            case this.hlsjs!.ErrorTypes.MEDIA_ERROR:
-              this.eventBus?.emit(StreamPluginEventEnum.DECODE_ERROR, data);
-              this.hlsPlayer?.recoverMediaError();
-              break;
-            default:
-              this.eventBus?.emit(StreamPluginEventEnum.ERROR, data);
-              break;
-          }
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            this.eventBus?.emit(StreamPluginEventEnum.NETWORK_ERROR, data);
+            // 网络错误：尝试重新加载
+            this.hlsPlayer?.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            this.eventBus?.emit(StreamPluginEventEnum.DECODE_ERROR, data);
+            // 媒体错误：尝试恢复
+            this.hlsPlayer?.recoverMediaError();
+            break;
+          default:
+            this.eventBus?.emit(StreamPluginEventEnum.ERROR, data);
+            break;
         }
       }
-    });
-
-    // 缓冲停滞开始 → 记录卡顿开始时间
-    this.hlsPlayer.on(Events.BUFFER_STALLED, () => {
-      this.lastStallTime = Date.now();
-      this.eventBus?.emit(StreamPluginEventEnum.BUFFER_START, {});
     });
 
     // 缓冲追加完成 → 计算卡顿时长
@@ -416,24 +608,24 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     });
 
     // 片段加载完成 → 更新下载速度统计
-    this.hlsPlayer.on(Events.FRAG_LOADED, (_event: unknown, data: unknown) => {
-      if (
-        data && typeof data === 'object' && 'stats' in data &&
-        data.stats !== null && typeof data.stats === 'object' &&
-        'loaded' in data.stats && typeof data.stats.loaded === 'number' &&
-        'total' in data.stats && typeof data.stats.total === 'number'
-      ) {
-        this.stats.downloadSpeed = data.stats.loaded;
-      }
+    this.hlsPlayer.on(Events.FRAG_LOADED, () => {
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
     });
 
     // 画质级别切换
-    this.hlsPlayer.on(Events.LEVEL_SWITCHED, (_event: unknown, data: unknown) => {
-      if (data && typeof data === 'object' && 'level' in data && typeof data.level === 'number') {
-        logger.info('画质切换至级别:', data.level);
-      }
+    this.hlsPlayer.on(Events.LEVEL_SWITCHED, (_event: string, data: LevelSwitchedData) => {
+      logger.info('画质切换至级别:', data.level);
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      const stats = this.getStats();
+      if (stats.resolution) {
+        const isAuto = this.hlsPlayer?.currentLevel === -1;
+        this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, {
+          width: stats.resolution.width,
+          height: stats.resolution.height,
+          bitrate: stats.videoBitrate,
+          isAuto,
+        });
+      }
     });
   }
 
@@ -447,8 +639,8 @@ export class HlsPlugin implements Plugin, StreamPlugin {
         .then(() => {
           this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
         })
-        .catch((err) => {
-          const msg = `播放失败: ${err instanceof Error ? err.message : String(err)}`;
+        .catch((err: Error) => {
+          const msg = `播放失败: ${err.message}`;
           logger.error(msg);
           this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
         });
@@ -483,6 +675,7 @@ export class HlsPlugin implements Plugin, StreamPlugin {
    * 停止加载、销毁 hls.js 实例，清理所有引用
    */
   destroy(): void {
+    this.removeFirstFrameTracking();
     if (this.hlsPlayer) {
       this.hlsPlayer.stopLoad();
       this.hlsPlayer.destroy();
@@ -491,6 +684,9 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     this.config = null;
     this.stats = {};
     this.lastStallTime = 0;
+    this.loadStartTime = 0;
+    this.firstFrameRecorded = false;
+    this.firstFrameTime = 0;
   }
 
   /**
@@ -503,7 +699,6 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     const video = this.videoElement;
     const buffered = video?.buffered;
 
-    // 无缓冲数据时返回空值
     if (!video || !buffered || buffered.length === 0) {
       return { start: 0, end: 0, length: 0 };
     }
@@ -511,7 +706,6 @@ export class HlsPlugin implements Plugin, StreamPlugin {
     const currentTime = video.currentTime || 0;
     let bufferEnd = 0;
 
-    // 查找包含当前播放位置的缓冲区间
     for (let i = 0; i < buffered.length; i++) {
       if (buffered.start(i) <= currentTime && buffered.end(i) >= currentTime) {
         bufferEnd = buffered.end(i);
@@ -530,7 +724,7 @@ export class HlsPlugin implements Plugin, StreamPlugin {
 
   /**
    * 获取统计信息
-   * 收集当前播放器状态，包括播放时间、缓冲长度、码率、分辨率等
+   * 收集当前播放器状态，包括播放时间、缓冲长度、码率、分辨率、首帧时间等
    *
    * @returns 流媒体统计信息
    */
@@ -544,10 +738,11 @@ export class HlsPlugin implements Plugin, StreamPlugin {
       currentTime: video?.currentTime || 0,
       duration: video?.duration || 0,
       bufferLength: bufferInfo.length,
-      firstFrameTime: 0,
+      firstFrameTime: this.firstFrameTime,
       totalStallCount: this.stats.totalStallCount || 0,
       totalStallTime: this.stats.totalStallTime || 0,
       videoBitrate: currentLevel?.bitrate,
+      downloadSpeed: this.stats.downloadSpeed || 0,
       resolution: currentLevel?.width && currentLevel?.height
         ? { width: currentLevel.width, height: currentLevel.height }
         : undefined,
@@ -558,20 +753,28 @@ export class HlsPlugin implements Plugin, StreamPlugin {
    * 获取可用画质列表
    * 从 hls.js 获取所有可用的码率/分辨率级别
    *
-   * @returns 画质列表（码率 + 分辨率）
+   * @returns 画质列表（id + label + 码率 + 分辨率）
    */
-  getQualities(): Array<{ bitrate: number; width: number; height: number }> {
-    return this.hlsPlayer?.levels ?? [];
+  getQualities(): QualityLevel[] {
+    if (!this.hlsPlayer) return [];
+    return this.hlsPlayer.levels.map((level, index) => ({
+      id: String(index),
+      label: level.height ? `${level.height}p` : `Level ${index}`,
+      width: level.width,
+      height: level.height,
+      bitrate: level.bitrate,
+    }));
   }
 
   /**
    * 设置播放画质
-   * 切换到指定索引的码率层级（-1 表示自动选择）
+   * 切换到指定索引的码率层级（'-1' 或 'auto' 表示自动选择）
    *
-   * @param level - 画质级别索引
+   * @param quality - 画质标识（级别索引字符串，或 'auto'）
    */
-  setQuality(level: number): void {
+  setQuality(quality: string): void {
     if (this.hlsPlayer) {
+      const level = quality === 'auto' ? -1 : Number(quality);
       this.hlsPlayer.currentLevel = level;
     }
   }
@@ -612,15 +815,21 @@ export class HlsPlugin implements Plugin, StreamPlugin {
  *
  * @example
  * // 基本用法
- * player.use(HlsPlugin());
+ * player.use(createHlsPlugin());
  *
  * @example
  * // 自定义缓冲配置
- * player.use(HlsPlugin({
+ * player.use(createHlsPlugin({
  *   maxBufferLength: 60,
  *   autoplay: false
  * }));
+ *
+ * @example
+ * // 使用 Safari 原生 HLS 回退
+ * player.use(createHlsPlugin({
+ *   useLocalHls: true
+ * }));
  */
-export function createHlsPlugin(config?: HlsJsConfig): HlsPlugin {
+export function createHlsPlugin(config?: HlsPluginConfig): HlsPlugin {
   return new HlsPlugin(config);
 }

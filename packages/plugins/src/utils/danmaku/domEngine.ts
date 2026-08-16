@@ -8,14 +8,18 @@ import {
   ScreenMode,
   DanmakuSpeed,
   DanmakuArea,
-  type DanmakuItem,
-  type DanmakuRenderItem,
-  type DanmakuFilter,
-  type DanmakuMaskConfig,
+} from '@/types/danmaku';
+import type {
+  DanmakuItem,
+  DanmakuFilter,
+} from '@/types/danmaku';
+import type {
+  DanmakuRenderItem,
+  DanmakuMaskConfig,
 } from './types';
 import { DOMElementPool, DanmakuItemPool } from './objectPool';
 import { TrackManager } from './trackManager';
-import { rafTimeout, cancelRaf, createLogger } from '@/utils';
+import { rafTimeout, cancelRaf, createLogger, isBrowser } from '@/utils';
 import { calculateFontSize } from './scaleHelper';
 const logger = createLogger('DOMEngine');
 
@@ -121,6 +125,11 @@ export class DOMEngine {
       ...config,
     };
 
+    if (!isBrowser()) {
+      this.danmakuLayer = container;
+      return;
+    }
+
     // 创建弹幕层
     this.danmakuLayer = document.createElement('div');
     this.danmakuLayer.className = 'danmaku-layer dom-engine';
@@ -157,11 +166,11 @@ export class DOMEngine {
   private loadMaskImage(url: string): void {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
+    img.onload = (): void => {
       this.maskImage = img;
       this.applyMask();
     };
-    img.onerror = () => {
+    img.onerror = (): void => {
       // 静默处理错误
     };
     img.src = url;
@@ -189,6 +198,8 @@ export class DOMEngine {
    * - 蒙层图片外区域（两边/上下）：显示弹幕
    */
   private applyMask(): void {
+    if (!isBrowser()) return;
+
     if (!this.maskImage || !this.config.maskConfig?.enabled) {
       this.danmakuLayer.style.maskImage = '';
       this.danmakuLayer.style.webkitMaskImage = '';
@@ -302,6 +313,8 @@ export class DOMEngine {
    * 注入CSS样式 - B站风格弹幕动画
    */
   private injectCSSStyles(): void {
+    if (!isBrowser()) return;
+
     const styleId = 'danmaku-bilibili-style';
     if (document.getElementById(styleId)) return;
 
@@ -637,7 +650,7 @@ export class DOMEngine {
     item.element.style.animationDelay = '0s';
 
     // 监听动画结束
-    const onAnimationEnd = () => {
+    const onAnimationEnd = (): void => {
       this.removeDanmaku(item.renderId);
     };
     item.element.addEventListener('animationend', onAnimationEnd);
@@ -678,7 +691,7 @@ export class DOMEngine {
     item.element.style.animationDelay = '0s';
 
     // 监听动画结束
-    const onAnimationEnd = () => {
+    const onAnimationEnd = (): void => {
       this.removeDanmaku(item.renderId);
     };
     item.element.addEventListener('animationend', onAnimationEnd);
@@ -1081,7 +1094,7 @@ export class DOMEngine {
 
     let lastTimeKey = -1;
 
-    const updateMask = async () => {
+    const updateMask = async (): Promise<void> => {
       if (!config.maskLoader) {
         return;
       }

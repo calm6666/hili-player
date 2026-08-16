@@ -29,7 +29,7 @@
  */
 
 // 导出流媒体相关
-export type { StreamPlugin, StreamConfig, BufferInfo, StreamStats } from './stream/types';
+export type { StreamPlugin, StreamConfig, BufferInfo, StreamStats, MediaManifestSource } from './stream/types';
 export {
   StreamPluginTypeEnum,
   StreamFormatEnum,
@@ -48,14 +48,14 @@ export { HlsPlugin, createHlsPlugin } from './hls';
 export { DashPlugin, createDashPlugin } from './dash';
 
 // 导出弹幕插件 - 使用工厂函数
-export { DanmakuPlugin } from './danmaku';
-export type { DanmakuPluginConfig } from './danmaku';
+export { DanmakuPlugin, createDanmakuPlugin } from './danmaku';
+export type { DanmakuPluginConfig, DanmakuPluginAPI } from './danmaku';
 export type { DanmakuItem } from './danmaku/types';
 
 // 导出字幕插件 - 使用工厂函数
-export { SubtitlePlugin } from './subtitle';
-export type { SubtitlePluginConfig, SubtitleSource } from './subtitle';
+export { SubtitlePlugin, createSubtitlePlugin } from './subtitle';
+export type { SubtitlePluginConfig, SubtitlePluginAPI } from './subtitle';
 
 // 导出交互插件 - 使用工厂函数
 export { InteractionPlugin } from './interaction';
-export type { InteractionPluginConfig } from './interaction';
+export type { InteractionPluginConfig, InteractionPluginAPI } from './interaction';

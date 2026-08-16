@@ -130,8 +130,13 @@ export function generateBitrateChart(
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  // 获取数据范围
-  const maxBitrate = Math.max(...data.map((d) => d.totalBitrate), 1);
+  // 获取数据范围（动态Y轴）
+  const rawMaxBitrate = Math.max(...data.map((d) => d.totalBitrate), 1);
+  const rawMinBitrate = Math.min(...data.map((d) => d.totalBitrate));
+  const bitrateRange = rawMaxBitrate - rawMinBitrate || rawMaxBitrate;
+  const maxBitrate = rawMaxBitrate + bitrateRange * 0.1;
+  const minBitrate = Math.max(0, rawMinBitrate - bitrateRange * 0.1);
+  const bitrateValueRange = maxBitrate - minBitrate;
   const minTime = data[0].timestamp;
   const maxTime = data[data.length - 1].timestamp;
   const timeRange = Math.max(maxTime - minTime, 1);
@@ -139,7 +144,7 @@ export function generateBitrateChart(
   // 生成数据点
   const points = data.map((d) => ({
     x: padding.left + ((d.timestamp - minTime) / timeRange) * chartWidth,
-    y: padding.top + chartHeight - (d.totalBitrate / maxBitrate) * chartHeight,
+    y: padding.top + chartHeight - ((d.totalBitrate - minBitrate) / bitrateValueRange) * chartHeight,
   }));
 
   // 生成路径
@@ -168,7 +173,7 @@ export function generateBitrateChart(
 
     // Y 轴标签
     for (let i = 0; i <= 4; i++) {
-      const value = (maxBitrate / 4) * (4 - i);
+      const value = minBitrate + (bitrateValueRange / 4) * (4 - i);
       const y = padding.top + (chartHeight / 4) * i;
       axes += `<text x="${padding.left - 5}" y="${y + 4}" text-anchor="end" fill="${cfg.axisColor}" font-size="10">${formatBitrate(value)}</text>`;
     }
@@ -215,8 +220,13 @@ export function generateBufferChart(
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  // 获取数据范围
-  const maxBuffer = Math.max(...data.map((d) => Math.max(d.videoBuffer, d.audioBuffer)), 10);
+  // 获取数据范围（动态Y轴）
+  const rawMaxBuffer = Math.max(...data.map((d) => Math.max(d.videoBuffer, d.audioBuffer)), 10);
+  const rawMinBuffer = Math.min(...data.map((d) => Math.min(d.videoBuffer, d.audioBuffer)));
+  const bufferRange = rawMaxBuffer - rawMinBuffer || rawMaxBuffer;
+  const maxBuffer = rawMaxBuffer + bufferRange * 0.1;
+  const minBuffer = Math.max(0, rawMinBuffer - bufferRange * 0.1);
+  const bufferValueRange = maxBuffer - minBuffer;
   const minTime = data[0].timestamp;
   const maxTime = data[data.length - 1].timestamp;
   const timeRange = Math.max(maxTime - minTime, 1);
@@ -224,13 +234,13 @@ export function generateBufferChart(
   // 生成视频缓冲区数据点
   const videoPoints = data.map((d) => ({
     x: padding.left + ((d.timestamp - minTime) / timeRange) * chartWidth,
-    y: padding.top + chartHeight - (d.videoBuffer / maxBuffer) * chartHeight,
+    y: padding.top + chartHeight - ((d.videoBuffer - minBuffer) / bufferValueRange) * chartHeight,
   }));
 
   // 生成音频缓冲区数据点
   const audioPoints = data.map((d) => ({
     x: padding.left + ((d.timestamp - minTime) / timeRange) * chartWidth,
-    y: padding.top + chartHeight - (d.audioBuffer / maxBuffer) * chartHeight,
+    y: padding.top + chartHeight - ((d.audioBuffer - minBuffer) / bufferValueRange) * chartHeight,
   }));
 
   const videoPath = generatePath(videoPoints, cfg);
@@ -252,7 +262,7 @@ export function generateBufferChart(
     axes += `<line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${cfg.axisColor}" stroke-width="1"/>`;
 
     for (let i = 0; i <= 4; i++) {
-      const value = (maxBuffer / 4) * (4 - i);
+      const value = minBuffer + (bufferValueRange / 4) * (4 - i);
       const y = padding.top + (chartHeight / 4) * i;
       axes += `<text x="${padding.left - 5}" y="${y + 4}" text-anchor="end" fill="${cfg.axisColor}" font-size="10">${value.toFixed(1)}s</text>`;
     }
@@ -293,8 +303,13 @@ export function generateThroughputChart(
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  // 获取数据范围
-  const maxThroughput = Math.max(...data.map((d) => d.totalThroughput), 1000000);
+  // 获取数据范围（动态Y轴）
+  const rawMaxThroughput = Math.max(...data.map((d) => d.totalThroughput), 1000000);
+  const rawMinThroughput = Math.min(...data.map((d) => d.totalThroughput));
+  const throughputRange = rawMaxThroughput - rawMinThroughput || rawMaxThroughput;
+  const maxThroughput = rawMaxThroughput + throughputRange * 0.1;
+  const minThroughput = Math.max(0, rawMinThroughput - throughputRange * 0.1);
+  const throughputValueRange = maxThroughput - minThroughput;
   const minTime = data[0].timestamp;
   const maxTime = data[data.length - 1].timestamp;
   const timeRange = Math.max(maxTime - minTime, 1000);
@@ -302,7 +317,7 @@ export function generateThroughputChart(
   // 生成数据点
   const points = data.map((d) => ({
     x: padding.left + ((d.timestamp - minTime) / timeRange) * chartWidth,
-    y: padding.top + chartHeight - (d.totalThroughput / maxThroughput) * chartHeight,
+    y: padding.top + chartHeight - ((d.totalThroughput - minThroughput) / throughputValueRange) * chartHeight,
   }));
 
   const linePath = generatePath(points, cfg);
@@ -326,7 +341,7 @@ export function generateThroughputChart(
     axes += `<line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${cfg.axisColor}" stroke-width="1"/>`;
 
     for (let i = 0; i <= 4; i++) {
-      const value = (maxThroughput / 4) * (4 - i);
+      const value = minThroughput + (throughputValueRange / 4) * (4 - i);
       const y = padding.top + (chartHeight / 4) * i;
       axes += `<text x="${padding.left - 5}" y="${y + 4}" text-anchor="end" fill="${cfg.axisColor}" font-size="10">${formatBitrate(value)}</text>`;
     }
@@ -367,8 +382,13 @@ export function generateFPSChart(
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  // 获取数据范围
-  const maxFPS = Math.max(...data.map((d) => d.fps), 60);
+  // 获取数据范围（动态Y轴）
+  const rawMaxFPS = Math.max(...data.map((d) => d.fps), 60);
+  const rawMinFPS = Math.min(...data.map((d) => d.fps));
+  const fpsRange = rawMaxFPS - rawMinFPS || rawMaxFPS;
+  const maxFPS = rawMaxFPS + fpsRange * 0.1;
+  const minFPS = Math.max(0, rawMinFPS - fpsRange * 0.1);
+  const fpsValueRange = maxFPS - minFPS;
   const minTime = data[0].timestamp;
   const maxTime = data[data.length - 1].timestamp;
   const timeRange = Math.max(maxTime - minTime, 1);
@@ -376,7 +396,7 @@ export function generateFPSChart(
   // 生成数据点
   const points = data.map((d) => ({
     x: padding.left + ((d.timestamp - minTime) / timeRange) * chartWidth,
-    y: padding.top + chartHeight - (d.fps / maxFPS) * chartHeight,
+    y: padding.top + chartHeight - ((d.fps - minFPS) / fpsValueRange) * chartHeight,
   }));
 
   const linePath = generatePath(points, cfg);
@@ -397,7 +417,7 @@ export function generateFPSChart(
     axes += `<line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${cfg.axisColor}" stroke-width="1"/>`;
 
     for (let i = 0; i <= 4; i++) {
-      const value = (maxFPS / 4) * (4 - i);
+      const value = minFPS + (fpsValueRange / 4) * (4 - i);
       const y = padding.top + (chartHeight / 4) * i;
       axes += `<text x="${padding.left - 5}" y="${y + 4}" text-anchor="end" fill="${cfg.axisColor}" font-size="10">${Math.round(value)} FPS</text>`;
     }

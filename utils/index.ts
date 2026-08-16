@@ -9,7 +9,7 @@ export { formatTime } from './formatTime';
 export { rafTimeout, cancelRaf } from './rafTimeout';
 export { rafInterval, clearRafInterval } from './rafInterval';
 export { dom } from './dom';
-export { isServer, isBrowser, createSSRConfig } from './ssr';
+export { isServer, isBrowser, createSSRConfig, safeResizeObserver, safeIntersectionObserver } from './ssr';
 export type { SSRConfig } from './ssr';
 export { smartMerge } from './smartMerge';
 export { createLogger, Logger, LogLevel, loggerManager } from './logger';

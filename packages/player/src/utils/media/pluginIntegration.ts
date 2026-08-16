@@ -202,7 +202,7 @@ export class MediaIntegration {
     const originalCallbacks = this.monitor['callbacks'];
     this.monitor['callbacks'] = {
       ...(typeof originalCallbacks === 'object' ? originalCallbacks : {}),
-      onStatsUpdate: (stats: PlayerStats) => {
+      onStatsUpdate: (stats: PlayerStats): void => {
         // 通过事件总线发送监控数据
         if (this.eventBus) {
           this.eventBus.emit('monitor:stats', stats);
@@ -212,22 +212,22 @@ export class MediaIntegration {
           originalCallbacks.onStatsUpdate(stats);
         }
       },
-      onBitrateUpdate: (data: BitrateDataPoint[]) => {
+      onBitrateUpdate: (data: BitrateDataPoint[]): void => {
         if (this.eventBus) {
           this.eventBus.emit('monitor:bitrate', data);
         }
       },
-      onThroughputUpdate: (data: ThroughputDataPoint[]) => {
+      onThroughputUpdate: (data: ThroughputDataPoint[]): void => {
         if (this.eventBus) {
           this.eventBus.emit('monitor:throughput', data);
         }
       },
-      onBufferUpdate: (data: BufferDataPoint[]) => {
+      onBufferUpdate: (data: BufferDataPoint[]): void => {
         if (this.eventBus) {
           this.eventBus.emit('monitor:buffer', data);
         }
       },
-      onFPSUpdate: (data: FrameRateDataPoint[]) => {
+      onFPSUpdate: (data: FrameRateDataPoint[]): void => {
         if (this.eventBus) {
           this.eventBus.emit('monitor:fps', data);
         }
