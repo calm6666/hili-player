@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { h, defineComponent, renderToString, Fragment } from '@/core';
+import { h, defineComponent, renderToString, Fragment, _createEl } from '@/core';
 
 describe('renderToString', () => {
   it('should render null/undefined to empty string', () => {
@@ -34,6 +34,22 @@ describe('renderToString', () => {
 
   it('should skip ref attribute', () => {
     const vnode = h('div', { ref: { current: null }, class: 'test' }, 'Content');
+    expect(renderToString(vnode)).toBe('<div class="test">Content</div>');
+  });
+
+  it('should skip compiled __ref attribute', () => {
+    const vnode = _createEl('div', { __ref: { current: null }, class: 'test' }, 'Content');
+    expect(renderToString(vnode)).toBe('<div class="test">Content</div>');
+  });
+
+  it('should not serialize compiled __events attribute', () => {
+    // 编译产物：vite-plugin-hili-compile 将 onXxx 提取为 __events
+    // __events 是内部字段，绝不能输出为 __events="[object Object]"
+    const vnode = _createEl(
+      'div',
+      { class: 'test', __events: { click: () => {} } },
+      'Content'
+    );
     expect(renderToString(vnode)).toBe('<div class="test">Content</div>');
   });
 

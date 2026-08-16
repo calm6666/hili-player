@@ -344,9 +344,16 @@ export function applyAttrs(
     if (value === null || value === undefined) continue;
 
     /**
-     * 跳过已处理的 ref / __ref / __events
+     * 跳过已处理的 ref / __ref / __events / __providers
+     * __providers 由 h()/内部函数在创建 VNode 时提取到 vnode.__providers，
+     * 此处兜底跳过，防止任何路径残留的 __providers 被当作 DOM 属性设置
      */
-    if (key === "ref" || key === "__ref" || key === "__events") continue;
+    if (
+      key === "ref" ||
+      key === "__ref" ||
+      key === "__events" ||
+      key === "__providers"
+    ) continue;
 
     /**
      * 处理指令数组
@@ -834,8 +841,11 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
      * 2. 直接绑定对象：ref: elementRef，其中 elementRef = { current: null }
      *
      * 回调 ref 传递 vnode 作为第二个参数，与 mount 中的 applyAttrs 保持一致
+     *
+     * ★ 优先读取编译期预分类的 __ref（与 applyAttrs 一致）
+     * 编译器将 ref → __ref，若只读 attrs.ref，编译产物水合时 ref 会全部失效
      */
-    const refValue = attrs.ref;
+    const refValue = attrs.__ref ?? attrs.ref;
     if (refValue !== undefined && refValue !== null) {
       if (typeof refValue === "function") {
         (refValue as RefValue)(el, vnode);

@@ -37,7 +37,10 @@ export default defineConfig({
     },
     outDir: resolve(__dirname, 'dist'),
     sourcemap: true,
-    minify: false,
+    // ★ 开启 minify 让 __HILI_DEV__ 替换后触发死代码消除：
+    // isDev() 是函数调用，不压缩时 `if (__HILI_DEV__)` 分支无法折叠，
+    // 开发警告代码会全量留在库产物中
+    minify: 'esbuild',
   },
   resolve: {
     alias: [

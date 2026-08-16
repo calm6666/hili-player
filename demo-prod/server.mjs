@@ -18,7 +18,7 @@ import { createServer as createViteServer } from 'vite';
 /** ESM 模块中等价于 __dirname */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Express 监听端口，与 dev demo（5174）错开 */
-const PORT = 5175;
+const PORT = 5177;
 /** 播放器构建产物的静态样式，SSR 首屏需要显式注入 */
 const PLAYER_STYLE_PATH = path.resolve(__dirname, '../packages/player/dist/style.css');
 

@@ -5,14 +5,18 @@
  * 参照 Vue/Solid/Svelte 插件设计模式：
  * - 自动检测 dev/prod 环境（configResolved）
  * - 自动注入 __HILI_DEV__ 常量（config.define）
- * - Dev 模式零开销（transform return null）
- * - Prod 模式全量 AST 优化转换
+ * - Dev/Prod 同一套编译产物（与 Vue/Solid 一致）：h() → _create* 专用函数
+ * - Prod 额外启用静态提升（hoistStatic，与 Vue plugin-vue 一致）
+ * - 静态提升常量通过 _cloneHoisted() 克隆复用，避免共享节点污染
  *
  * 智能文件过滤：
  * - Vue 只处理 .vue 文件，Solid 只处理含 JSX 的文件
  * - 本插件只处理「真正使用了框架 API」的文件：
  *   通过检测 import 语句判断文件是否引入了 h/defineComponent 等
  *   纯工具函数文件（即使有 class）不会被转换
+ * - 所有转换都通过 babel scope 校验标识符来源，
+ *   只转换来自框架模块（@/core、@/hili-player）的 h/defineComponent，
+ *   不误伤其他库的同名导出（如 preact 的 h）
  *
  * 使用方式：
  * ```typescript
@@ -26,7 +30,7 @@
  * ```
  */
 
-import type { Plugin, ResolvedConfig } from "vite";
+import type { Plugin, ResolvedConfig, UserConfig, TransformResult } from "vite";
 import { transformCode } from "./transform";
 import type { HiliCompileOptions } from "./types";
 
@@ -37,7 +41,10 @@ const DEFAULT_OPTIONS: Required<HiliCompileOptions> = {
   hoistStatic: true,
   compileComponentType: true,
   compileAttrs: true,
-  dev: false,
+  // ★ 默认开发环境也执行转换（与 Vue/Solid 一致）：
+  // dev/prod 使用同一套编译产物，消除双路径行为差异，
+  // 编译路径的 Bug（__events/__ref/__providers）在 dev 即可暴露
+  dev: true,
   include: [/\.tsx?$/],
   exclude: [
     /node_modules/,
@@ -46,10 +53,11 @@ const DEFAULT_OPTIONS: Required<HiliCompileOptions> = {
     // 框架源码目录不转换（框架自身 export API，不是消费者）
     // 与 Solid 排除 node_modules/solid-js 的逻辑一致
     // 应用代码在 demo/、packages/ 等目录中
-    /[\\\/]core[\\\/]/,
+    /[\\/]core[\\/]/,
     // 插件自身源码不转换
-    /plugins[\/\\]vite-plugin-hili-compile/,
+    /plugins[/\\]vite-plugin-hili-compile/,
   ],
+  internalImportSource: "@/core/internal",
 };
 
 /**
@@ -117,7 +125,7 @@ export function hiliCompile(options?: HiliCompileOptions): Plugin {
      * 注意：config 钩子运行在 configResolved 之前，此时闭包变量还未设置，
      * 所以必须使用 command 参数而非闭包变量
      */
-    config(_userConfig, { command }) {
+    config(_userConfig, { command }): UserConfig {
       const isBuild = command === "build";
       return {
         define: {
@@ -133,23 +141,24 @@ export function hiliCompile(options?: HiliCompileOptions): Plugin {
      * - serve: vite dev 启动开发服务器
      * - build: vite build 生产打包
      */
-    configResolved(resolvedConfig: ResolvedConfig) {
+    configResolved(resolvedConfig: ResolvedConfig): void {
       isServe = resolvedConfig.command === "serve";
       isProduction = resolvedConfig.isProduction;
     },
 
     /**
-     * transform 钩子：根据环境自动分流
+     * transform 钩子：dev/prod 统一编译（与 Vue/Solid 一致）
      *
      * 三层过滤策略：
      * 1. 文件扩展名过滤（include/exclude）
      * 2. 内容过滤：检测文件是否真正 import 了框架 API
-     * 3. 环境过滤：dev 模式跳过，prod 模式转换
+     * 3. 环境过滤：默认 dev/prod 都执行转换；dev: false 时开发模式跳过
      *
-     * - Dev 模式（且 dev=false）：跳过转换，保持 HMR 速度
-     * - Prod 模式：全量优化（静态提升、组件类型预计算、属性预分类）
+     * - Dev：转换（h() → _create*、组件标记、属性预分类），保留 HMR 容错
+     * - Prod：全量优化（额外启用静态提升）
+     * 开发警告由 __HILI_DEV__ 在运行时控制（dev true / prod false 触发 DCE）
      */
-    transform(code: string, id: string) {
+    transform(code: string, id: string): TransformResult | null {
       // 第一层：文件扩展名过滤
       const isIncluded = opts.include.some((pattern) => pattern.test(id));
       if (!isIncluded) return null;
@@ -163,17 +172,18 @@ export function hiliCompile(options?: HiliCompileOptions): Plugin {
       if (!usesFrameworkAPI(code)) return null;
 
       // 第三层：环境过滤
-      // 开发模式：默认不做转换，保持 HMR 速度
+      // 默认 dev/prod 都编译（dev: false 显式回到旧行为）
       if (isServe && !isProduction && !opts.dev) {
         return null;
       }
 
-      // 生产模式或 dev=true：执行 AST 转换
+      // 执行 AST 转换（dev/prod 同一套编译，静态提升仅生产构建生效）
       const result = transformCode(code, id, {
-        isProduction: isProduction || opts.dev,
-        hoistStatic: opts.hoistStatic,
+        isProduction,
+        hoistStatic: isProduction && opts.hoistStatic,
         compileComponentType: opts.compileComponentType,
         compileAttrs: opts.compileAttrs,
+        internalImportSource: opts.internalImportSource,
       });
 
       if (!result) return null;

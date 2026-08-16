@@ -131,3 +131,61 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 | P2 | lib 构建开 minify 让 `__HILI_DEV__` DCE 生效 | 小 |
 
 > 注：本次分析过程中 `pnpm test` 因沙箱限制（esbuild spawn EPERM）无法执行，上述结论全部基于静态代码阅读；建议修复后在本地跑一遍 `pnpm test` 和 `pnpm build` 验证。
+
+---
+
+## 八、P0 修复记录（已完成）
+
+| Bug | 修复文件 | 说明 |
+|-----|---------|------|
+| SSR 序列化 `__events` | `core/ssr.ts` | `SKIP_ATTRS` 增加 `"__events"`，与 `__ref`/`__providers` 并列 |
+| hydrate 不认 `__ref` | `core/mount.ts` | `hydrateNode` 改为 `attrs.__ref ?? attrs.ref`，与 `applyAttrs` 对齐 |
+| 元素级 `__providers` 失效 | `core/internal.ts` + `core/mount.ts` | `_createStaticEl/_createEl/_createSvgEl` 提取 `__providers` 到 `vnode.__providers`（与 h() 一致）；`applyAttrs` 跳过清单兜底加 `__providers` |
+
+回归测试：
+
+- `tests/core/ssr.test.ts`：`__ref`/`__events` 不序列化（新增 2 条）
+- `tests/core/hydrate.test.ts`：编译路径 `__ref` 水合绑定（新增 1 条）
+- `tests/core/internal.test.ts`（新增）：`__providers` 提取、无 DOM 属性泄漏、SSR 跳过、与 h() 行为一致性（6 条）
+
+验证结果：`tests/core` 222 条全通过；全量 382 条中仅 `VideoPlayer > should merge default config` 失败——经 stash 对照确认是**改动前即存在**的历史问题（`PlayerConfig.controls` 默认值合并，与 typecheck 中 `Property 'controls' does not exist on type 'PlayerConfig'` 同源），与本次修复无关。
+
+---
+
+## 九、P1/P2 修复记录（已完成）
+
+### 9.1 插件核心改造：dev/prod 统一编译（与 Vue/Solid 一致）
+
+- **`plugins/vite-plugin-hili-compile/index.ts`**
+  - `dev` 选项默认改为 `true`：开发模式也执行转换，dev/prod 同一套编译产物，编译路径的 Bug 在 dev 即可暴露（双路径不一致是 P0 三连 Bug 的根源）
+  - `hoistStatic` 仅生产构建生效（`isProduction && opts.hoistStatic`，与 Vue plugin-vue 一致）
+  - 新增 `internalImportSource` 选项（默认 `@/core/internal`），用户可覆盖别名
+- **dev 验证**：`vite dev` 下 `demo/main.ts` 实际输出 `_createComp`×58 / `_createEl`×103 / 注入 `core/internal` 导入，且无 `_hoisted_`（提升仅生产）
+
+### 9.2 插件正确性修复（`plugins/vite-plugin-hili-compile/transform.ts` 重写）
+
+| 问题 | 修复 |
+|------|------|
+| `isHCall` 不校验来源，preact 等库的 `h` 会被误改 | babel scope binding 校验（`isFrameworkNamedImport`）：只有来自 `@/core`/`@/hili-player` 等框架模块的 h/defineComponent/Fragment/Component 才转换；支持 `import { h as alias }` 别名 |
+| 静态提升不递归，真实代码几乎提升不动 | 递归 `isStaticSubtree` + 预扫描标记提升目标；AST 级代码生成（`genStaticExpr`），无字符串拼接冲突；嵌套静态调用内联进父级提升代码 |
+| 提升常量共享对象互相污染（el 覆盖/destroy 错删） | 使用点生成 `_cloneHoisted(_hoisted_N)`（新增 `core/internal.ts` 运行时函数，深克隆独立树，Vue cloneVNode 同思路） |
+| `h('fragment', {}, ...)` 的 attrs 被当子节点 | 字符串形式与 `h(Fragment, {}, ...)` 形式都丢弃 attrs，生成 `_createFragment(...children)` |
+| `export default defineComponent(...)` 无标记 | 改写为临时 const + 标记 + 重新导出 |
+| class 标记只看字面名 `Component` | 改为 binding 校验 |
+| 只要转换就注入全部 5 个函数 | `usedInternalFns` 按需注入 |
+| attrs 内的 h() 调用被转换/与 rewriteAttrs 冲突 | `isInsideAttrsOfHCall` 跳过 |
+
+### 9.3 运行时与构建优化
+
+- **`core/h.ts`**：`flattenChildren` 单遍扁平化（替代 `flat(3)+filter` 的 4 次分配）；组件 props 单次遍历拷贝（替代两次展开）；`getComponentType` 增加 WeakMap 缓存（dev 反射只做一次）；`SVG_TAGS` 导出为单一数据源
+- **`core/internal.ts`**：flatten 复用 `h.ts` 实现；`_createComp` props 单次拷贝；新增 `_cloneHoisted`
+- **`plugins/.../svgTags.ts`**：改为从 `core/h` 再导出（消除双份 SVG 表漂移）
+- **`core/index.ts`**：导出 `_cloneHoisted`
+- **`packages/player/vite.config.ts`**：`minify: false → 'esbuild'`，让 `__HILI_DEV__` 替换后触发 DCE（此前 dev 警告代码全量留在库产物）
+
+### 9.4 新增测试
+
+- `tests/plugin/hili-compile.test.ts`（20 条）：dev 默认编译、dev:false 退出、递归提升、克隆复用、属性预分类、SVG、Fragment 两种形式、组件/export default/class 标记、preact h 与局部 h 不误伤、别名导入、按需注入、真实组件文件（Ending.ts）dev/prod 冒烟
+- `tests/core/internal.test.ts` 新增 `_cloneHoisted` 多次挂载互不污染测试
+
+验证结果：全量 402 条中 401 通过（唯一失败仍为历史遗留的 `VideoPlayer > should merge default config`）；`core/`、`plugins/`、`tests/` 目录 tsc 类型检查零新增错误；`packages/player` 的 `vite build` 生产构建通过（`tsc && vite build` 中的 tsc 步骤因改动前就存在的类型错误失败，经 stash 对照确认与本次修改无关），产物经 sourcemap 确认包含 `_hoisted_N`/`_cloneHoisted`，且 minify 后 dev 警告代码已被 DCE 移除。

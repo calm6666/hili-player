@@ -8,19 +8,39 @@
  * 编译后的代码（生产模式）使用这些专用函数。
  */
 
-import type { VNode, VNodeAttrs, VNodeChild, Component, Ref } from "@/types";
+import type { VNode, VNodeAttrs, Component, Ref } from "@/types";
 import type { HChild } from "./h";
-import { h } from "./h";
+import { h, flattenChildren } from "./h";
 import { getCurrentVNode, setPendingProviders } from "./context";
 import { reportError, ErrorSource } from "./warning";
 
 /**
- * 扁平化子节点数组（与 h() 中的逻辑一致）
+ * 元素属性中的 Context Provider 条目
+ * 与 h() 元素分支中的提取逻辑保持一致
  */
-function flattenChildren(children: HChild[]): VNodeChild[] {
-  return children
-    .flat(3)
-    .filter((c): c is VNodeChild => c !== null && c !== undefined);
+type ProviderEntry = { contextId: symbol; value: unknown };
+
+/**
+ * 从元素属性中提取 __providers（与 h() 元素分支行为一致）
+ *
+ * 编译路径下 _create* 系列函数必须做与 h() 相同的提取：
+ * 否则 __providers 会残留在 attrs 中，被 applyAttrs 当作 DOM 属性设置，
+ * 且 useContext 沿 __parent 链无法找到 Provider。
+ *
+ * @param attrs - 原始属性对象
+ * @returns 清理后的 attrs（不含 __providers）与提取出的 providers
+ */
+function extractProviders(attrs: VNodeAttrs | undefined): {
+  attrs: VNodeAttrs;
+  providers?: ProviderEntry[];
+} {
+  if (attrs && "__providers" in attrs && Array.isArray(attrs.__providers)) {
+    const providers = attrs.__providers as ProviderEntry[];
+    const rest: VNodeAttrs = { ...attrs };
+    delete rest.__providers;
+    return { attrs: rest, providers };
+  }
+  return { attrs: attrs ?? {} };
 }
 
 /**
@@ -40,11 +60,16 @@ export function _createStaticEl(
   attrs?: VNodeAttrs,
   ...children: HChild[]
 ): VNode {
-  return {
+  const { attrs: cleanAttrs, providers } = extractProviders(attrs);
+  const vnode: VNode = {
     tag,
-    attrs: attrs ?? {},
+    attrs: cleanAttrs,
     children: flattenChildren(children),
   };
+  if (providers) {
+    vnode.__providers = providers;
+  }
+  return vnode;
 }
 
 /**
@@ -63,11 +88,16 @@ export function _createEl(
   attrs?: VNodeAttrs,
   ...children: HChild[]
 ): VNode {
-  return {
+  const { attrs: cleanAttrs, providers } = extractProviders(attrs);
+  const vnode: VNode = {
     tag,
-    attrs: attrs ?? {},
+    attrs: cleanAttrs,
     children: flattenChildren(children),
   };
+  if (providers) {
+    vnode.__providers = providers;
+  }
+  return vnode;
 }
 
 /**
@@ -83,12 +113,17 @@ export function _createSvgEl(
   attrs?: VNodeAttrs,
   ...children: HChild[]
 ): VNode {
-  return {
+  const { attrs: cleanAttrs, providers } = extractProviders(attrs);
+  const vnode: VNode = {
     tag,
-    attrs: attrs ?? {},
+    attrs: cleanAttrs,
     children: flattenChildren(children),
     __ns: "http://www.w3.org/2000/svg",
   };
+  if (providers) {
+    vnode.__providers = providers;
+  }
+  return vnode;
 }
 
 /**
@@ -148,10 +183,12 @@ export function _createComp(
       ? rawAttrs.__providers
       : undefined;
 
-  // 构建 props（排除 ref 和 __providers）
-  const props: Record<string, unknown> = { ...rawAttrs };
-  delete props["ref"];
-  delete props["__providers"];
+  // 构建 props（排除 ref 和 __providers），单次遍历避免两次对象展开
+  const props: Record<string, unknown> = {};
+  for (const key in rawAttrs) {
+    if (key === "ref" || key === "__providers") continue;
+    props[key] = rawAttrs[key];
+  }
   props.children = flatChildren;
 
   // 函数组件
@@ -217,4 +254,32 @@ export function _createComp(
 
   // fallback：未编译的代码走通用 h() 路径
   return h(component as Component<unknown>, attrs, ...children);
+}
+
+/**
+ * 克隆编译期提升的静态 VNode（_hoisted_N）
+ *
+ * 静态提升把整棵静态子树提升为模块级共享常量，
+ * 同一常量可能被多次渲染/多处使用：
+ * - materialize 会写入 vnode.el，共享对象会被后挂载的节点覆盖
+ * - destroy 沿共享对象取 el 时可能移除错误的 DOM
+ * 因此每个使用点必须克隆一份独立树，Vue 的 cloneVNode 同理。
+ *
+ * 编译期转换：_hoisted_1 → _cloneHoisted(_hoisted_1)
+ */
+export function _cloneHoisted<T extends VNode>(vnode: T): T {
+  const clone: VNode = {
+    tag: vnode.tag,
+    attrs: { ...vnode.attrs },
+    children: vnode.children.map((child) =>
+      typeof child === "string" ? child : _cloneHoisted(child),
+    ),
+  };
+  if (vnode.__ns !== undefined) {
+    clone.__ns = vnode.__ns;
+  }
+  if (vnode.__providers !== undefined) {
+    clone.__providers = vnode.__providers;
+  }
+  return clone as T;
 }

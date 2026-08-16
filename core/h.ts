@@ -31,8 +31,10 @@ import { reportError, ErrorSource } from "./warning";
  * SVG 标签集合
  * 用于自动识别 SVG 元素并设置命名空间
  * 包含 SVG 1.1 规范中的所有元素
+ *
+ * 导出供 vite-plugin-hili-compile 复用（单一数据源，避免双份维护漂移）
  */
-const SVG_TAGS = new Set([
+export const SVG_TAGS = new Set([
   // 容器元素
   "svg",
   "g",
@@ -106,6 +108,23 @@ const SVG_TAGS = new Set([
 type HiliCompType = "fn" | "class";
 
 /**
+ * 可调用组件（函数组件或类组件构造函数）
+ *
+ * 用函数类型字面量替代 Function：
+ * Function 接受任意类函数值、调用时无类型安全（ban-types 禁止），
+ * 而组件缓存 key 只可能是组件函数/构造函数。
+ */
+type CallableComponent = (...args: never[]) => unknown;
+
+/**
+ * 组件类型缓存（WeakMap）
+ * 无 __hili_type 标记（dev/未编译代码）时，缓存反射判断结果，
+ * 避免每次组件调用都执行 Object.getOwnPropertyDescriptor
+ * class 身份稳定，缓存安全
+ */
+const componentTypeCache = new WeakMap<CallableComponent, HiliCompType>();
+
+/**
  * 获取组件类型（优先使用编译期标记，fallback 到运行时反射判断）
  *
  * 编译期：vite-plugin-hili-compile 在 defineComponent 和 class 组件后注入
@@ -114,20 +133,22 @@ type HiliCompType = "fn" | "class";
  */
 function getComponentType(fn: unknown): HiliCompType | null {
   if (typeof fn !== "function") return null;
+  const callable = fn as CallableComponent;
 
   // 优先检查编译期注入的标记（O(1) 属性读取，无需反射）
   const marker = (
-    fn as unknown as { __hili_type?: HiliCompType }
+    callable as unknown as { __hili_type?: HiliCompType }
   ).__hili_type;
   if (marker === "fn" || marker === "class") return marker;
 
-  // fallback：运行时反射判断（开发模式或未编译代码）
+  // fallback：运行时反射判断（开发模式或未编译代码），结果缓存到 WeakMap
+  const cached = componentTypeCache.get(callable);
+  if (cached !== undefined) return cached;
+
   // 只做一次 isClassComponent 反射检查，避免 isFnComponent 中再次调用
-  const isClass = isClassComponent(fn);
-  if (isClass) return "class";
-  // 是函数但不是 class → 函数组件
-  if (typeof fn === "function") return "fn";
-  return null;
+  const type: HiliCompType = isClassComponent(callable) ? "class" : "fn";
+  componentTypeCache.set(callable, type);
+  return type;
 }
 
 /**
@@ -166,6 +187,38 @@ function isClassComponent(fn: unknown): fn is ClassComponent {
  */
 export function isFnComponent(fn: unknown): fn is FnComponent {
   return typeof fn === "function" && !isClassComponent(fn);
+}
+
+/**
+ * 扁平化子节点数组（深度限制 3，与 flat(3) 语义一致）
+ *
+ * 单次遍历、单次分配：
+ * - flat(3) 内部会产生最多 3 个中间数组
+ * - filter 会产生第 4 个数组
+ * 这里在遍历中内联过滤 null/undefined，只分配最终结果数组
+ *
+ * 导出供 core/internal.ts 的编译路径复用（单一实现）
+ */
+export function flattenChildren(children: readonly HChild[]): VNodeChild[] {
+  const result: VNodeChild[] = [];
+  flattenInto(children as readonly unknown[], result, 0);
+  return result;
+}
+
+function flattenInto(
+  items: readonly unknown[],
+  out: VNodeChild[],
+  depth: number,
+): void {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item === null || item === undefined) continue;
+    if (depth < 3 && Array.isArray(item)) {
+      flattenInto(item, out, depth + 1);
+    } else {
+      out.push(item as VNodeChild);
+    }
+  }
 }
 
 /**
@@ -227,11 +280,9 @@ export function h<P = Record<string, unknown>>(
   /**
    * 扁平化子节点数组
    * 处理嵌套数组并过滤掉 null 和 undefined
-   * flat(3) 一次遍历，替代三次 flat(1) 的三次遍历+三次中间数组分配
+   * 单遍遍历 + 内联过滤（见 flattenChildren），只分配最终数组
    */
-  const flatChildren = children
-    .flat(3)
-    .filter((c): c is VNodeChild => c !== null && c !== undefined);
+  const flatChildren = flattenChildren(children);
 
   /**
    * 组件处理逻辑
@@ -251,19 +302,19 @@ export function h<P = Record<string, unknown>>(
       "current" in rawAttrs.ref
         ? rawAttrs.ref
         : undefined;
-    const attrsWithoutRef = { ...rawAttrs };
-    delete attrsWithoutRef["ref"];
 
     const providers: Array<{ contextId: symbol; value: unknown }> | undefined =
       "__providers" in rawAttrs && Array.isArray(rawAttrs.__providers)
         ? rawAttrs.__providers
         : undefined;
-    delete attrsWithoutRef["__providers"];
 
-    const props: Record<string, unknown> = {
-      ...attrsWithoutRef,
-      children: flatChildren,
-    };
+    // 单次遍历拷贝 props（剔除 ref / __providers），避免两次对象展开
+    const props: Record<string, unknown> = {};
+    for (const key in rawAttrs) {
+      if (key === "ref" || key === "__providers") continue;
+      props[key] = rawAttrs[key];
+    }
+    props.children = flatChildren;
 
     const compType = getComponentType(tag);
 

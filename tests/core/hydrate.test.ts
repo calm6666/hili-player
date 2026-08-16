@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { h, defineComponent, hydrate, ref } from '@/core';
+import { h, defineComponent, hydrate, ref, _createEl } from '@/core';
 
 describe('hydrate', () => {
   let container: HTMLElement;
@@ -13,6 +13,18 @@ describe('hydrate', () => {
     const divRef = ref<HTMLDivElement>();
 
     const vnode = h('div', { class: 'test', ref: divRef }, 'Content');
+    hydrate(vnode, container);
+
+    expect(divRef.current).toBe(container.firstChild);
+  });
+
+  it('should bind compiled __ref to existing DOM element', () => {
+    // 编译产物：vite-plugin-hili-compile 将 ref 重命名为 __ref
+    // hydrate 必须与 applyAttrs 一样优先读取 __ref，否则水合后 ref 全部失效
+    container.innerHTML = '<div class="test">Content</div>';
+    const divRef = ref<HTMLDivElement>();
+
+    const vnode = _createEl('div', { class: 'test', __ref: divRef }, 'Content');
     hydrate(vnode, container);
 
     expect(divRef.current).toBe(container.firstChild);

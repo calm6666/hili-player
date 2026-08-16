@@ -59,6 +59,9 @@ const VOID_ELEMENTS = new Set([
 const SKIP_ATTRS = new Set([
   "ref",
   "__ref",
+  // 编译期预分类的事件对象（vite-plugin-hili-compile 将 onXxx 提取为 __events）
+  // 与 __ref/__providers 一样是内部字段，绝不能序列化到 HTML 中
+  "__events",
   "key",
   "children",
   "_cleanups",

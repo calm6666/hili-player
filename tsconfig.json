@@ -48,7 +48,8 @@
     "packages/player/src/**/*",
     "packages/plugins/src/**/*",
     "packages/plugins/src/hls/vendor/hls/*",
-    "demo/**/*"
+    "demo/**/*",
+    "demo-prod/**/*"
   ],
   "exclude": ["node_modules", "dist"]
 }

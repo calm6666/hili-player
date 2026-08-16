@@ -40,4 +40,11 @@ export {
 } from './normalize';
 
 // 编译期内部函数（由 vite-plugin-hili-compile 生成的代码引用）
-export { _createStaticEl, _createEl, _createSvgEl, _createFragment, _createComp } from './internal';
+export {
+  _createStaticEl,
+  _createEl,
+  _createSvgEl,
+  _createFragment,
+  _createComp,
+  _cloneHoisted,
+} from './internal';
