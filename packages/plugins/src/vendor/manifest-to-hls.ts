@@ -67,6 +67,24 @@ function isSingleFileMode(segInfo?: SegmentInfo): boolean {
 }
 
 /**
+ * 单文件 SegmentBase 清单只给 initialization + indexRange（段表在那个文件的 sidx 里）时，
+ * HLS 侧没法自己枚举分片 —— HLS 协议里没有 sidx 这个概念。这种清单改用转码器随包产出的
+ * **媒体播放列表**：与单文件同名的 .m3u8（命名口径见 docs/DASH-SEGMENTBASE.md），
+ * 里面就是 #EXT-X-MAP + 逐段 #EXT-X-BYTERANGE，hls.js 按普通播放列表加载即可。
+ * URL 不带 .m4s 后缀时推不出播放列表名，保持原样（此时也不挂 playlistDetails）。
+ */
+function singleFilePlaylistUrl(baseUrl: string): string {
+  return baseUrl.replace(/\.m4s(\?|#|$)/, '.m3u8$1');
+}
+
+/** 是否走"单文件 + 同名媒体播放列表"这条路（清单自带 segments[] 时仍用内联段表）。 */
+function useMediaPlaylist(segInfo?: SegmentInfo): boolean {
+  if (!isSingleFileMode(segInfo)) return false;
+  const hasSegments = !!segInfo?.segments && segInfo.segments.length > 0;
+  return !hasSegments && !!segInfo?.indexRange;
+}
+
+/**
  * AES-128 配置写入 PlaylistDetails（两种模式共用）
  */
 function applyEncryption(
@@ -180,7 +198,8 @@ function toPlaylistDetails(
      init 段用 #EXT-X-MAP（同一个文件 + BYTERANGE）。与 _buildLevelDetails 里的
      setByteRange 是 hls.js 解析 #EXT-X-BYTERANGE 的同一个入口。
      注意：HLS 没有 sidx 概念，所以这条路**必须有显式 segments[]**；只有 indexRange 时
-     无法枚举分片，返回 undefined（调用方就不会挂 playlistDetails）。 */
+     无法枚举分片，返回 undefined —— 这种清单由调用方改指向同名媒体播放列表
+     （见 useMediaPlaylist / singleFilePlaylistUrl），播放列表里才有逐段字节范围。 */
   if (segInfo.mode === 'single') {
     const file = baseUrl;
     const list = segInfo.segments ?? [];
@@ -273,10 +292,20 @@ function toManifestVariant(
   encryption?: Aes128Encryption,
   licenseServer?: LicenseServer,
 ): ManifestVariant {
+  /* single（单文件字节范围）模式下 baseUrl 是媒体文件本身，补斜杠会拼错地址；
+     清单只有 sidx 范围（没有 segments[]）时改指向同名媒体播放列表，见 useMediaPlaylist。 */
+  let targetUrl = rep.baseUrl ?? '';
+  if (targetUrl) {
+    if (useMediaPlaylist(rep.segmentInfo)) {
+      targetUrl = singleFilePlaylistUrl(targetUrl);
+    } else if (!isSingleFileMode(rep.segmentInfo)) {
+      targetUrl = ensureTrailingSlash(targetUrl);
+    }
+  }
+
   const variant: ManifestVariant = {
     bandwidth: rep.bandwidth,
-    /* single（单文件字节范围）模式下 baseUrl 是媒体文件本身，补斜杠会拼错地址 */
-    url: rep.baseUrl ? (isSingleFileMode(rep.segmentInfo) ? rep.baseUrl : ensureTrailingSlash(rep.baseUrl)) : '',
+    url: targetUrl,
     codecs: rep.codecs,
   };
 
@@ -313,10 +342,19 @@ function toManifestAudioGroup(
   encryption?: Aes128Encryption,
   licenseServer?: LicenseServer,
 ): ManifestAudioGroup {
+  /* 同 variant：single 模式下 baseUrl 是文件本身；只有 sidx 范围时指向同名媒体播放列表 */
+  let audioUrl = rep.baseUrl ?? '';
+  if (audioUrl) {
+    if (useMediaPlaylist(rep.segmentInfo)) {
+      audioUrl = singleFilePlaylistUrl(audioUrl);
+    } else if (!isSingleFileMode(rep.segmentInfo)) {
+      audioUrl = ensureTrailingSlash(audioUrl);
+    }
+  }
+
   const group: ManifestAudioGroup = {
     groupId: 'audio-group',
-    /* 同 variant：single 模式下 baseUrl 是文件本身 */
-    url: rep.baseUrl ? (isSingleFileMode(rep.segmentInfo) ? rep.baseUrl : ensureTrailingSlash(rep.baseUrl)) : '',
+    url: audioUrl,
     codecs: rep.codecs,
     name: `Audio ${index + 1}`,
     default: index === 0,
