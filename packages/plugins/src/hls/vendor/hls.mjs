@@ -38944,6 +38944,9 @@ class Hls {
       initSeg.sn = 'initSegment';
       initSeg.level = levelIndex;
       initSeg.relurl = playlist.initSegmentUrl;
+      if (playlist.initSegmentRange) {
+        initSeg.setByteRange(playlist.initSegmentRange);
+      }
       initSeg.setStart(0);
       initSeg.playlistOffset = 0;
     }
@@ -38963,6 +38966,9 @@ class Hls {
       // 只设置 relurl，让 url getter 通过 buildAbsoluteURL(baseurl, relurl) 自动拼接绝对路径
       // 直接设置 frag.url 会绕过绝对路径解析，相对路径分片请求将失败
       frag.relurl = seg.url;
+      if (seg.byteRange) {
+        frag.setByteRange(seg.byteRange, i > 0 ? details.fragments[details.fragments.length - 1] : undefined);
+      }
       frag.initSegment = initSeg;
       // 非直播流仅最后一个分片标记 endList（与 M3U8Parser 行为一致）
       frag.endList = !details.live && i === segments.length - 1;

@@ -3487,6 +3487,11 @@ export declare interface ManifestPlaylistDetails {
     live?: boolean;
     /** 初始化段 URL（fMP4 的 init segment） */
     initSegmentUrl?: string;
+    /**
+     * 初始化段的字节范围，HLS 记法「长度@起点」（如 "820@0"）；
+     * 对应 `#EXT-X-MAP:URI="…",BYTERANGE="…"`。单文件（SegmentBase / mode='single'）模式下用。
+     */
+    initSegmentRange?: string;
     /** 媒体序列号起始值（对应 #EXT-X-MEDIA-SEQUENCE），默认 0 */
     mediaSequence?: number;
     /** 媒体分片列表 */
@@ -3515,6 +3520,11 @@ export declare interface ManifestSegment {
     duration: number;
     /** 分片 URL（相对或绝对路径，指向 .ts 或 .m4s 文件） */
     url: string;
+    /**
+     * 分片字节范围，HLS 记法「长度@起点」（如 "587314@908"），对应 `#EXT-X-BYTERANGE`；
+     * 只给长度时接着上一分片的结束位置续算。单文件模式下多个分片指向同一个文件。
+     */
+    byteRange?: string;
 }
 
 /**
