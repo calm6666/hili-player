@@ -151,11 +151,27 @@ function validateSegmentInfo(
   }
 
   if (s.mode === 'single') {
-    if (typeof s.initialization !== 'string' && s.initialization !== undefined) {
-      throw new ValidationError(`${path}.initialization 必须是字符串`);
+    /* single = SegmentBase（单文件 + 字节范围，见 docs/MANIFEST-OBJECT-GUIDE.md 6.3）：
+       · initialization / indexRange 都是**字节范围字符串**（"start-end"），不是 URL；
+       · 段表来源必须至少有一样：indexRange（dash.js 读单文件里的 sidx）或
+         非空 segments[]（显式字节范围，转换器会退回 SegmentList + mediaRange）。
+       两样都没有的话清单是"空壳"，这里直接报错，别等播放时才失败。 */
+    const isRange = (v: unknown): boolean => typeof v === 'string' && /^\d+-\d+$/.test(v);
+
+    if (s.initialization !== undefined && !isRange(s.initialization)) {
+      throw new ValidationError(
+        `${path}.initialization 在 single 模式下必须是字节范围（start-end），不是 URL`,
+      );
     }
-    if (typeof s.indexRange !== 'string' && s.indexRange !== undefined) {
-      throw new ValidationError(`${path}.indexRange 必须是字符串`);
+    if (s.indexRange !== undefined && !isRange(s.indexRange)) {
+      throw new ValidationError(`${path}.indexRange 必须是字节范围（start-end）`);
+    }
+    const hasIndexRange = isRange(s.indexRange);
+    const hasExplicitSegments = Array.isArray(s.segments) && s.segments.length > 0;
+    if (!hasIndexRange && !hasExplicitSegments) {
+      throw new ValidationError(
+        `${path} 是 single 模式，必须给 indexRange（读单文件里的 sidx）或非空 segments[]（显式字节范围）`,
+      );
     }
   }
 
