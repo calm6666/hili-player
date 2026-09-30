@@ -6,7 +6,7 @@
  * 支持章节列表渲染、章节点击跳转、菜单悬停动画回调
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { VNode } from '@/types';
 import type { ComponentLifecycle } from '@/types';
 
@@ -46,14 +46,8 @@ export const ViewpointMenu = defineComponent<ViewpointMenuProps>((props, lifecyc
   // DOM 引用
   // ============================================
 
-  /** 章节按钮根元素引用 */
-  const viewpointBtnRef = ref<HTMLDivElement>();
-
   /** 章节显示文本元素引用 */
-  const viewpointTextRef = ref<HTMLDivElement>();
-
-  /** 章节下拉菜单列表元素引用 */
-  const viewpointMenuRef = ref<HTMLUListElement>();
+  const viewpointTextRef = useTemplateRef<HTMLDivElement>(lifecycle, 'viewpointTextRef');
 
   // ============================================
   // 事件处理函数
@@ -107,8 +101,8 @@ export const ViewpointMenu = defineComponent<ViewpointMenuProps>((props, lifecyc
       onClick: () => {
         lifecycle.emit?.('seek', point.time);
         // 更新章节文本显示
-        if (viewpointTextRef.current) {
-          viewpointTextRef.current.innerText = '章节 · ' + point.title;
+        if (viewpointTextRef.value) {
+          viewpointTextRef.value.innerText = '章节 · ' + point.title;
         }
       },
     },
@@ -133,10 +127,10 @@ export const ViewpointMenu = defineComponent<ViewpointMenuProps>((props, lifecyc
    */
   lifecycle.onMounted = (): void => {
     // 设置初始章节文本
-    if (viewpointTextRef.current && points.length > 0) {
+    if (viewpointTextRef.value && points.length > 0) {
       // 找到当前章节
       const currentPoint = points.find((p, i) => isCurrentPoint(p.time, i));
-      viewpointTextRef.current.innerText = '章节 · ' + (currentPoint?.title ?? points[0].title);
+      viewpointTextRef.value.innerText = '章节 · ' + (currentPoint?.title ?? points[0].title);
     }
     lifecycle.emit?.('viewpointMenuMounted');
   };
@@ -146,14 +140,13 @@ export const ViewpointMenu = defineComponent<ViewpointMenuProps>((props, lifecyc
   // ============================================
   return h('div', {
     class: 'player-ctrl-btn player-ctrl-viewpoint',
-    ref: viewpointBtnRef,
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
   },
     h('div', { class: 'player-ctrl-viewpoint-inner' },
       h('div', { class: 'player-ctrl-viewpoint-content' },
         // 章节文本
-        h('span', { class: 'player-ctrl-viewpoint-text', ref: viewpointTextRef },
+        h('span', { class: 'player-ctrl-viewpoint-text', ref: 'viewpointTextRef' },
           points.length > 0 ? '章节 · ' + points[0].title : '章节'
         ),
         // 章节图标
@@ -162,7 +155,7 @@ export const ViewpointMenu = defineComponent<ViewpointMenuProps>((props, lifecyc
         ),
         // 章节下拉菜单
         h('div', { class: 'player-ctrl-viewpoint-menu-wrap' },
-          h('ul', { class: 'player-ctrl-viewpoint-menu', ref: viewpointMenuRef },
+          h('ul', { class: 'player-ctrl-viewpoint-menu' },
             ...points.map((point, index) => renderViewpointItem(point, index))
           )
         )

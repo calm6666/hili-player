@@ -19,6 +19,7 @@ import type {
   ComponentAttrs,
   VNodeInternalAttrs,
 } from "@/types";
+import type { Signal } from "@preact/signals-core";
 import {
   setCurrentVNode,
   getCurrentVNode,
@@ -26,6 +27,7 @@ import {
   getPendingProviders,
 } from "./context";
 import { reportError, ErrorSource } from "./warning";
+import { isRefObject, isSignalRef } from "./templateRef";
 
 /**
  * SVG 标签集合
@@ -295,13 +297,21 @@ export function h<P = Record<string, unknown>>(
      * 挂载后由 mount 模块自动将 exposed API 赋值给 ref.current
      */
     const rawAttrs = attrs ?? {};
-    const componentRef: Ref<unknown> | undefined =
-      "ref" in rawAttrs &&
-      rawAttrs.ref &&
-      typeof rawAttrs.ref === "object" &&
-      "current" in rawAttrs.ref
-        ? rawAttrs.ref
-        : undefined;
+    /**
+     * 提取组件实例 ref（父组件通过 ref 属性传入）
+     * ref 不作为 props 传递给组件，而是存储在 lifecycle 上
+     * 挂载后由 mount 模块自动将 exposed API 赋值给 ref（旧 {current} 对象或 Signal）
+     * 字符串 ref：解析到父组件的 useTemplateRef 注册表
+     */
+    const rawRef = "ref" in rawAttrs ? rawAttrs.ref : undefined;
+    let componentRef: Ref<unknown> | Signal<unknown> | undefined;
+    if (typeof rawRef === "string") {
+      componentRef = getCurrentVNode()?.lifecycle?._templateRefs?.get(rawRef);
+    } else if (isSignalRef(rawRef)) {
+      componentRef = rawRef;
+    } else if (isRefObject(rawRef)) {
+      componentRef = rawRef;
+    }
 
     const providers: Array<{ contextId: symbol; value: unknown }> | undefined =
       "__providers" in rawAttrs && Array.isArray(rawAttrs.__providers)

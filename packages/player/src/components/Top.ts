@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -32,13 +32,13 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
   // ============================================
 
   /** 根容器元素引用 */
-  const topWrapRef = ref<HTMLDivElement>();
+  const topWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'topWrapRef');
 
   /** 标题文本元素引用 */
-  const titleRef = ref<HTMLDivElement>();
+  const titleRef = useTemplateRef<HTMLDivElement>(lifecycle, 'titleRef');
 
   /** 头像图片元素引用 */
-  const avatarRef = ref<HTMLImageElement>();
+  const avatarRef = useTemplateRef<HTMLImageElement>(lifecycle, 'avatarRef');
 
   // ============================================
   // 事件处理函数
@@ -67,8 +67,8 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
    * @param title - 标题内容
    */
   const setTitle = (title: string): void => {
-    if (titleRef.current) {
-      titleRef.current.textContent = title;
+    if (titleRef.value) {
+      titleRef.value.textContent = title;
     }
   };
 
@@ -77,8 +77,8 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
    * @param avatar - 头像 URL
    */
   const setAvatar = (avatar: string): void => {
-    if (avatarRef.current) {
-      avatarRef.current.src = avatar;
+    if (avatarRef.value) {
+      avatarRef.value.src = avatar;
     }
   };
 
@@ -86,8 +86,8 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
    * 显示顶部栏
    */
   const show = (): void => {
-    if (topWrapRef.current) {
-      topWrapRef.current.style.display = '';
+    if (topWrapRef.value) {
+      topWrapRef.value.style.display = '';
     }
   };
 
@@ -95,8 +95,8 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
    * 隐藏顶部栏
    */
   const hide = (): void => {
-    if (topWrapRef.current) {
-      topWrapRef.current.style.display = 'none';
+    if (topWrapRef.value) {
+      topWrapRef.value.style.display = 'none';
     }
   };
 
@@ -129,7 +129,7 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
     'div',
     {
       class: 'player-top-wrap',
-      ref: topWrapRef,
+      ref: 'topWrapRef',
     },
     h('div', { class: 'player-top-mask', hidden: true }),
     h('div', { class: 'player-top-title' }),
@@ -139,7 +139,7 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
       { class: 'player-top-left' },
       h(
         'div',
-        { class: 'player-top-left-title', style: { fontSize: '20px' }, ref: titleRef },
+        { class: 'player-top-left-title', style: { fontSize: '20px' }, ref: 'titleRef' },
         props.title ?? ''
       ),
       h(
@@ -153,7 +153,7 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
             src:
               props.avatar ??
               'https://io.v.hblog.top/hfs/face/706353e46fe1c390d6d2cb72a704818a.jpg@240w_240h_1c_1s_!web-avatar-nav.webp',
-            ref: avatarRef,
+            ref: 'avatarRef',
           }),
           h(
             'span',

@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -61,7 +61,7 @@ export const HotkeyPanel = defineComponent<HotkeyPanelProps>((props, lifecycle: 
   // ============================================
 
   /** 面板根容器 DOM 引用 */
-  const panelRef = ref<HTMLDivElement>();
+  const panelRef = useTemplateRef<HTMLDivElement>(lifecycle, 'panelRef');
 
   /**
    * 处理关闭面板操作
@@ -96,8 +96,8 @@ export const HotkeyPanel = defineComponent<HotkeyPanelProps>((props, lifecycle: 
    * 显示面板组件
    */
   const show = (): void => {
-    if (panelRef.current) {
-      panelRef.current.style.display = '';
+    if (panelRef.value) {
+      panelRef.value.style.display = '';
     }
   };
 
@@ -105,8 +105,8 @@ export const HotkeyPanel = defineComponent<HotkeyPanelProps>((props, lifecycle: 
    * 隐藏面板组件
    */
   const hide = (): void => {
-    if (panelRef.current) {
-      panelRef.current.style.display = 'none';
+    if (panelRef.value) {
+      panelRef.value.style.display = 'none';
     }
   };
 
@@ -131,7 +131,7 @@ export const HotkeyPanel = defineComponent<HotkeyPanelProps>((props, lifecycle: 
     'div',
     {
       class: 'player-hotkey-panel',
-      ref: panelRef,
+      ref: 'panelRef',
       style: {
         display: props.visible ? '' : 'none',
       },

@@ -9,10 +9,12 @@
  */
 
 import type { VNode, VNodeAttrs, Component, Ref } from "@/types";
+import type { Signal } from "@preact/signals-core";
 import type { HChild } from "./h";
 import { h, flattenChildren } from "./h";
 import { getCurrentVNode, setPendingProviders } from "./context";
 import { reportError, ErrorSource } from "./warning";
+import { isRefObject, isSignalRef } from "./templateRef";
 
 /**
  * 元素属性中的 Context Provider 条目
@@ -167,15 +169,17 @@ export function _createComp(
   // 扁平化子节点
   const flatChildren = flattenChildren(children);
 
-  // 提取 ref（不作为 props 传递）
+  // 提取 ref（不作为 props 传递；支持字符串 / Signal / 旧 {current} 对象）
   const rawAttrs = attrs ?? {};
-  const componentRef: Ref<unknown> | undefined =
-    "ref" in rawAttrs &&
-    rawAttrs.ref &&
-    typeof rawAttrs.ref === "object" &&
-    "current" in rawAttrs.ref
-      ? (rawAttrs.ref as Ref<unknown>)
-      : undefined;
+  const rawRef = "ref" in rawAttrs ? rawAttrs.ref : undefined;
+  let componentRef: Ref<unknown> | Signal<unknown> | undefined;
+  if (typeof rawRef === "string") {
+    componentRef = getCurrentVNode()?.lifecycle?._templateRefs?.get(rawRef);
+  } else if (isSignalRef(rawRef)) {
+    componentRef = rawRef;
+  } else if (isRefObject(rawRef)) {
+    componentRef = rawRef as Ref<unknown>;
+  }
 
   // 提取 __providers（Context 依赖注入）
   const providers: Array<{ contextId: symbol; value: unknown }> | undefined =

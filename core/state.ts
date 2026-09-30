@@ -5,14 +5,15 @@
  * 提供集中式状态存储和订阅机制
  * 支持路径式访问状态，如 'player.currentTime'
  *
- * 通知策略：批量微任务调度（Batched Microtask）
- * - 非阻塞：set() 立即返回，监听器在微任务中执行，不阻塞主线程
- * - 批量执行：同一次 set 的所有监听器打包到同一个微任务中执行，
- *   保证同一状态变更内监听器顺序执行，不会乱序
+ * 响应式引擎：@preact/signals-core（与 signal/computed/effect/onEffect 统一）
+ * - 每个状态路径一个惰性 Signal，set 写入 signal、subscribe/useState 通过 effect 订阅 signal
+ * - 同步通知：set() 立即同步触发 effect（signals 语义，尊重 batch 批量提交）
  * - 异常隔离：每个监听器用 try-catch 包裹，单个崩溃不影响其他
- * - 状态间有序：微任务按 FIFO 执行，先 set 的状态先通知
+ * - === 短路：值未变化不触发通知
  */
 
+import { signal, effect } from "@preact/signals-core";
+import type { Signal } from "@preact/signals-core";
 import { isDev } from "./warning";
 
 /**
@@ -52,6 +53,14 @@ export interface StateManager {
     path: string,
     listener: (newVal: unknown, oldVal: unknown) => void,
   ): () => void;
+
+  /**
+   * 获取指定路径的响应式 Signal（基于 @preact/signals-core）
+   * 可用于 onEffect / computed，与 useState / subscribe 共用同一响应式引擎
+   * @param path - 状态路径，如 'player.currentTime'
+   * @returns 该路径的 Signal（惰性创建，与 get/set 保持一致）
+   */
+  signal(path: string): Signal<unknown>;
 }
 
 /**
@@ -110,6 +119,13 @@ export interface TypedStateManager<TMap = Record<string, unknown>> {
     path: K,
     listener: (newVal: TMap[K], oldVal: TMap[K]) => void,
   ): () => void;
+
+  /**
+   * 获取指定路径的响应式 Signal（类型安全）
+   * @param path - 状态路径，必须是 TMap 的 key
+   * @returns 该路径的 Signal，类型自动推断为 TMap[K]
+   */
+  signal<K extends keyof TMap & string>(path: K): Signal<TMap[K]>;
 }
 
 /**
@@ -264,69 +280,79 @@ function clone<T>(obj: T): T {
  */
 export function createStateManager(
   initial: Record<string, unknown> = {},
-): StateManager {
-  const state = clone(initial);
-  const listeners = new Map<
-    string,
-    Set<(newVal: unknown, oldVal: unknown) => void>
-  >();
+): TypedStateManager {
+  // 权威状态对象：get / getState / set 的 === 比较都基于它
+  const root = clone(initial);
+  // 每个状态路径一个惰性 Signal（作为值存储 + 通知通道）
+  const pathSignals = new Map<string, Signal<unknown>>();
+  // 正在静默写入的路径：silent set 时同步 signal 保持一致，但抑制订阅回调
+  const silentPaths = new Set<string>();
 
-  /**
-   * 批量通知队列
-   *
-   * 同一同步 tick 内的多次 set() 调用收集到 pendingNotifications，
-   * 由单个 queueMicrotask 统一触发，避免多个微任务导致的 DOM 中间状态不一致。
-   */
-  let pendingNotifications: Array<{
-    path: string;
-    newVal: unknown;
-    oldVal: unknown;
-    fns: Array<(newVal: unknown, oldVal: unknown) => void>;
-  }> | null = null;
-
-  const notify = (path: string, newVal: unknown, oldVal: unknown): void => {
-    const set = listeners.get(path);
-    if (!set) return;
-    const fns = [...set];
-    if (!pendingNotifications) {
-      pendingNotifications = [];
-      queueMicrotask(() => {
-        const batch = pendingNotifications!;
-        pendingNotifications = null;
-        for (const item of batch) {
-          for (const fn of item.fns) {
-            try {
-              fn(item.newVal, item.oldVal);
-            } catch (e) {
-              console.error(e);
-            }
-          }
-        }
-      });
+  function signalFor(path: string): Signal<unknown> {
+    let sig = pathSignals.get(path);
+    if (sig === undefined) {
+      sig = signal(getValue(root, path));
+      pathSignals.set(path, sig);
     }
-    pendingNotifications.push({ path, newVal, oldVal, fns });
-  };
+    return sig;
+  }
 
   return {
-    getState: () => clone(state),
+    getState: (): Record<string, unknown> => clone(root),
+
     get: <R>(path: string): R | undefined =>
-      getValue(state, path) as R | undefined,
+      getValue(root, path) as R | undefined,
+
     set: (path: string, value: unknown, silent = false): void => {
-      const oldVal = getValue(state, path);
+      const oldVal = getValue(root, path);
       if (oldVal === value) return;
-      setValue(state, path, value);
-      if (!silent) notify(path, value, oldVal);
+      setValue(root, path, value);
+
+      const sig = signalFor(path);
+      if (silent) {
+        // 静默：signal 值同步为最新（get / signal().value 一致），
+        // 但通过 silentPaths 抑制订阅回调
+        silentPaths.add(path);
+        try {
+          sig.value = value;
+        } finally {
+          silentPaths.delete(path);
+        }
+      } else {
+        sig.value = value;
+      }
     },
+
     subscribe: (
       path: string,
       listener: (newVal: unknown, oldVal: unknown) => void,
-    ) => {
-      if (!listeners.has(path)) listeners.set(path, new Set());
-      listeners.get(path)!.add(listener);
-      return () => {
-        listeners.get(path)?.delete(listener);
-      };
+    ): (() => void) => {
+      const sig = signalFor(path);
+      let prev = getValue(root, path);
+      // ★ 用 effect（而非 Signal.subscribe）作为触发机构：
+      // - 与 onEffect / 用户代码同用一个原语，自动追踪依赖
+      // - effect 尊重 batch()，可把同一批量内的多次 set 合并提交
+      return effect(() => {
+        const v = sig.value;
+        if (silentPaths.has(path)) {
+          // 静默写入：更新 prev 以保证后续 oldVal 正确，但不通知
+          prev = v;
+          return;
+        }
+        // effect 首次同步执行会读到当前值，这里跳过初始运行，
+        // 仅在实际变化时通知（与原 subscribe-only 语义一致）
+        if (v === prev) return;
+        const old = prev;
+        prev = v;
+        try {
+          listener(v, old);
+        } catch (e) {
+          console.error(e); // 异常隔离：单个监听器崩溃不影响其他
+        }
+      });
     },
+
+    signal: (path: string): Signal<unknown> => signalFor(path),
   };
 }
 
@@ -379,6 +405,8 @@ export function createTypedStateManager<TMap>(
         listener as (newVal: unknown, oldVal: unknown) => void,
       );
     },
+    signal: <K extends keyof TMap & string>(path: K): Signal<TMap[K]> =>
+      inner.signal(path) as Signal<TMap[K]>,
   };
 }
 

@@ -11,7 +11,7 @@
  *   - 框架无响应式，DOM 更新必须手动完成（通过 useState 订阅 + updater 回调）
  */
 
-import { h, defineComponent, ref, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
@@ -76,23 +76,14 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   // DOM 引用
   // ============================================
 
-  /** 上一个按钮元素引用 */
-  const prevBtnRef = ref<HTMLDivElement>();
-
-  /** 播放/暂停按钮元素引用 */
-  const playBtnRef = ref<HTMLDivElement>();
-
-  /** 下一个按钮元素引用 */
-  const nextBtnRef = ref<HTMLDivElement>();
-
   /** 当前时间显示元素引用 */
-  const playerCtrlTimeCurrentRef = ref<HTMLDivElement>();
+  const playerCtrlTimeCurrentRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerCtrlTimeCurrentRef');
 
   /** 总时长显示元素引用 */
-  const playerCtrlTimeDurationRef = ref<HTMLDivElement>();
+  const playerCtrlTimeDurationRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerCtrlTimeDurationRef');
 
   /** 播放/暂停按钮图标 API 引用（LottieIcon 暴露的接口） */
-  const playOrPauseIconBtnRef = ref<LottieIconApi>();
+  const playOrPauseIconBtnRef = useTemplateRef<LottieIconApi>(lifecycle, 'playOrPauseIconBtnRef');
 
   // ============================================
   // 事件处理函数
@@ -133,10 +124,10 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    * 先切换到播放动画槽位（slot 0），再播放
    */
   const pauseToPlayAnimation = (): void => {
-    if (playOrPauseIconBtnRef.current?.getCurrentSlotIndex() != 0) {
-      playOrPauseIconBtnRef.current?.advanceSlot();
+    if (playOrPauseIconBtnRef.value?.getCurrentSlotIndex() != 0) {
+      playOrPauseIconBtnRef.value?.advanceSlot();
     }
-    playOrPauseIconBtnRef.current?.play();
+    playOrPauseIconBtnRef.value?.play();
   };
 
   /**
@@ -144,10 +135,10 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    * 先切换到暂停动画槽位（slot 1），再播放
    */
   const playToPauseAnimation = (): void => {
-    if (playOrPauseIconBtnRef.current?.getCurrentSlotIndex() != 1) {
-      playOrPauseIconBtnRef.current?.advanceSlot();
+    if (playOrPauseIconBtnRef.value?.getCurrentSlotIndex() != 1) {
+      playOrPauseIconBtnRef.value?.advanceSlot();
     }
-    playOrPauseIconBtnRef.current?.play();
+    playOrPauseIconBtnRef.value?.play();
   };
 
   /**
@@ -213,8 +204,8 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       state,
       PlayerStateKeyEnum.CURRENT_TIME,
       (newTime) => {
-        if (playerCtrlTimeCurrentRef.current) {
-          playerCtrlTimeCurrentRef.current.innerHTML = formatTime(newTime as number);
+        if (playerCtrlTimeCurrentRef.value) {
+          playerCtrlTimeCurrentRef.value.innerHTML = formatTime(newTime as number);
         }
       },
       lifecycle
@@ -229,8 +220,8 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       state,
       PlayerStateKeyEnum.DURATION,
       (newDuration) => {
-        if (playerCtrlTimeDurationRef.current) {
-          playerCtrlTimeDurationRef.current.innerHTML = formatTime(newDuration as number);
+        if (playerCtrlTimeDurationRef.value) {
+          playerCtrlTimeDurationRef.value.innerHTML = formatTime(newDuration as number);
         }
       },
       lifecycle
@@ -246,9 +237,6 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       state,
       PlayerStateKeyEnum.IS_LOADING,
       (isLoading) => {
-        // if (playBtnRef.current) {
-        //   playBtnRef.current.style.pointerEvents = isLoading ? 'none' : '';
-        // }
       },
       lifecycle
     );
@@ -279,7 +267,6 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       role: 'button',
       'aria-label': '上一个',
       class: 'player-ctrl-btn player-ctrl-prev',
-      ref: prevBtnRef,
       onClick: handlePrev
     },
       h('div', { class: 'player-ctrl-btn-icon' },
@@ -297,7 +284,6 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       role: 'button',
       'aria-label': '播放/暂停',
       class: 'player-ctrl-btn player-ctrl-play',
-      ref: playBtnRef,
       onClick: togglePlayPause
     },
       h('div', {
@@ -317,7 +303,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
               autoplay: false
             }
           ],
-          ref: playOrPauseIconBtnRef
+          ref: 'playOrPauseIconBtnRef'
         }),
       )
     ),
@@ -326,7 +312,6 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       role: 'button',
       'aria-label': '下一个',
       class: 'player-ctrl-btn player-ctrl-next',
-      ref: nextBtnRef,
       onClick: handleNext
     },
       h('div', { class: 'player-ctrl-btn-icon' },
@@ -343,9 +328,9 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
     time: () => h('div', { class: 'player-ctrl-btn player-ctrl-time' },
       h('input', { id: 'playerCtrlTimeSeekInput', class: 'player-ctrl-time-seek', type: 'text', value: '0:00', style: 'display: none;' },),
       h('div', { class: 'player-ctrl-time-label' },
-        h('span', { class: 'player-ctrl-time-current', ref: playerCtrlTimeCurrentRef }),
+        h('span', { class: 'player-ctrl-time-current', ref: 'playerCtrlTimeCurrentRef' }),
         h('span', { class: 'player-ctrl-time-divide' }, '/'),
-        h('span', { class: 'player-ctrl-time-duration', ref: playerCtrlTimeDurationRef })
+        h('span', { class: 'player-ctrl-time-duration', ref: 'playerCtrlTimeDurationRef' })
       )
     ),
     /** 渲染看点菜单，仅在看点数量大于 1 时显示 */
@@ -374,8 +359,8 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    * 框架无响应式，必须手动更新 DOM
    */
   lifecycle.onMounted = (): void => {
-    if (playerCtrlTimeDurationRef.current) {
-      playerCtrlTimeDurationRef.current.innerHTML = formatTime(duration);
+    if (playerCtrlTimeDurationRef.value) {
+      playerCtrlTimeDurationRef.value.innerHTML = formatTime(duration);
     }
     lifecycle.emit?.('leftControlsMounted');
   };

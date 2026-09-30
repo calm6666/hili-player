@@ -4,7 +4,8 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
+import type { Signal } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -55,34 +56,34 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
   // ============================================
 
   /** 面板根容器 DOM 引用 */
-  const panelRef = ref<HTMLDivElement>();
+  const panelRef = useTemplateRef<HTMLDivElement>(lifecycle, 'panelRef');
 
   /** 饱和度滑块进度条 DOM 引用 */
-  const saturateBarRef = ref<HTMLDivElement>();
+  const saturateBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'saturateBarRef');
 
   /** 饱和度滑块拖拽手柄 DOM 引用 */
-  const saturateThumbRef = ref<HTMLDivElement>();
+  const saturateThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'saturateThumbRef');
 
   /** 饱和度数值显示 DOM 引用 */
-  const saturateValueRef = ref<HTMLDivElement>();
+  const saturateValueRef = useTemplateRef<HTMLDivElement>(lifecycle, 'saturateValueRef');
 
   /** 亮度滑块进度条 DOM 引用 */
-  const brightnessBarRef = ref<HTMLDivElement>();
+  const brightnessBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'brightnessBarRef');
 
   /** 亮度滑块拖拽手柄 DOM 引用 */
-  const brightnessThumbRef = ref<HTMLDivElement>();
+  const brightnessThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'brightnessThumbRef');
 
   /** 亮度数值显示 DOM 引用 */
-  const brightnessValueRef = ref<HTMLDivElement>();
+  const brightnessValueRef = useTemplateRef<HTMLDivElement>(lifecycle, 'brightnessValueRef');
 
   /** 对比度滑块进度条 DOM 引用 */
-  const contrastBarRef = ref<HTMLDivElement>();
+  const contrastBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'contrastBarRef');
 
   /** 对比度滑块拖拽手柄 DOM 引用 */
-  const contrastThumbRef = ref<HTMLDivElement>();
+  const contrastThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'contrastThumbRef');
 
   /** 对比度数值显示 DOM 引用 */
-  const contrastValueRef = ref<HTMLDivElement>();
+  const contrastValueRef = useTemplateRef<HTMLDivElement>(lifecycle, 'contrastValueRef');
 
   /**
    * 计算滑块进度比例
@@ -109,17 +110,17 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
    * @param valueRef - 数值显示 DOM 引用
    * @param value - 当前数值
    */
-  const updateSliderUI = (barRef: { current: HTMLDivElement | null }, thumbRef: { current: HTMLDivElement | null }, valueRef: { current: HTMLDivElement | null }, value: number): void => {
+  const updateSliderUI = (barRef: Signal<HTMLDivElement | null>, thumbRef: Signal<HTMLDivElement | null>, valueRef: Signal<HTMLDivElement | null>, value: number): void => {
     const progress = getSliderProgress(value);
     const position = getSliderPosition(value);
-    if (barRef.current) {
-      barRef.current.style.transform = `scaleX(${progress})`;
+    if (barRef.value) {
+      barRef.value.style.transform = `scaleX(${progress})`;
     }
-    if (thumbRef.current) {
-      thumbRef.current.style.transform = `translateX(${position}px)`;
+    if (thumbRef.value) {
+      thumbRef.value.style.transform = `translateX(${position}px)`;
     }
-    if (valueRef.current) {
-      valueRef.current.innerText = value.toString();
+    if (valueRef.value) {
+      valueRef.value.innerText = value.toString();
     }
   };
 
@@ -158,8 +159,8 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
    * 显示面板组件
    */
   const show = (): void => {
-    if (panelRef.current) {
-      panelRef.current.style.display = '';
+    if (panelRef.value) {
+      panelRef.value.style.display = '';
     }
   };
 
@@ -167,8 +168,8 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
    * 隐藏面板组件
    */
   const hide = (): void => {
-    if (panelRef.current) {
-      panelRef.current.style.display = 'none';
+    if (panelRef.value) {
+      panelRef.value.style.display = 'none';
     }
   };
 
@@ -179,7 +180,7 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
    * @param thumbRef - 手柄 DOM 引用
    * @returns 滑块虚拟节点
    */
-  const renderSlider = (value: number, barRef: { current: HTMLDivElement | null }, thumbRef: { current: HTMLDivElement | null }): VNode => {
+  const renderSlider = (value: number, barRef: Signal<HTMLDivElement | null>, thumbRef: Signal<HTMLDivElement | null>): VNode => {
     return h(
       'div',
       { class: 'player-color-panel-slider ui ui-slider ui-dark' },
@@ -230,7 +231,7 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
     'div',
     {
       class: 'player-color-panel',
-      ref: panelRef,
+      ref: 'panelRef',
       style: {
         display: props.visible ? '' : 'none',
       },
@@ -250,21 +251,21 @@ export const ColorPanel = defineComponent<ColorPanelProps>((props, lifecycle: Co
       { class: 'player-color-panel-saturate player-color-wrap' },
       h('div', { class: 'player-color-panel-name' }, '饱和度'),
       renderSlider(saturate, saturateBarRef, saturateThumbRef),
-      h('div', { class: 'player-color-panel-value', ref: saturateValueRef }, saturate.toString())
+      h('div', { class: 'player-color-panel-value', ref: 'saturateValueRef' }, saturate.toString())
     ),
     h(
       'div',
       { class: 'player-color-panel-brightness player-color-wrap' },
       h('div', { class: 'player-color-panel-name' }, '亮度'),
       renderSlider(brightness, brightnessBarRef, brightnessThumbRef),
-      h('div', { class: 'player-color-panel-value', ref: brightnessValueRef }, brightness.toString())
+      h('div', { class: 'player-color-panel-value', ref: 'brightnessValueRef' }, brightness.toString())
     ),
     h(
       'div',
       { class: 'player-color-panel-contrast player-color-wrap' },
       h('div', { class: 'player-color-panel-name' }, '对比度'),
       renderSlider(contrast, contrastBarRef, contrastThumbRef),
-      h('div', { class: 'player-color-panel-value', ref: contrastValueRef }, contrast.toString())
+      h('div', { class: 'player-color-panel-value', ref: 'contrastValueRef' }, contrast.toString())
     ),
     h(
       'div',

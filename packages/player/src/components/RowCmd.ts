@@ -5,7 +5,7 @@
  * 支持点赞关注、外链视频、投票、评分等互动卡片
  */
 
-import { defineComponent, h, ref } from '@/core';
+import { defineComponent, h } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type {
   CardType,
@@ -57,12 +57,6 @@ export const RowCmd = defineComponent<RowCmdProps>((_props, lifecycle: Component
   // ============================================
   // DOM 元素引用
   // ============================================
-
-  /** 互动命令外层容器 DOM 引用 */
-  const cmdDmWrapRef = ref<HTMLDivElement>();
-
-  /** 互动命令内部容器 DOM 引用，互动卡片将挂载到此容器中 */
-  const dmInsideRef = ref<HTMLDivElement>();
 
   // ============================================
   // 状态数据
@@ -128,7 +122,7 @@ export const RowCmd = defineComponent<RowCmdProps>((_props, lifecycle: Component
    * 渲染互动命令组件
    * 返回组件的 VNode 结构
    */
-  return h('div', { class: 'player-cmd-dm-wrap', ref: cmdDmWrapRef },
-    h('div', { class: 'player-cmd-dm-inside', ref: dmInsideRef })
+  return h('div', { class: 'player-cmd-dm-wrap' },
+    h('div', { class: 'player-cmd-dm-inside' })
   );
 });

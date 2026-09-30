@@ -10,7 +10,7 @@
  * 组件不处理鼠标事件，通过 ref 暴露方法供父组件调用
  */
 
-import { h, defineComponent, ref } from "@/core";
+import { h, defineComponent, useTemplateRef } from "@/core";
 import type { ComponentLifecycle, VNode } from "@/types";
 import { isBrowser } from "@/utils";
 import type { AnimationItem, LottiePlayer } from "lottie-web";
@@ -187,7 +187,7 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
     // ============================================
 
     /** 图标容器 DOM 引用（span 元素） */
-    const containerRef = ref<HTMLSpanElement>();
+    const containerRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'containerRef');
 
     // ============================================
     // 状态
@@ -271,7 +271,7 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
      * @param index - 槽位索引
      */
     const playSequenceSlot = (index: number): void => {
-      if (!sequence || !lottieModule || !containerRef.current) return;
+      if (!sequence || !lottieModule || !containerRef.value) return;
       if (index < 0 || index >= sequence.length) return;
 
       // 销毁当前动画
@@ -286,7 +286,7 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
       animationItem = createAnimation(
         slot.animationData,
         slot.path,
-        containerRef.current,
+        containerRef.value,
         slot.startFrame !== undefined ? false : slotAutoplay,
         shouldLoop,
       );
@@ -377,10 +377,10 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
         const lottieMod: { default: LottiePlayer } = await import("lottie-web");
         lottieModule = lottieMod.default;
 
-        if (!containerRef.current) return;
+        if (!containerRef.value) return;
 
         // lottie 加载成功，清空回退内容后渲染动画
-        containerRef.current.innerHTML = "";
+        containerRef.value.innerHTML = "";
 
         // 序列模式
         if (sequence && sequence.length > 0) {
@@ -392,7 +392,7 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
         animationItem = createAnimation(
           animationData,
           path,
-          containerRef.current,
+          containerRef.value,
           autoplay,
         );
         if (animationItem) {
@@ -437,12 +437,12 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
       /** 切换到悬停态动画 */
       showHover: (): void => {
         if (isFallbackMode) return;
-        if ((hoverData || hoverPath) && lottieModule && containerRef.current) {
+        if ((hoverData || hoverPath) && lottieModule && containerRef.value) {
           animationItem?.pause();
           hoverAnimationItem = createAnimation(
             hoverData,
             hoverPath,
-            containerRef.current,
+            containerRef.value,
             true,
           );
           if (hoverAnimationItem) {
@@ -474,21 +474,21 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
         }
 
         // 单动画 + 切换模式
-        if (toggleData && lottieModule && containerRef.current) {
+        if (toggleData && lottieModule && containerRef.value) {
           isToggled = !isToggled;
           destroyCurrentAnimation();
           if (isToggled) {
             animationItem = createAnimation(
               toggleData,
               undefined,
-              containerRef.current,
+              containerRef.value,
               true,
             );
           } else {
             animationItem = createAnimation(
               animationData,
               path,
-              containerRef.current,
+              containerRef.value,
               true,
             );
           }
@@ -567,7 +567,7 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
     /** 构建 VNode 属性对象 */
     const attrs: Record<string, unknown> = {
       class: classStr,
-      ref: containerRef,
+      ref: 'containerRef',
       "data-name": name,
     };
     if (style) {

@@ -12,24 +12,24 @@
       "types": "./dist/index.d.ts"
     },
     "./danmaku": {
-      "import": "./dist/danmaku/index.js",
-      "types": "./dist/danmaku/index.d.ts"
+      "import": "./dist/danmaku.js",
+      "types": "./dist/danmaku.d.ts"
     },
     "./subtitle": {
-      "import": "./dist/subtitle/index.js",
-      "types": "./dist/subtitle/index.d.ts"
+      "import": "./dist/subtitle.js",
+      "types": "./dist/subtitle.d.ts"
     },
     "./dash": {
-      "import": "./dist/dash/index.js",
-      "types": "./dist/dash/index.d.ts"
+      "import": "./dist/dash.js",
+      "types": "./dist/dash.d.ts"
     },
     "./hls": {
-      "import": "./dist/hls/index.js",
-      "types": "./dist/hls/index.d.ts"
+      "import": "./dist/hls.js",
+      "types": "./dist/hls.d.ts"
     },
     "./flv": {
-      "import": "./dist/flv/index.js",
-      "types": "./dist/flv/index.d.ts"
+      "import": "./dist/flv.js",
+      "types": "./dist/flv.d.ts"
     },
     "./interaction": {
       "import": "./dist/interaction/index.js",

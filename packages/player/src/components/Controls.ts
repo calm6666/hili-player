@@ -5,7 +5,7 @@
  * 所有 DOM 引用通过 ref 回调获取，不使用 querySelector
  */
 
-import { h, defineComponent, ref, useContext } from "@/core";
+import { h, defineComponent, useTemplateRef, useContext } from "@/core";
 import { isBrowser } from "@/utils";
 import type {
   CtrlShowMenu,
@@ -213,39 +213,69 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // ============================================
 
     /** 控制栏主体容器元素 */
-    const controlEntityRef = ref<HTMLDivElement>();
+    const controlEntityRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "controlEntityRef",
+    );
     /** 进度条区域容器元素 */
-    const playerProgressAreaRef = ref<HTMLDivElement>();
-    /** 阴影进度条轨道容器元素（编辑模式下的分段预览） */
-    const playerShadowProgressScheduleWrapRef = ref<HTMLDivElement>();
-    /** 阴影进度条区域容器元素 */
-    const playerShadowProgressAreaRef = ref<HTMLDivElement>();
+    const playerProgressAreaRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "playerProgressAreaRef",
+    );
     /** 进度条拖拽滑块元素 */
-    const progressThumbRef = ref<HTMLDivElement>();
+    const progressThumbRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "progressThumbRef",
+    );
     /** 进度条鼠标跟随指示器元素 */
-    const moveIndicatorRef = ref<HTMLDivElement>();
+    const moveIndicatorRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "moveIndicatorRef",
+    );
     /** 当前播放时间文本元素 */
-    const playerCtrlTimeCurrentRef = ref<HTMLDivElement>();
+    const playerCtrlTimeCurrentRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "playerCtrlTimeCurrentRef",
+    );
     /** 总时长文本元素 */
-    const playerCtrlTimeDurationRef = ref<HTMLDivElement>();
+    const playerCtrlTimeDurationRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "playerCtrlTimeDurationRef",
+    );
     /** 进度条悬浮预览弹出层元素 */
-    const progressPopupRef = ref<HTMLDivElement>();
+    const progressPopupRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "progressPopupRef",
+    );
     /** 进度条悬浮预览时间文本元素 */
-    const previewTimeRef = ref<HTMLDivElement>();
+    const previewTimeRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "previewTimeRef",
+    );
     /** 音量按钮元素 */
-    const ctrlVolumeBtnRef = ref<HTMLDivElement>();
+    const ctrlVolumeBtnRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "ctrlVolumeBtnRef",
+    );
     /** 音量数值文本元素 */
-    const volumeNumberRef = ref<HTMLDivElement>();
-    /** 音量滑块区域容器元素 */
-    const volumeSliderAreaRef = ref<HTMLDivElement>();
+    const volumeNumberRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "volumeNumberRef",
+    );
     /** 音量进度条元素 */
-    const volumeProgressbarRef = ref<HTMLDivElement>();
+    const volumeProgressbarRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "volumeProgressbarRef",
+    );
     /** 音量滑块拖拽手柄元素 */
-    const volumeSliderThumbRef = ref<HTMLDivElement>();
+    const volumeSliderThumbRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "volumeSliderThumbRef",
+    );
     /** 倍速菜单项元素列表 */
     const backrateMenuItems: HTMLLIElement[] = [];
     /** PBP（逐行预览）面板元素 */
-    const pbpRef = ref<HTMLDivElement>();
+    const pbpRef = useTemplateRef<HTMLDivElement>(lifecycle, "pbpRef");
 
     // ============================================
     // 工具函数
@@ -282,19 +312,19 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      */
     const mouseMove = (event: MouseEvent): void => {
       event.preventDefault();
-      if (playerProgressAreaRef.current) {
+      if (playerProgressAreaRef.value) {
         const containerRect =
-          playerProgressAreaRef.current.getBoundingClientRect();
+          playerProgressAreaRef.value.getBoundingClientRect();
         indicatorLeft = Math.min(
           Math.max(0, event.clientX - containerRect.left + 1),
           containerRect.width,
         );
-        if (moveIndicatorRef.current) {
-          moveIndicatorRef.current.style.transform = `translateX(${indicatorLeft}px)`;
+        if (moveIndicatorRef.value) {
+          moveIndicatorRef.value.style.transform = `translateX(${indicatorLeft}px)`;
         }
         popup.currentTime = (indicatorLeft / containerRect.width) * duration;
-        if (previewTimeRef.current) {
-          previewTimeRef.current.innerHTML = formatTime(popup.currentTime);
+        if (previewTimeRef.value) {
+          previewTimeRef.value.innerHTML = formatTime(popup.currentTime);
         }
         if (indicatorLeft <= 80) {
           popup.left = 0;
@@ -303,8 +333,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         } else {
           popup.left = indicatorLeft - 80;
         }
-        if (progressPopupRef.current) {
-          progressPopupRef.current.style.left = `${popup.left}px`;
+        if (progressPopupRef.value) {
+          progressPopupRef.value.style.left = `${popup.left}px`;
         }
       }
     };
@@ -314,10 +344,9 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * @param event - 鼠标事件
      */
     const handleMouseDown = (event: MouseEvent): void => {
-      if (!isBrowser() || !playerProgressAreaRef.current) return;
+      if (!isBrowser() || !playerProgressAreaRef.value) return;
       isDragging = true;
-      const containerRect =
-        playerProgressAreaRef.current.getBoundingClientRect();
+      const containerRect = playerProgressAreaRef.value.getBoundingClientRect();
       const offsetX = event.clientX - containerRect.left;
       const currentTime =
         Math.min(Math.max(0.00001, offsetX / containerRect.width), 0.99999) *
@@ -338,9 +367,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * @param event - 鼠标事件
      */
     const handleMouseMove = (event: MouseEvent): void => {
-      if (!isDragging || !playerProgressAreaRef.current) return;
-      const containerRect =
-        playerProgressAreaRef.current.getBoundingClientRect();
+      if (!isDragging || !playerProgressAreaRef.value) return;
+      const containerRect = playerProgressAreaRef.value.getBoundingClientRect();
       const offsetX = event.clientX - containerRect.left;
       const currentTime =
         Math.min(Math.max(0.00001, offsetX / containerRect.width), 0.99999) *
@@ -355,17 +383,16 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * @param event - 触摸事件
      */
     const handleTouchMove = (event: TouchEvent): void => {
-      if (!isDragging || !playerProgressAreaRef.current) return;
+      if (!isDragging || !playerProgressAreaRef.value) return;
       event.preventDefault();
       const offsetX =
         event.touches[0].clientX -
-        playerProgressAreaRef.current.getBoundingClientRect().left;
+        playerProgressAreaRef.value.getBoundingClientRect().left;
       const currentTime =
         Math.min(
           Math.max(
             0.00001,
-            offsetX /
-              playerProgressAreaRef.current.getBoundingClientRect().width,
+            offsetX / playerProgressAreaRef.value.getBoundingClientRect().width,
           ),
           0.99999,
         ) * duration;
@@ -534,8 +561,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * @param current - 当前时间（秒）
      */
     const updateMainProgress = (current: number): void => {
-      if (!playerCtrlTimeCurrentRef.current) return;
-      playerCtrlTimeCurrentRef.current.textContent = formatTime(current);
+      if (!playerCtrlTimeCurrentRef.value) return;
+      playerCtrlTimeCurrentRef.value.textContent = formatTime(current);
     };
 
     /**
@@ -543,10 +570,10 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * @param current - 当前时间（秒）
      */
     const updateThumbPosition = (current: number): void => {
-      if (!progressThumbRef.current || !playerProgressAreaRef.current) return;
+      if (!progressThumbRef.value || !playerProgressAreaRef.value) return;
       const position =
-        (current / duration) * playerProgressAreaRef.current.clientWidth - 10;
-      applyTransform(progressThumbRef.current, 1, `translateX(${position}px)`);
+        (current / duration) * playerProgressAreaRef.value.clientWidth - 10;
+      applyTransform(progressThumbRef.value, 1, `translateX(${position}px)`);
     };
 
     /**
@@ -555,19 +582,19 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      */
     const updateVolumeDisplay = (newVolume: number): void => {
       if (volume <= 0 && newVolume > 0) {
-        ctrlVolumeBtnRef.current?.classList.remove("state-muted");
+        ctrlVolumeBtnRef.value?.classList.remove("state-muted");
       } else if (volume > 0 && newVolume <= 0) {
-        ctrlVolumeBtnRef.current?.classList.add("state-muted");
+        ctrlVolumeBtnRef.value?.classList.add("state-muted");
       }
       volume = newVolume;
       if (
-        volumeNumberRef.current &&
-        volumeProgressbarRef.current &&
-        volumeSliderThumbRef.current
+        volumeNumberRef.value &&
+        volumeProgressbarRef.value &&
+        volumeSliderThumbRef.value
       ) {
-        volumeNumberRef.current.innerHTML = Math.floor(volume * 100).toString();
-        volumeProgressbarRef.current.style.transform = `scaleY(${volume})`;
-        volumeSliderThumbRef.current.style.transform = `translateY(${-(60 * volume - 6)}px)`;
+        volumeNumberRef.value.innerHTML = Math.floor(volume * 100).toString();
+        volumeProgressbarRef.value.style.transform = `scaleY(${volume})`;
+        volumeSliderThumbRef.value.style.transform = `translateY(${-(60 * volume - 6)}px)`;
       }
     };
 
@@ -575,8 +602,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * 初始化总时长文本显示
      */
     const initDuration = (): void => {
-      if (playerCtrlTimeDurationRef.current) {
-        playerCtrlTimeDurationRef.current.innerHTML = formatTime(duration);
+      if (playerCtrlTimeDurationRef.value) {
+        playerCtrlTimeDurationRef.value.innerHTML = formatTime(duration);
       }
     };
 
@@ -585,6 +612,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // ============================================
 
     lifecycle.onMounted = (): void => {
+      console.log("[Controls] 组件挂载完成", volumeNumberRef.value);
       initDuration();
       initBackrate();
       initTooltip();
@@ -593,16 +621,16 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       lifecycle.emit?.("controlsMounted", {
         updateVolumeDisplay,
         showControl: () => {
-          if (controlEntityRef.current) {
-            controlEntityRef.current.setAttribute("data-shadow-show", "false");
+          if (controlEntityRef.value) {
+            controlEntityRef.value.setAttribute("data-shadow-show", "false");
           }
-          pbpRef.current?.classList.add("show");
+          pbpRef.value?.classList.add("show");
         },
         hideControl: () => {
-          if (controlEntityRef.current) {
-            controlEntityRef.current.setAttribute("data-shadow-show", "true");
+          if (controlEntityRef.value) {
+            controlEntityRef.value.setAttribute("data-shadow-show", "true");
           }
-          pbpRef.current?.classList.remove("show");
+          pbpRef.value?.classList.remove("show");
         },
         updateMute: (isMuted: boolean) => {
           volumeProgress.isMuted = isMuted;
@@ -677,7 +705,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         {
           class: "player-control-entity",
           "data-shadow-show": "false",
-          ref: controlEntityRef,
+          ref: "controlEntityRef",
         },
         h(TopControls, {
           progressSegments: config.progressSegments,
@@ -725,15 +753,13 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
           "div",
           {
             class: "player-shadow-progress-area",
-            ref: playerShadowProgressAreaRef,
           },
           h("div", {
             class: "player-shadow-progress-schedule-wrap",
-            ref: playerShadowProgressScheduleWrapRef,
           }),
         ),
         h(PbpControls, {
-          ref: pbpRef,
+          ref: "pbpRef",
           onPbpClick: () => {},
           onPbpPinClick: () => {},
         }),

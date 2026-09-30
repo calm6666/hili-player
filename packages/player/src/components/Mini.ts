@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -32,13 +32,13 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
   // ============================================
 
   /** 缓冲进度条元素引用 */
-  const progressBufferRef = ref<HTMLDivElement>();
+  const progressBufferRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressBufferRef');
 
   /** 播放进度条元素引用 */
-  const progressTempoRef = ref<HTMLDivElement>();
+  const progressTempoRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressTempoRef');
 
   /** 根容器元素引用 */
-  const miniWrapRef = ref<HTMLDivElement>();
+  const miniWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'miniWrapRef');
 
   // ============================================
   // 事件处理函数
@@ -67,9 +67,9 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
    * @param buffer - 缓冲进度时间（秒）
    */
   const updateBuffer = (buffer: number): void => {
-    if (progressBufferRef.current && props.duration) {
+    if (progressBufferRef.value && props.duration) {
       const scale = buffer / props.duration;
-      progressBufferRef.current.style.transform = `scaleX(${scale})`;
+      progressBufferRef.value.style.transform = `scaleX(${scale})`;
     }
   };
 
@@ -78,9 +78,9 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
    * @param current - 当前播放时间（秒）
    */
   const updateCurrent = (current: number): void => {
-    if (progressTempoRef.current && props.duration) {
+    if (progressTempoRef.value && props.duration) {
       const scale = current / props.duration;
-      progressTempoRef.current.style.transform = `scaleX(${scale})`;
+      progressTempoRef.value.style.transform = `scaleX(${scale})`;
     }
   };
 
@@ -88,8 +88,8 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
    * 显示迷你播放器
    */
   const show = (): void => {
-    if (miniWrapRef.current) {
-      miniWrapRef.current.style.display = '';
+    if (miniWrapRef.value) {
+      miniWrapRef.value.style.display = '';
     }
   };
 
@@ -97,8 +97,8 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
    * 隐藏迷你播放器
    */
   const hide = (): void => {
-    if (miniWrapRef.current) {
-      miniWrapRef.current.style.display = 'none';
+    if (miniWrapRef.value) {
+      miniWrapRef.value.style.display = 'none';
     }
   };
 
@@ -132,7 +132,7 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
 
   return h(
     'div',
-    { class: 'player-mini-warp', ref: miniWrapRef },
+    { class: 'player-mini-warp', ref: 'miniWrapRef' },
     h(
       'div',
       { class: 'player-mini-close', onClick: handleClose },
@@ -149,11 +149,11 @@ export const Mini = defineComponent<MiniProps>((props, lifecycle: ComponentLifec
       { class: 'player-mini-progress' },
       h('div', {
         class: 'player-mini-progress-buffer',
-        ref: progressBufferRef,
+        ref: 'progressBufferRef',
       }),
       h('div', {
         class: 'player-mini-progress-tempo',
-        ref: progressTempoRef,
+        ref: 'progressTempoRef',
       })
     )
   );

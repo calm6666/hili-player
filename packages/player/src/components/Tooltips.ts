@@ -4,7 +4,8 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, signal } from '@/core';
+import type { Signal } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -60,14 +61,11 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
   // DOM 引用
   // ============================================
 
-  /** 工具提示区域容器元素引用 */
-  const tooltipAreaRef = ref<HTMLDivElement>();
-
   /**
    * 提示项元素引用映射表
    * 通过 name 索引每个提示项的 DOM 元素引用
    */
-  const itemRefMap: Record<string, { current: HTMLDivElement | null }> = {};
+  const itemRefMap: Record<string, Signal<HTMLDivElement | null>> = {};
 
   /** 提示项数组，未传入时使用默认提示项 */
   const items = props.items ?? DEFAULT_TOOLTIP_ITEMS;
@@ -107,8 +105,8 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
    */
   const renderTooltipItems = (): VNode[] => {
     return items.map((item: TooltipItem) => {
-      /** 当前提示项的 DOM 元素引用对象 */
-      const refObj = ref<HTMLDivElement>();
+      /** 当前提示项的 DOM 元素引用（每个 item 独立 Signal，不能用 useTemplateRef 去重 key） */
+      const refObj = signal<HTMLDivElement | null>(null);
       itemRefMap[item.name] = refObj;
 
       return h(
@@ -134,12 +132,12 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
   const showTooltip = (name: string, position: { left: number; top: number }): void => {
     /** 指定名称对应的 DOM 元素引用对象 */
     const refObj = itemRefMap[name];
-    if (refObj?.current) {
-      refObj.current.style.transform = 'translate(0px, 0px)';
-      refObj.current.style.visibility = 'visible';
-      refObj.current.style.opacity = '1';
-      refObj.current.style.left = `${position.left}px`;
-      refObj.current.style.top = `${position.top}px`;
+    if (refObj?.value) {
+      refObj.value.style.transform = 'translate(0px, 0px)';
+      refObj.value.style.visibility = 'visible';
+      refObj.value.style.opacity = '1';
+      refObj.value.style.left = `${position.left}px`;
+      refObj.value.style.top = `${position.top}px`;
     }
   };
 
@@ -149,12 +147,12 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
   const hideTooltip = (name: string): void => {
     /** 指定名称对应的 DOM 元素引用对象 */
     const refObj = itemRefMap[name];
-    if (refObj?.current) {
+    if (refObj?.value) {
       /** 未激活时的默认偏移 */
       const defaultTransform = name === 'feedback-btn' ? 'translate(0px, -5px)' : 'translate(0px, 5px)';
-      refObj.current.style.transform = defaultTransform;
-      refObj.current.style.visibility = 'hidden';
-      refObj.current.style.opacity = '0';
+      refObj.value.style.transform = defaultTransform;
+      refObj.value.style.visibility = 'hidden';
+      refObj.value.style.opacity = '0';
     }
   };
 
@@ -165,12 +163,12 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
     items.forEach((item) => {
       /** 当前提示项的 DOM 元素引用对象 */
       const refObj = itemRefMap[item.name];
-      if (refObj?.current) {
+      if (refObj?.value) {
         /** 未激活时的默认偏移 */
         const defaultTransform = item.name === 'feedback-btn' ? 'translate(0px, -5px)' : 'translate(0px, 5px)';
-        refObj.current.style.transform = defaultTransform;
-        refObj.current.style.visibility = 'hidden';
-        refObj.current.style.opacity = '0';
+        refObj.value.style.transform = defaultTransform;
+        refObj.value.style.visibility = 'hidden';
+        refObj.value.style.opacity = '0';
       }
     });
   };
@@ -194,7 +192,7 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
 
   return h(
     'div',
-    { class: 'player-tooltip-area', ref: tooltipAreaRef },
+    { class: 'player-tooltip-area' },
     ...renderTooltipItems()
   );
 });

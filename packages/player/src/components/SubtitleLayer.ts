@@ -7,7 +7,7 @@
  * 字幕插件将自身DOM注入到 .player-subtitle-wrap 容器中
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 // ============================================
@@ -42,7 +42,7 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
   // ============================================
 
   /** 字幕容器 DOM 引用，字幕插件将内容注入到此容器 */
-  const subtitleWrapRef = ref<HTMLDivElement>();
+  const subtitleWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'subtitleWrapRef');
 
   // ============================================
   // 样式控制方法
@@ -53,8 +53,8 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
    * @param size - 字体大小（px）
    */
   const setFontSize = (size: number): void => {
-    if (subtitleWrapRef.current) {
-      subtitleWrapRef.current.style.fontSize = `${size}px`;
+    if (subtitleWrapRef.value) {
+      subtitleWrapRef.value.style.fontSize = `${size}px`;
     }
   };
 
@@ -63,8 +63,8 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
    * @param color - CSS 颜色值
    */
   const setColor = (color: string): void => {
-    if (subtitleWrapRef.current) {
-      subtitleWrapRef.current.style.color = color;
+    if (subtitleWrapRef.value) {
+      subtitleWrapRef.value.style.color = color;
     }
   };
 
@@ -73,8 +73,8 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
    * @param color - CSS 颜色值
    */
   const setBackgroundColor = (color: string): void => {
-    if (subtitleWrapRef.current) {
-      subtitleWrapRef.current.style.backgroundColor = color;
+    if (subtitleWrapRef.value) {
+      subtitleWrapRef.value.style.backgroundColor = color;
     }
   };
 
@@ -83,22 +83,22 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
    * @param position - 字幕位置（top / center / bottom）
    */
   const setPosition = (position: SubtitlePosition): void => {
-    if (!subtitleWrapRef.current) return;
+    if (!subtitleWrapRef.value) return;
 
     switch (position) {
       case 'top':
-        subtitleWrapRef.current.style.bottom = '';
-        subtitleWrapRef.current.style.top = '10%';
+        subtitleWrapRef.value.style.bottom = '';
+        subtitleWrapRef.value.style.top = '10%';
         break;
       case 'center':
-        subtitleWrapRef.current.style.bottom = '';
-        subtitleWrapRef.current.style.top = '50%';
-        subtitleWrapRef.current.style.transform = 'translateY(-50%)';
+        subtitleWrapRef.value.style.bottom = '';
+        subtitleWrapRef.value.style.top = '50%';
+        subtitleWrapRef.value.style.transform = 'translateY(-50%)';
         break;
       case 'bottom':
-        subtitleWrapRef.current.style.top = '';
-        subtitleWrapRef.current.style.transform = '';
-        subtitleWrapRef.current.style.bottom = '10%';
+        subtitleWrapRef.value.style.top = '';
+        subtitleWrapRef.value.style.transform = '';
+        subtitleWrapRef.value.style.bottom = '10%';
         break;
     }
   };
@@ -110,7 +110,7 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
   /** 组件挂载后对外暴露字幕容器引用和样式控制方法 */
   lifecycle.onMounted = (): void => {
     lifecycle.emit?.('subtitleLayerMounted', {
-      subtitleWrap: subtitleWrapRef.current,
+      subtitleWrap: subtitleWrapRef.value,
       setFontSize,
       setColor,
       setBackgroundColor,
@@ -120,9 +120,9 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
 
   /** 组件销毁前清理字幕容器内的所有子节点 */
   lifecycle.onBeforeDestroy = (): void => {
-    if (subtitleWrapRef.current) {
-      while (subtitleWrapRef.current.firstChild) {
-        subtitleWrapRef.current.removeChild(subtitleWrapRef.current.firstChild);
+    if (subtitleWrapRef.value) {
+      while (subtitleWrapRef.value.firstChild) {
+        subtitleWrapRef.value.removeChild(subtitleWrapRef.value.firstChild);
       }
     }
   };
@@ -133,7 +133,7 @@ export const SubtitleLayer = defineComponent<SubtitleLayerProps>((props, lifecyc
 
   return h('div', {
     class: 'player-subtitle-wrap',
-    ref: subtitleWrapRef,
+    ref: 'subtitleWrapRef',
     style: {
       position: 'absolute',
       left: '0',

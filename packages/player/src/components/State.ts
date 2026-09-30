@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -26,16 +26,16 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
   // ============================================
 
   /** 播放图标元素引用 */
-  const playIconRef = ref<HTMLDivElement>();
+  const playIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playIconRef');
 
   /** 缓冲图标元素引用 */
-  const bufferIconRef = ref<HTMLDivElement>();
+  const bufferIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bufferIconRef');
 
   /** 缓冲速度文本元素引用 */
-  const bufferSpeedRef = ref<HTMLSpanElement>();
+  const bufferSpeedRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'bufferSpeedRef');
 
   /** 缓冲文本容器元素引用 */
-  const bufferTextRef = ref<HTMLDivElement>();
+  const bufferTextRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bufferTextRef');
 
   // ============================================
   // DOM 更新函数
@@ -55,8 +55,8 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
    * @param speed - 缓冲速度（字节/秒）
    */
   const updateBufferSpeed = (speed: number): void => {
-    if (bufferSpeedRef.current) {
-      bufferSpeedRef.current.innerHTML = formatBufferSpeed(speed);
+    if (bufferSpeedRef.value) {
+      bufferSpeedRef.value.innerHTML = formatBufferSpeed(speed);
     }
   };
 
@@ -64,11 +64,11 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
    * 显示缓冲状态图标和文本
    */
   const showBuffering = (): void => {
-    if (bufferIconRef.current) {
-      bufferIconRef.current.style.display = '';
+    if (bufferIconRef.value) {
+      bufferIconRef.value.style.display = '';
     }
-    if (bufferTextRef.current) {
-      bufferTextRef.current.style.display = '';
+    if (bufferTextRef.value) {
+      bufferTextRef.value.style.display = '';
     }
   };
 
@@ -76,11 +76,11 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
    * 隐藏缓冲状态图标和文本
    */
   const hideBuffering = (): void => {
-    if (bufferIconRef.current) {
-      bufferIconRef.current.style.display = 'none';
+    if (bufferIconRef.value) {
+      bufferIconRef.value.style.display = 'none';
     }
-    if (bufferTextRef.current) {
-      bufferTextRef.current.style.display = 'none';
+    if (bufferTextRef.value) {
+      bufferTextRef.value.style.display = 'none';
     }
   };
 
@@ -88,8 +88,8 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
    * 显示播放图标
    */
   const showPlayIcon = (): void => {
-    if (playIconRef.current) {
-      playIconRef.current.style.display = '';
+    if (playIconRef.value) {
+      playIconRef.value.style.display = '';
     }
   };
 
@@ -97,8 +97,8 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
    * 隐藏播放图标
    */
   const hidePlayIcon = (): void => {
-    if (playIconRef.current) {
-      playIconRef.current.style.display = 'none';
+    if (playIconRef.value) {
+      playIconRef.value.style.display = 'none';
     }
   };
 
@@ -131,17 +131,17 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
   return h(
     'div',
     { class: 'player-state-wrap' },
-    h('div', { class: 'player-state-play', ref: playIconRef }),
-    h('div', { class: 'player-state-buff-icon', ref: bufferIconRef }),
+    h('div', { class: 'player-state-play', ref: 'playIconRef' }),
+    h('div', { class: 'player-state-buff-icon', ref: 'bufferIconRef' }),
     h(
       'div',
-      { class: 'player-state-buff-text', ref: bufferTextRef },
+      { class: 'player-state-buff-text', ref: 'bufferTextRef' },
       h('span', { class: 'player-state-buff-title' }, '正在缓冲...'),
       h(
         'span',
         {
           class: 'player-state-buff-speed',
-          ref: bufferSpeedRef,
+          ref: 'bufferSpeedRef',
         },
         formatBufferSpeed(props.bufferSpeed ?? 0)
       )

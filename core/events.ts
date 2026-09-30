@@ -34,6 +34,18 @@ export type PlayerEventMap = {
   loading: undefined;
   loaded: undefined;
 
+  // HTML5 媒体元素标准事件（与 <video> 事件一一对应）
+  loadStart: undefined;
+  loadedMetadata: { duration: number };
+  loadedData: undefined;
+  emptied: undefined;
+  abort: undefined;
+  stalled: undefined;
+  suspend: undefined;
+  playing: undefined;
+  seeking: { currentTime: number };
+  seeked: { currentTime: number };
+
   // 视频属性相关事件
   volumeChange: { volume: number; muted: boolean };
   mutedChange: boolean;
@@ -150,6 +162,28 @@ export enum PlayerEventEnum {
   LOADING = 'loading',
   /** 加载完成 */
   LOADED = 'loaded',
+
+  // HTML5 媒体元素标准事件（与 <video> 事件一一对应）
+  /** 开始加载媒体 */
+  LOAD_START = 'loadStart',
+  /** 媒体元数据加载完成（duration 可用） */
+  LOADED_METADATA = 'loadedMetadata',
+  /** 首帧数据加载完成（readyState 达到 HAVE_CURRENT_DATA） */
+  LOADED_DATA = 'loadedData',
+  /** 媒体被清空（重新加载前触发） */
+  EMPTIED = 'emptied',
+  /** 加载被中止（用户主动中断 / 切换源） */
+  ABORT = 'abort',
+  /** 数据停滞（网络/磁盘长时间无数据） */
+  STALLED = 'stalled',
+  /** 浏览器主动暂停加载（非错误，通常是已缓冲足够） */
+  SUSPEND = 'suspend',
+  /** 实际开始播放（缓冲结束后，与 play 区分） */
+  PLAYING = 'playing',
+  /** 跳转开始 */
+  SEEKING = 'seeking',
+  /** 跳转完成 */
+  SEEKED = 'seeked',
 
   // 视频属性相关事件
   /** 音量改变 */

@@ -13,11 +13,11 @@
 import { hydrate } from "../core/index.ts";
 import { createApp } from "./main";
 
-// ★ 从构建产物导入播放器（验证打包是否正确）
-import { VideoPlayer } from "../packages/player/dist/index.es.js";
-// 插件从源码导入（构建产物中 @/ 外部引用需 Vite 别名解析，esbuild 预扫描不支持）
-import { createHlsPlugin } from "../packages/plugins/src/hls/index";
-import { createDashPlugin } from "../packages/plugins/src/dash/index";
+// ★ 从构建产物导入播放器（monorepo 链接到 packages/player/dist）
+import { VideoPlayer } from "@hili-player/player";
+// 插件从构建产物导入（monorepo 链接到 packages/plugins/dist）
+import { createHlsPlugin } from "@hili-player/plugins/hls";
+import { createDashPlugin } from "@hili-player/plugins/dash";
 
 // ============================================
 // 步骤 1：执行水合
@@ -237,8 +237,8 @@ renderDebugItems("dbg-ssr", [
 /** 示例视频源列表（轮播切换：MP4 / HLS / DASH） */
 const SAMPLE_SOURCES = [
   "http://127.0.0.1:9000/hfs/4d00fa3c10f5807b74f3ec7d52e86c4918d043b6911f854af577f4c70b366dc5.mp4",
-  "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-  "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+  "http://127.0.0.1:9000/video/dash2/master-segmentbase.m3u8",
+  "http://127.0.0.1:9000/video/dash2/output-segmentbase.mpd",
 ];
 /** 当前使用的视频源索引（轮播递增） */
 let sourceIndex = 0;

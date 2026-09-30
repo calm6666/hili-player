@@ -469,8 +469,8 @@ export class VideoPlayer
         {
           contextId: ConfigContext.id,
           value:
-            typeof this.props.controls === "object"
-              ? this.props.controls
+            typeof this.props.controlBtns === "object"
+              ? this.props.controlBtns
               : defaultControlConfig,
         },
       ],
@@ -544,43 +544,147 @@ export class VideoPlayer
 
   /**
    * 绑定视频元素事件
-   * 同步运行时状态到 Store，并触发用户回调
+   *
+   * 覆盖 HTML5 媒体元素全部标准事件（共 21 个），每个事件都会：
+   *   1. 同步运行时状态到 Store / StateManager
+   *   2. 通过事件总线发出对应的 PlayerEventEnum 事件
+   *   3. 触发 PlayerConfig.callbacks 中的用户回调
+   *
+   * 事件清单：
+   *   abort, canplay, durationchange, emptied, ended, error, loadeddata,
+   *   loadedmetadata, loadstart, pause, play, playing, progress, ratechange,
+   *   seeked, seeking, stalled, suspend, timeupdate, volumechange, waiting
    */
   private bindVideoEvents(): void {
     if (!this.videoEl) return;
+    const video = this.videoEl;
 
-    // 视频加载开始 → 设置加载中状态
-    this.videoEl.addEventListener("loadstart", () => {
+    // ============================================
+    // 一、加载生命周期
+    // ============================================
+
+    /** loadstart：开始加载媒体 */
+    video.addEventListener("loadstart", () => {
       this.store.setLoading(true);
       this.state.set(PlayerStateKeyEnum.IS_LOADING, true);
       this.setState(PlayerState.LOADING);
+      this.events.emit(PlayerEventEnum.LOAD_START);
+      this.callbacks.loadstart?.();
     });
 
-    // 视频元数据加载完成 → 清除加载状态，更新时长
-    this.videoEl.addEventListener("loadedmetadata", () => {
+    /** loadedmetadata：元数据加载完成，duration 可用 */
+    video.addEventListener("loadedmetadata", () => {
+      const duration = this.videoEl?.duration || 0;
       this.store.setLoading(false);
-      this.store.setDuration(this.videoEl?.duration || 0);
+      this.store.setDuration(duration);
       this.state.set(PlayerStateKeyEnum.IS_LOADING, false);
-      this.state.set(PlayerStateKeyEnum.DURATION, this.videoEl?.duration || 0);
+      this.state.set(PlayerStateKeyEnum.DURATION, duration);
       this.setState(PlayerState.IDLE);
+      this.events.emit(PlayerEventEnum.LOADED_METADATA, { duration });
+      this.callbacks.loadedmetadata?.(duration);
     });
 
-    // 视频可播放 → 清除等待状态
-    this.videoEl.addEventListener("canplay", () => {
+    /** loadeddata：首帧数据加载完成（移动端"数据节省"模式下可能不触发） */
+    video.addEventListener("loadeddata", () => {
+      this.events.emit(PlayerEventEnum.LOADED_DATA);
+      this.callbacks.loadeddata?.();
+    });
+
+    /** canplay：缓冲足够，可以开始播放 */
+    video.addEventListener("canplay", () => {
       this.store.setWaiting(false);
       this.events.emit(PlayerEventEnum.CAN_PLAY);
       this.callbacks.canplay?.();
     });
 
-    // 视频缓冲中 → 设置等待状态
-    this.videoEl.addEventListener("waiting", () => {
-      this.store.setWaiting(true);
-      this.events.emit(PlayerEventEnum.WAITING);
-      this.callbacks.waiting?.();
+    /** durationchange：媒体时长变化 */
+    video.addEventListener("durationchange", () => {
+      const duration = this.videoEl?.duration || 0;
+      this.store.setDuration(duration);
+      this.state.set(PlayerStateKeyEnum.DURATION, duration);
+      this.events.emit(PlayerEventEnum.DURATION_CHANGE);
+      this.callbacks.durationchange?.(duration);
     });
 
-    // 视频播放结束 → 同步结束状态
-    this.videoEl.addEventListener("ended", () => {
+    /** progress：媒体数据周期性加载进度 */
+    video.addEventListener("progress", () => {
+      if (this.videoEl && this.videoEl.buffered.length > 0) {
+        const bufferedEnd = this.videoEl.buffered.end(
+          this.videoEl.buffered.length - 1,
+        );
+        this.store.setBuffered(bufferedEnd);
+        this.state.set(PlayerStateKeyEnum.BUFFERED, bufferedEnd);
+        this.events.emit(PlayerEventEnum.PROGRESS);
+        this.callbacks.progress?.(this.videoEl.buffered);
+      }
+    });
+
+    /** suspend：浏览器主动暂停加载（非错误，通常已缓冲足够） */
+    video.addEventListener("suspend", () => {
+      this.events.emit(PlayerEventEnum.SUSPEND);
+      this.callbacks.suspend?.();
+    });
+
+    /** stalled：数据停滞（网络/磁盘长时间无数据） */
+    video.addEventListener("stalled", () => {
+      this.events.emit(PlayerEventEnum.STALLED);
+      this.callbacks.stalled?.();
+    });
+
+    /** abort：加载被中止（用户主动中断 / 切换源） */
+    video.addEventListener("abort", () => {
+      this.store.setLoading(false);
+      this.state.set(PlayerStateKeyEnum.IS_LOADING, false);
+      this.events.emit(PlayerEventEnum.ABORT);
+      this.callbacks.abort?.();
+    });
+
+    /** emptied：媒体被清空（重新加载前触发） */
+    video.addEventListener("emptied", () => {
+      this.store.setEnded(false);
+      this.events.emit(PlayerEventEnum.EMPTIED);
+      this.callbacks.emptied?.();
+    });
+
+    /**
+     * error：加载/解码错误 → 触发备用源切换
+     * 注意：使用 <source> 子元素时错误会在 <source> 上触发而不冒泡到 <video>，
+     * 本播放器始终把 src 直接设置在 <video> 上，因此这里可以捕获。
+     */
+    video.addEventListener("error", () => this.handleVideoError());
+
+    // ============================================
+    // 二、播放状态
+    // ============================================
+
+    /** play：play() 被调用（此时可能尚未真正开始播放） */
+    video.addEventListener("play", () => {
+      this.store.setPlaying(true);
+      this.store.setEnded(false);
+      this.setState(PlayerState.PLAYING);
+      this.events.emit(PlayerEventEnum.PLAY);
+      this.callbacks.play?.();
+    });
+
+    /** playing：实际开始播放（缓冲结束后，与 play 区分） */
+    video.addEventListener("playing", () => {
+      this.store.setWaiting(false);
+      this.store.setPlaying(true);
+      this.setState(PlayerState.PLAYING);
+      this.events.emit(PlayerEventEnum.PLAYING);
+      this.callbacks.playing?.();
+    });
+
+    /** pause：暂停 */
+    video.addEventListener("pause", () => {
+      this.store.setPlaying(false);
+      this.setState(PlayerState.PAUSED);
+      this.events.emit(PlayerEventEnum.PAUSE);
+      this.callbacks.pause?.();
+    });
+
+    /** ended：播放结束（loop=true 且 playbackRate 非负时不会触发） */
+    video.addEventListener("ended", () => {
       this.store.setPlaying(false);
       this.store.setEnded(true);
       this.setState(PlayerState.ENDED);
@@ -588,20 +692,12 @@ export class VideoPlayer
       this.callbacks.ended?.();
     });
 
-    // 进度更新 → 同步缓冲进度
-    this.videoEl.addEventListener("progress", () => {
-      if (this.videoEl && this.videoEl.buffered.length > 0) {
-        const bufferedEnd = this.videoEl.buffered.end(
-          this.videoEl.buffered.length - 1,
-        );
-        this.store.setBuffered(bufferedEnd);
-        this.state.set(PlayerStateKeyEnum.BUFFERED, bufferedEnd);
-        this.callbacks.progress?.(this.videoEl.buffered);
-      }
-    });
+    // ============================================
+    // 三、进度与跳转
+    // ============================================
 
-    // 时间更新 → 同步当前播放时间（高频更新，仅更新运行时StateManager）
-    this.videoEl.addEventListener("timeupdate", () => {
+    /** timeupdate：播放时间更新（触发频率约 4Hz ~ 66Hz，取决于系统负载） */
+    video.addEventListener("timeupdate", () => {
       const currentTime = this.videoEl?.currentTime || 0;
       const duration = this.videoEl?.duration || 0;
       this.state.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
@@ -609,10 +705,59 @@ export class VideoPlayer
       this.callbacks.timeupdate?.(currentTime, duration);
     });
 
-    // 视频错误事件 - 用于备用源切换
-    this.videoEl.addEventListener("error", () => this.handleVideoError());
+    /** seeking：跳转开始 */
+    video.addEventListener("seeking", () => {
+      const currentTime = this.videoEl?.currentTime || 0;
+      this.store.setWaiting(true);
+      this.events.emit(PlayerEventEnum.SEEKING, { currentTime });
+      this.callbacks.seeking?.(currentTime);
+    });
 
-    // 全屏变化监听（浏览器原生全屏事件）
+    /** seeked：跳转完成 */
+    video.addEventListener("seeked", () => {
+      const currentTime = this.videoEl?.currentTime || 0;
+      this.store.setWaiting(false);
+      this.state.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
+      this.events.emit(PlayerEventEnum.SEEKED, { currentTime });
+      this.callbacks.seeked?.(currentTime);
+    });
+
+    // ============================================
+    // 四、音量与速率
+    // ============================================
+
+    /** volumechange：音量 / 静音状态变化 */
+    video.addEventListener("volumechange", () => {
+      const volume = this.videoEl?.volume ?? 1;
+      const muted = this.videoEl?.muted ?? false;
+      this.state.set(PlayerStateKeyEnum.VOLUME, volume);
+      this.state.set(PlayerStateKeyEnum.MUTED, muted);
+      this.events.emit(PlayerEventEnum.VOLUME_CHANGE, { volume, muted });
+      this.callbacks.volumechange?.(volume, muted);
+    });
+
+    /** ratechange：播放速率变化 */
+    video.addEventListener("ratechange", () => {
+      const rate = this.videoEl?.playbackRate ?? 1;
+      this.state.set(PlayerStateKeyEnum.PLAYBACK_RATE, rate);
+      this.events.emit(PlayerEventEnum.RATE_CHANGE, rate);
+      this.callbacks.ratechange?.(rate);
+    });
+
+    // ============================================
+    // 五、缓冲等待
+    // ============================================
+
+    /** waiting：缓冲中，等待数据 */
+    video.addEventListener("waiting", () => {
+      this.store.setWaiting(true);
+      this.events.emit(PlayerEventEnum.WAITING);
+      this.callbacks.waiting?.();
+    });
+
+    // ============================================
+    // 全屏变化监听（document 级原生事件，非 video 事件）
+    // ============================================
     this.fullscreenChangeHandler = (): void => {
       const isFullscreen = !!document.fullscreenElement;
       this.state.set(PlayerStateKeyEnum.IS_FULLSCREEN, isFullscreen);

@@ -1,4 +1,4 @@
-import { h, defineComponent, ref } from "@/core";
+import { h, defineComponent, useTemplateRef } from "@/core";
 import type { VNode } from "@/types";
 import type { ProgressSegment } from "@/types";
 import { isBrowser } from "@/utils";
@@ -13,7 +13,10 @@ export type ProgressBarEvents = {
   seek: number;
   seekStart: undefined;
   seekEnd: undefined;
-  progressBarMounted: { updateProgress: (time: number) => void; updateBuffer: (buffer: number) => void };
+  progressBarMounted: {
+    updateProgress: (time: number) => void;
+    updateBuffer: (buffer: number) => void;
+  };
 };
 
 type ProgressStrategy = (
@@ -34,43 +37,34 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     // ============================================
 
     /** 进度条区域容器元素引用 */
-    const progressAreaRef = ref<HTMLDivElement>();
-
-    /** 进度条外层包裹元素引用 */
-    const progressWrapRef = ref<HTMLDivElement>();
+    const progressAreaRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "progressAreaRef",
+    );
 
     /** 进度条内层包裹元素引用 */
-    const scheduleWrapRef = ref<HTMLDivElement>();
+    const scheduleWrapRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "scheduleWrapRef",
+    );
 
     /** 缓冲进度条元素引用 */
-    const bufferBarRef = ref<HTMLDivElement>();
-
-    /** 当前播放进度条元素引用 */
-    const currentBarRef = ref<HTMLDivElement>();
-
-    /** 拖拽滑块元素引用 */
-    const thumbRef = ref<HTMLDivElement>();
-
-    /** 移动指示器元素引用 */
-    const moveIndicatorRef = ref<HTMLDivElement>();
+    const bufferBarRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "bufferBarRef",
+    );
 
     /** 预览弹窗元素引用 */
-    const popupRef = ref<HTMLDivElement>();
-
-    /** 预览图片元素引用 */
-    const previewImageRef = ref<HTMLImageElement>();
+    const popupRef = useTemplateRef<HTMLDivElement>(lifecycle, "popupRef");
 
     /** 预览时间文本元素引用 */
-    const previewTimeRef = ref<HTMLDivElement>();
-
-    /** 拉拽指示器元素引用 */
-    const pullIndicatorRef = ref<HTMLDivElement>();
+    const previewTimeRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "previewTimeRef",
+    );
 
     /** 光标元素引用 */
-    const cursorRef = ref<HTMLDivElement>();
-
-    /** 分段进度条包裹元素引用 */
-    const segmentWrapRef = ref<HTMLDivElement>();
+    const cursorRef = useTemplateRef<HTMLDivElement>(lifecycle, "cursorRef");
 
     // ============================================
     // 状态
@@ -95,9 +89,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * @returns 对应的时间（秒）
      */
     const getTimeFromX = (clientX: number): number => {
-      if (!progressAreaRef.current || duration <= 0) return 0;
+      if (!progressAreaRef.value || duration <= 0) return 0;
       /** 进度条区域的边界矩形 */
-      const rect = progressAreaRef.current.getBoundingClientRect();
+      const rect = progressAreaRef.value.getBoundingClientRect();
       /** 鼠标位置在进度条上的比例 (0-1) */
       const ratio = Math.max(
         0,
@@ -105,23 +99,6 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       );
       return ratio * duration;
     };
-
-    // /**
-    //  * 更新进度条 UI
-    //  * @param time - 当前时间（秒）
-    //  */
-    // const updateProgressUI = (time: number): void => {
-    //   if (duration <= 0) return;
-    //   /** 当前时间占总时长的百分比 */
-    //   const percent = Math.max(0, Math.min(100, (time / duration) * 100));
-
-    //   if (currentBarRef.current) {
-    //     currentBarRef.current.style.width = `${percent}%`;
-    //   }
-    //   if (thumbRef.current) {
-    //     thumbRef.current.style.left = `${percent}%`;
-    //   }
-    // };
 
     /**
      * 更新缓冲条 UI
@@ -131,8 +108,8 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       if (duration <= 0) return;
       /** 缓冲时间占总时长的百分比 */
       const percent = Math.max(0, Math.min(100, (buffer / duration) * 100));
-      if (bufferBarRef.current) {
-        bufferBarRef.current.style.width = `${percent}%`;
+      if (bufferBarRef.value) {
+        bufferBarRef.value.style.width = `${percent}%`;
       }
     };
 
@@ -141,10 +118,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * @param clientX - 鼠标 X 坐标
      */
     const updatePopup = (clientX: number): void => {
-      if (!progressAreaRef.current || !popupRef.current) return;
+      if (!progressAreaRef.value || !popupRef.value) return;
 
       /** 进度条区域的边界矩形 */
-      const rect = progressAreaRef.current.getBoundingClientRect();
+      const rect = progressAreaRef.value.getBoundingClientRect();
       /** 鼠标位置在进度条上的比例 (0-1) */
       const ratio = Math.max(
         0,
@@ -154,26 +131,26 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       const time = ratio * duration;
 
       // 更新预览时间文本
-      if (previewTimeRef.current) {
-        previewTimeRef.current.innerText = formatTime(time);
+      if (previewTimeRef.value) {
+        previewTimeRef.value.innerText = formatTime(time);
       }
 
       // 更新弹窗位置
       /** 弹窗宽度 */
-      const popupWidth = popupRef.current.offsetWidth || 120;
+      const popupWidth = popupRef.value.offsetWidth || 120;
       /** 弹窗左侧偏移量 */
       let left = ratio * rect.width - popupWidth / 2;
       left = Math.max(0, Math.min(left, rect.width - popupWidth));
-      popupRef.current.style.left = `${left}px`;
-      popupRef.current.style.display = "";
+      popupRef.value.style.left = `${left}px`;
+      popupRef.value.style.display = "";
     };
 
     /**
      * 隐藏预览弹窗
      */
     const hidePopup = (): void => {
-      if (popupRef.current) {
-        popupRef.current.style.display = "none";
+      if (popupRef.value) {
+        popupRef.value.style.display = "none";
       }
     };
 
@@ -189,15 +166,15 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       updatePopup(event.clientX);
 
       // 更新光标位置
-      if (cursorRef.current && progressAreaRef.current) {
+      if (cursorRef.value && progressAreaRef.value) {
         /** 进度条区域的边界矩形 */
-        const rect = progressAreaRef.current.getBoundingClientRect();
+        const rect = progressAreaRef.value.getBoundingClientRect();
         /** 鼠标位置在进度条上的比例 (0-1) */
         const ratio = Math.max(
           0,
           Math.min(1, (event.clientX - rect.left) / rect.width),
         );
-        cursorRef.current.style.left = `${ratio * 100}%`;
+        cursorRef.value.style.left = `${ratio * 100}%`;
       }
     };
 
@@ -485,7 +462,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           progressSegments,
         );
       }
-      scheduleWrapRef.current?.appendChild(progress);
+      scheduleWrapRef.value?.appendChild(progress);
     };
 
     /**
@@ -536,6 +513,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       // updateBufferUI(0);
       setupProgressElements();
       hidePopup();
+      console.log("[ProgressBar] 组件挂载完成", progressAreaRef.value);
       lifecycle.emit?.("progressBarMounted", { updateProgress, updateBuffer });
     };
 
@@ -561,21 +539,21 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       "div",
       {
         class: "player-progress-area",
-        ref: progressAreaRef,
+        ref: "progressAreaRef",
         onMouseMove: handleMouseMove,
         onMouseDown: handleMouseDown,
         onMouseLeave: handleMouseLeave,
       },
       h(
         "div",
-        { class: "player-progress-wrap", ref: progressWrapRef },
+        { class: "player-progress-wrap" },
         h(
           "div",
           { class: "player-progress", style: { height: "4px" } },
           // 当前播放进度条
           h("div", {
             class: "player-progress-schedule-wrap",
-            ref: scheduleWrapRef,
+            ref: "scheduleWrapRef",
           }),
           // 进度点容器
           h("div", { class: "player-progress-point-wrap" }),
@@ -584,7 +562,6 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
             "div",
             {
               class: "player-progress-thumb",
-              ref: thumbRef,
               style: { left: "0%" },
             },
             h(
@@ -599,7 +576,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           // 移动指示器
           h(
             "div",
-            { class: "player-progress-move-indicator", ref: moveIndicatorRef },
+            {
+              class: "player-progress-move-indicator",
+            },
             h("div", { class: "player-progress-move-indicator-down" }),
             h("div", { class: "player-progress-move-indicator-up" }),
           ),
@@ -608,7 +587,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
             "div",
             {
               class: "player-progress-popup",
-              ref: popupRef,
+              ref: "popupRef",
               style: { display: "none" },
             },
             h(
@@ -616,11 +595,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
               { class: "player-progress-preview" },
               h("img", {
                 class: "player-progress-preview-image",
-                ref: previewImageRef,
               }),
               h("div", {
                 class: "player-progress-preview-time",
-                ref: previewTimeRef,
+                ref: "previewTimeRef",
               }),
             ),
             h("div", { class: "player-progress-hotspot" }),
@@ -631,12 +609,11 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
             {
               class: "player-progress-pull-indicator",
               style: { transform: "translateX(0px)" },
-              ref: pullIndicatorRef,
             },
             h("span", { class: "common-svg-icon" }),
           ),
           // 光标
-          h("div", { class: "player-progress-cursor", ref: cursorRef }),
+          h("div", { class: "player-progress-cursor", ref: "cursorRef" }),
         ),
       ),
     );

@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -56,10 +56,10 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: Comp
   // ============================================
 
   /** 信息面板外层容器 DOM 引用 */
-  const infoContainerRef = ref<HTMLDivElement>();
+  const infoContainerRef = useTemplateRef<HTMLDivElement>(lifecycle, 'infoContainerRef');
 
   /** 信息面板内容区域 DOM 引用 */
-  const panelRef = ref<HTMLDivElement>();
+  const panelRef = useTemplateRef<HTMLDivElement>(lifecycle, 'panelRef');
 
   /**
    * 处理关闭面板操作
@@ -89,8 +89,8 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: Comp
    * @param data - 新的数据内容
    */
   const updateItem = (title: string, data: string): void => {
-    if (panelRef.current) {
-      const lines = panelRef.current.querySelectorAll('.info-line');
+    if (panelRef.value) {
+      const lines = panelRef.value.querySelectorAll('.info-line');
       lines.forEach((line) => {
         const titleEl = line.querySelector('.info-title');
         if (titleEl && titleEl.textContent === title) {
@@ -107,8 +107,8 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: Comp
    * 显示信息面板
    */
   const show = (): void => {
-    if (infoContainerRef.current) {
-      infoContainerRef.current.style.display = '';
+    if (infoContainerRef.value) {
+      infoContainerRef.value.style.display = '';
     }
   };
 
@@ -116,8 +116,8 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: Comp
    * 隐藏信息面板
    */
   const hide = (): void => {
-    if (infoContainerRef.current) {
-      infoContainerRef.current.style.display = 'none';
+    if (infoContainerRef.value) {
+      infoContainerRef.value.style.display = 'none';
     }
   };
 
@@ -142,7 +142,7 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: Comp
     'div',
     {
       class: 'player-info-container',
-      ref: infoContainerRef,
+      ref: 'infoContainerRef',
     },
     h(
       'div',
@@ -156,7 +156,7 @@ export const VideoInfo = defineComponent<VideoInfoProps>((props, lifecycle: Comp
     ),
     h(
       'div',
-      { class: 'player-info-panel', ref: panelRef },
+      { class: 'player-info-panel', ref: 'panelRef' },
       ...infoItems.map((item) =>
         h(
           'div',

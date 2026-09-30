@@ -7,6 +7,7 @@
 export { h, defineComponent, Fragment, when, each } from './h';
 export { mount, materialize, applyAttrs, destroy, invokeLifecycle, hydrate } from './mount';
 export { ref } from './ref';
+export { useTemplateRef } from './templateRef';
 export type { Ref, ExposedApi, ComponentLifecycle, TypedComponentLifecycle, TypedEmit, TypedOn, ComponentAttrs, VNodeInternalAttrs, EventCallbacks, ExposedComponent } from '@/types';
 
 // 状态管理、事件总线、钩子系统（基础类型和实现）
@@ -14,6 +15,10 @@ export { createStateManager, createTypedStateManager, useState } from './state';
 export { createEventBus, createTypedEventBus } from './eventBus';
 export { createHookSystem } from './hooks';
 export { createContext, useContext, provide, saveContext, restoreContext } from './context';
+
+// 响应式信号 + effect（基于 @preact/signals-core）
+export { signal, computed, effect, batch, untracked, onEffect } from './signals';
+export type { Signal, ReadonlySignal } from './signals';
 
 // 框架警告与错误处理
 export { warn, reportError, safeCall, safeAsyncCall, assertWarn, onFrameworkError, onFrameworkWarning } from './warning';

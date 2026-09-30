@@ -5,7 +5,7 @@
  * 支持弹幕详情提示弹窗 (DmTip) 和通用对话框
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import { isBrowser } from '@/utils';
 import type { ComponentLifecycle } from '@/types';
 
@@ -83,7 +83,7 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
   // ============================================
 
   /** 对话框外层容器 DOM 引用 */
-  const dialogWrapRef = ref<HTMLDivElement>();
+  const dialogWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'dialogWrapRef');
 
   /** 当前显示的弹幕提示弹窗 DOM 元素 */
   let dmTipElement: HTMLDivElement | null = null;
@@ -183,7 +183,7 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
   /** 组件挂载后对外暴露对话框容器和弹幕提示控制方法 */
   lifecycle.onMounted = (): void => {
     lifecycle.emit?.('dialogMounted', {
-      dialogWrap: dialogWrapRef.current,
+      dialogWrap: dialogWrapRef.value,
       showDmTip,
       hideDmTip,
     });
@@ -194,9 +194,9 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
     // 清理弹幕提示
     hideDmTip();
     // 清理对话框容器内所有子节点
-    if (dialogWrapRef.current) {
-      while (dialogWrapRef.current.firstChild) {
-        dialogWrapRef.current.removeChild(dialogWrapRef.current.firstChild);
+    if (dialogWrapRef.value) {
+      while (dialogWrapRef.value.firstChild) {
+        dialogWrapRef.value.removeChild(dialogWrapRef.value.firstChild);
       }
     }
   };
@@ -207,7 +207,7 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
 
   return h('div', {
     class: 'player-dialog-wrap',
-    ref: dialogWrapRef,
+    ref: 'dialogWrapRef',
     style: {
       display: props.visible ? '' : 'none',
     },

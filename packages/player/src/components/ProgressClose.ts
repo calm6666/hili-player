@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -27,10 +27,10 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecyc
   // ============================================
 
   /** SVG 根元素 DOM 引用 */
-  const svgRef = ref<SVGSVGElement>();
+  const svgRef = useTemplateRef<SVGSVGElement>(lifecycle, 'svgRef');
 
   /** 进度圆环 DOM 引用 */
-  const progressCircleRef = ref<SVGCircleElement>();
+  const progressCircleRef = useTemplateRef<SVGCircleElement>(lifecycle, 'progressCircleRef');
 
   /**
    * 处理点击事件
@@ -59,8 +59,8 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecyc
    * @param progress - 新的进度值 (0-1)
    */
   const setProgress = (progress: number): void => {
-    if (progressCircleRef.current) {
-      progressCircleRef.current.setAttribute('stroke-dashoffset', getStrokeDashoffset(progress).toString());
+    if (progressCircleRef.value) {
+      progressCircleRef.value.setAttribute('stroke-dashoffset', getStrokeDashoffset(progress).toString());
     }
   };
 
@@ -68,8 +68,8 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecyc
    * 显示组件
    */
   const show = (): void => {
-    if (svgRef.current) {
-      svgRef.current.style.display = '';
+    if (svgRef.value) {
+      svgRef.value.style.display = '';
     }
   };
 
@@ -77,8 +77,8 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecyc
    * 隐藏组件
    */
   const hide = (): void => {
-    if (svgRef.current) {
-      svgRef.current.style.display = 'none';
+    if (svgRef.value) {
+      svgRef.value.style.display = 'none';
     }
   };
 
@@ -106,7 +106,7 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecyc
       height: '150',
       viewBox: '0 0 150 150',
       class: 'close-warp',
-      ref: svgRef,
+      ref: 'svgRef',
       onClick: handleClick,
     },
     h('circle', {
@@ -125,7 +125,7 @@ export const ProgressClose = defineComponent<ProgressCloseProps>((props, lifecyc
       'stroke-width': '8',
       'stroke-dasharray': '377',
       'stroke-dashoffset': getStrokeDashoffset(props.progress ?? 0).toString(),
-      ref: progressCircleRef,
+      ref: 'progressCircleRef',
     }),
     h('path', {
       d: 'M 50,50 L 100,100 M 50,100 L 100,50',

@@ -5,6 +5,8 @@
  * 定义播放器所需的所有类型、接口和枚举
  */
 
+import type { Signal } from "@preact/signals-core";
+
 // ============================================
 // 虚拟节点相关类型
 // ============================================
@@ -92,12 +94,16 @@ export interface ComponentLifecycle extends Lifecycle {
   el?: Element;
   /** 内部回调函数映射表 */
   _callbacks?: ComponentCallbacks;
-  /** 父组件传入的 ref 引用，挂载后赋值为 _exposed */
-  _ref?: Ref<unknown>;
+  /** 父组件传入的 ref 引用，挂载后赋值为 _exposed（支持旧 {current} 对象或 Signal） */
+  _ref?: Ref<unknown> | Signal<unknown>;
   /** 组件通过 expose() 暴露的 API 对象 */
   _exposed?: unknown;
   /** useState 订阅的取消订阅函数数组，销毁时统一调用 */
   _stateCleanups?: Array<() => void>;
+  /** 响应式 effect 启动器列表（onEffect 收集），挂载时统一启动，返回的 dispose 收集到 _stateCleanups */
+  _effects?: Array<() => (() => void) | void>;
+  /** 模板引用注册表（useTemplateRef 收集）：字符串 key → 对应的 Signal，销毁时自动清空为 null */
+  _templateRefs?: Map<string, Signal<unknown>>;
   /** 注册回调函数 */
   on?: UntypedOn;
   /** 触发回调函数 */
@@ -120,6 +126,8 @@ export interface TypedComponentLifecycle<
   _ref?: Ref<unknown>;
   _exposed?: unknown;
   _stateCleanups?: Array<() => void>;
+  _effects?: Array<() => (() => void) | void>;
+  _templateRefs?: Map<string, Signal<unknown>>;
   on?: TypedOn<E>;
   emit?: TypedEmit<E>;
   expose?: (api: unknown) => void;
@@ -141,8 +149,8 @@ export interface Ref<T = Element> {
  * 支持 ref 绑定、class、style 及其他 HTML 属性
  */
 export interface VNodeAttrs extends Record<string, unknown> {
-  /** 元素引用，挂载后自动赋值为对应 DOM 元素 */
-  ref?: Ref<Element>;
+  /** 元素引用：旧 {current} 对象 / Signal / 字符串模板引用 / 回调，挂载后自动绑定 DOM */
+  ref?: Ref<Element> | Signal<Element | null> | string | RefValue;
   /** CSS 类名 */
   class?: string;
   /** 内联样式 */
@@ -208,7 +216,7 @@ export type EventCallbacks<E> = {
  * __events 为编译期事件映射标记，运行时不存在
  */
 export type VNodeInternalAttrs = {
-  ref?: Ref<unknown>;
+  ref?: Ref<unknown> | Signal<unknown> | string;
   __providers?: Array<{ contextId: symbol; value: unknown }>;
 };
 
@@ -566,6 +574,30 @@ export interface PlayerEvents extends Record<string, (...args: any[]) => void> {
   click: (event: MouseEvent) => void;
   /** 双击播放器 */
   dblclick: (event: MouseEvent) => void;
+
+  // ===== HTML5 媒体元素标准事件（与 video 元素一一对应） =====
+  /** 加载被中止（用户主动中断 / 切换源） */
+  abort: () => void;
+  /** 媒体时长变化 */
+  durationchange: (duration: number) => void;
+  /** 媒体被清空（重新加载前触发） */
+  emptied: () => void;
+  /** 首帧数据加载完成（readyState 达到 HAVE_CURRENT_DATA） */
+  loadeddata: () => void;
+  /** 媒体元数据加载完成（duration 可用） */
+  loadedmetadata: (duration: number) => void;
+  /** 开始加载媒体 */
+  loadstart: () => void;
+  /** 实际开始播放（缓冲结束后，与 play 区分） */
+  playing: () => void;
+  /** 跳转完成 */
+  seeked: (currentTime: number) => void;
+  /** 跳转开始 */
+  seeking: (currentTime: number) => void;
+  /** 数据停滞（网络/磁盘长时间无数据） */
+  stalled: () => void;
+  /** 浏览器主动暂停加载（非错误） */
+  suspend: () => void;
 }
 
 /**

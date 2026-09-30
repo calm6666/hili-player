@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import { isBrowser } from '@/utils';
 import type { VNode, ComponentLifecycle } from '@/types';
 
@@ -73,9 +73,7 @@ export const Context = defineComponent<ContextProps>((props, lifecycle: Componen
   // ============================================
 
   /** 右键菜单列表元素引用 */
-  const contextmenuRef = ref<HTMLUListElement>();
-  /** 右键菜单区域容器元素引用 */
-  const contextAreaRef = ref<HTMLDivElement>();
+  const contextmenuRef = useTemplateRef<HTMLUListElement>(lifecycle, 'contextmenuRef');
 
   // ============================================
   // 方法
@@ -88,10 +86,10 @@ export const Context = defineComponent<ContextProps>((props, lifecycle: Componen
    */
   const showMenu = (x: number, y: number): void => {
     if (!isBrowser()) return;
-    if (contextmenuRef.current) {
-      contextmenuRef.current.style.left = `${x}px`;
-      contextmenuRef.current.style.top = `${y}px`;
-      contextmenuRef.current.classList.add('player-active');
+    if (contextmenuRef.value) {
+      contextmenuRef.value.style.left = `${x}px`;
+      contextmenuRef.value.style.top = `${y}px`;
+      contextmenuRef.value.classList.add('player-active');
     }
     document.addEventListener('click', hideMenu);
   };
@@ -100,7 +98,7 @@ export const Context = defineComponent<ContextProps>((props, lifecycle: Componen
    * 隐藏右键菜单并触发关闭回调
    */
   const hideMenu = (): void => {
-    contextmenuRef.current?.classList.remove('player-active');
+    contextmenuRef.value?.classList.remove('player-active');
     props.onClose?.();
     lifecycle.emit?.('hideMenu');
     document.removeEventListener('click', hideMenu);
@@ -171,7 +169,7 @@ export const Context = defineComponent<ContextProps>((props, lifecycle: Componen
   // ============================================
   // 组件渲染
   // ============================================
-  return h('div', { class: 'player-context-area', ref: contextAreaRef },
-    h('ul', { class: 'player-contextmenu player-black', ref: contextmenuRef }, ...renderMenuItems())
+  return h('div', { class: 'player-context-area' },
+    h('ul', { class: 'player-contextmenu player-black', ref: 'contextmenuRef' }, ...renderMenuItems())
   );
 });

@@ -4,7 +4,8 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
+import type { Signal } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -56,32 +57,29 @@ export const DmSetting = defineComponent<DmSettingProps>((props, lifecycle: Comp
   // DOM 引用
   // ============================================
 
-  /** 弹幕设置面板根元素引用 */
-  const panelRef = ref<HTMLDivElement>();
-
   /** 显示区域滑块进度条元素引用 */
-  const areaBarRef = ref<HTMLDivElement>();
+  const areaBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'areaBarRef');
 
   /** 显示区域滑块拖拽手柄元素引用 */
-  const areaThumbRef = ref<HTMLDivElement>();
+  const areaThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'areaThumbRef');
 
   /** 不透明度滑块进度条元素引用 */
-  const opacityBarRef = ref<HTMLDivElement>();
+  const opacityBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'opacityBarRef');
 
   /** 不透明度滑块拖拽手柄元素引用 */
-  const opacityThumbRef = ref<HTMLDivElement>();
+  const opacityThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'opacityThumbRef');
 
   /** 弹幕字号滑块进度条元素引用 */
-  const fontsizeBarRef = ref<HTMLDivElement>();
+  const fontsizeBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'fontsizeBarRef');
 
   /** 弹幕字号滑块拖拽手柄元素引用 */
-  const fontsizeThumbRef = ref<HTMLDivElement>();
+  const fontsizeThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'fontsizeThumbRef');
 
   /** 弹幕速度滑块进度条元素引用 */
-  const speedBarRef = ref<HTMLDivElement>();
+  const speedBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'speedBarRef');
 
   /** 弹幕速度滑块拖拽手柄元素引用 */
-  const speedThumbRef = ref<HTMLDivElement>();
+  const speedThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'speedThumbRef');
 
   /**
    * 更新滑块 UI 显示
@@ -89,16 +87,16 @@ export const DmSetting = defineComponent<DmSettingProps>((props, lifecycle: Comp
    * @param thumbRef - 拖拽手柄元素引用
    * @param value - 当前滑块值 (0-100)
    */
-  const updateSliderUI = (barRef: { current: HTMLDivElement | null }, thumbRef: { current: HTMLDivElement | null }, value: number): void => {
+  const updateSliderUI = (barRef: Signal<HTMLDivElement | null>, thumbRef: Signal<HTMLDivElement | null>, value: number): void => {
     /** 进度比例 (0-1) */
     const progress = value / 100;
     /** 手柄偏移像素位置 */
     const position = (value / 100) * 268;
-    if (barRef.current) {
-      barRef.current.style.transform = `scaleX(${progress})`;
+    if (barRef.value) {
+      barRef.value.style.transform = `scaleX(${progress})`;
     }
-    if (thumbRef.current) {
-      thumbRef.current.style.transform = `translateX(${position}px)`;
+    if (thumbRef.value) {
+      thumbRef.value.style.transform = `translateX(${position}px)`;
     }
   };
 
@@ -146,7 +144,7 @@ export const DmSetting = defineComponent<DmSettingProps>((props, lifecycle: Comp
    * @param thumbRef - 拖拽手柄元素引用
    * @returns 滑块 VNode
    */
-  const renderSlider = (value: number, type: string, barRef: { current: HTMLDivElement | null }, thumbRef: { current: HTMLDivElement | null }): VNode => {
+  const renderSlider = (value: number, type: string, barRef: Signal<HTMLDivElement | null>, thumbRef: Signal<HTMLDivElement | null>): VNode => {
     /** 进度比例 (0-1) */
     const progress = value / 100;
     /** 手柄偏移像素位置 */
@@ -227,7 +225,6 @@ export const DmSetting = defineComponent<DmSettingProps>((props, lifecycle: Comp
     'div',
     {
       class: 'player-dm-setting-panel-wrap',
-      ref: panelRef,
       style: {
         display: props.visible ? '' : 'none',
       },

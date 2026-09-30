@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -33,16 +33,16 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
   // ============================================
 
   /** 自动消失提示的 DOM 容器引用 */
-  const autoToastRef = ref<HTMLDivElement>();
+  const autoToastRef = useTemplateRef<HTMLDivElement>(lifecycle, 'autoToastRef');
 
   /** 固定提示的 DOM 容器引用 */
-  const fixedToastRef = ref<HTMLDivElement>();
+  const fixedToastRef = useTemplateRef<HTMLDivElement>(lifecycle, 'fixedToastRef');
 
   /** 固定提示中的文本元素引用 */
-  const fixedTextRef = ref<HTMLSpanElement>();
+  const fixedTextRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'fixedTextRef');
 
   /** 固定提示中的时间元素引用 */
-  const fixedTimeRef = ref<HTMLSpanElement>();
+  const fixedTimeRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'fixedTimeRef');
 
   // ============================================
   // 事件处理函数
@@ -72,9 +72,9 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
    * @param duration - 显示持续时间（毫秒），默认 3000ms
    */
   const showAutoToast = (text: string, duration?: number): void => {
-    if (autoToastRef.current) {
-      autoToastRef.current.textContent = text;
-      autoToastRef.current.style.display = '';
+    if (autoToastRef.value) {
+      autoToastRef.value.textContent = text;
+      autoToastRef.value.style.display = '';
     }
     // 清除之前的定时器
     if (autoToastTimer !== null) {
@@ -90,8 +90,8 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
 
   /** 隐藏自动消失的短暂提示 */
   const hideAutoToast = (): void => {
-    if (autoToastRef.current) {
-      autoToastRef.current.style.display = 'none';
+    if (autoToastRef.value) {
+      autoToastRef.value.style.display = 'none';
     }
     if (autoToastTimer !== null) {
       clearTimeout(autoToastTimer);
@@ -105,21 +105,21 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
    * @param jumpTime - 跳转目标时间点字符串
    */
   const showFixedToast = (text: string, jumpTime: string): void => {
-    if (fixedTextRef.current) {
-      fixedTextRef.current.textContent = text;
+    if (fixedTextRef.value) {
+      fixedTextRef.value.textContent = text;
     }
-    if (fixedTimeRef.current) {
-      fixedTimeRef.current.textContent = jumpTime;
+    if (fixedTimeRef.value) {
+      fixedTimeRef.value.textContent = jumpTime;
     }
-    if (fixedToastRef.current) {
-      fixedToastRef.current.style.display = '';
+    if (fixedToastRef.value) {
+      fixedToastRef.value.style.display = '';
     }
   };
 
   /** 隐藏固定提示 */
   const hideFixedToast = (): void => {
-    if (fixedToastRef.current) {
-      fixedToastRef.current.style.display = 'none';
+    if (fixedToastRef.value) {
+      fixedToastRef.value.style.display = 'none';
     }
   };
 
@@ -157,17 +157,17 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
   return h(
     'div',
     { class: 'player-toast-wrap' },
-    h('div', { class: 'player-toast-auto', ref: autoToastRef }),
+    h('div', { class: 'player-toast-auto', ref: 'autoToastRef' }),
     h(
       'div',
-      { class: 'player-toast-fixed', ref: fixedToastRef },
+      { class: 'player-toast-fixed', ref: 'fixedToastRef' },
       h(
         'div',
         { class: 'player-toast-close', onClick: handleClose },
         h('span', { class: 'common-svg-icon' }, '×')
       ),
-      h('span', { class: 'player-toast-text', ref: fixedTextRef }, props.text ?? '记忆你上次看到'),
-      h('span', { class: 'player-toast-time', ref: fixedTimeRef }, props.jumpTime ?? '00:00'),
+      h('span', { class: 'player-toast-text', ref: 'fixedTextRef' }, props.text ?? '记忆你上次看到'),
+      h('span', { class: 'player-toast-time', ref: 'fixedTimeRef' }, props.jumpTime ?? '00:00'),
       h('span', { class: 'player-toast-jump', onClick: handleJump }, '跳转')
     )
   );

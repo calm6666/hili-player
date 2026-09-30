@@ -6,7 +6,7 @@
  * 当前倍率高亮、菜单悬停动画回调
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { VNode } from '@/types';
 
 /**
@@ -35,14 +35,11 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   // DOM 引用
   // ============================================
 
-  /** 倍速按钮根元素引用 */
-  const backrateBtnRef = ref<HTMLDivElement>();
-
   /** 倍速显示文本元素引用 */
-  const backrateResultTextRef = ref<HTMLDivElement>();
+  const backrateResultTextRef = useTemplateRef<HTMLDivElement>(lifecycle, 'backrateResultTextRef');
 
   /** 倍速下拉菜单列表元素引用 */
-  const backrateMenuRef = ref<HTMLUListElement>();
+  const backrateMenuRef = useTemplateRef<HTMLUListElement>(lifecycle, 'backrateMenuRef');
 
   // ============================================
   // 状态
@@ -93,7 +90,6 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
     return h('li', {
       class: ['player-ctrl-playbackrate-menu-item', isActive ? 'active' : ''].filter(Boolean).join(' '),
       'data-value': rateValue.toString(),
-      ref: ref<HTMLLIElement>(),
       onClick: (e: MouseEvent) => {
         /** 点击的目标元素 */
         const target = e.currentTarget;
@@ -103,8 +99,8 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
           target.classList.add('active');
         }
         // 更新倍速显示文本
-        if (backrateResultTextRef.current) {
-          backrateResultTextRef.current.innerText = rateValue === 1 ? '倍速' : formatRateLabel(rateValue);
+        if (backrateResultTextRef.value) {
+          backrateResultTextRef.value.innerText = rateValue === 1 ? '倍速' : formatRateLabel(rateValue);
         }
         lifecycle.emit?.('rateChange', rateValue);
       },
@@ -120,8 +116,8 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
    */
   lifecycle.onMounted = (): void => {
     // 收集菜单项 DOM 元素
-    if (backrateMenuRef.current) {
-      const items = backrateMenuRef.current.querySelectorAll('.player-ctrl-playbackrate-menu-item');
+    if (backrateMenuRef.value) {
+      const items = backrateMenuRef.value.querySelectorAll('.player-ctrl-playbackrate-menu-item');
       menuItems.length = 0;
       items.forEach((item) => {
         if (item instanceof HTMLLIElement) {
@@ -131,8 +127,8 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
     }
 
     // 设置初始倍速显示
-    if (backrateResultTextRef.current) {
-      backrateResultTextRef.current.innerText = rate === 1 ? '倍速' : formatRateLabel(rate);
+    if (backrateResultTextRef.value) {
+      backrateResultTextRef.value.innerText = rate === 1 ? '倍速' : formatRateLabel(rate);
     }
 
     lifecycle.emit?.('playbackRateMenuMounted');
@@ -145,15 +141,14 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
     class: 'player-ctrl-btn player-ctrl-playbackrate',
     role: 'button',
     'aria-label': '倍速',
-    ref: backrateBtnRef,
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
   },
     // 当前倍速显示
-    h('div', { class: 'player-ctrl-playbackrate-result', ref: backrateResultTextRef }, '倍速'),
+    h('div', { class: 'player-ctrl-playbackrate-result', ref: 'backrateResultTextRef' }, '倍速'),
     // 倍速下拉菜单
     h('div', { class: 'player-ctrl-playbackrate-menu-wrap' },
-      h('ul', { class: 'player-ctrl-playbackrate-menu', ref: backrateMenuRef },
+      h('ul', { class: 'player-ctrl-playbackrate-menu', ref: 'backrateMenuRef' },
         ...rates.map((r) => renderRateItem(r))
       )
     )

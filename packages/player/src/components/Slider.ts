@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { VNode, ComponentLifecycle } from '@/types';
 import { isBrowser } from '@/utils';
 
@@ -58,13 +58,13 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
   let isDragging = false;
 
   /** 进度条容器元素引用 */
-  const progressRef = ref<HTMLDivElement>();
+  const progressRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressRef');
 
   /** 进度条元素引用 */
-  const progressBarRef = ref<HTMLDivElement>();
+  const progressBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressBarRef');
 
   /** 进度值显示元素引用 */
-  const progressValRef = ref<HTMLDivElement>();
+  const progressValRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressValRef');
 
   /**
    * 获取显示值，优先从标记点中查找名称，否则返回百分比字符串
@@ -83,11 +83,11 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
    * 更新进度条宽度和显示值
    */
   const updateProgressBar = (): void => {
-    if (progressBarRef.current) {
-      progressBarRef.current.style.width = `${Math.floor(currentValue)}%`;
+    if (progressBarRef.value) {
+      progressBarRef.value.style.width = `${Math.floor(currentValue)}%`;
     }
-    if (progressValRef.current) {
-      progressValRef.current.innerHTML = getDisplayValue();
+    if (progressValRef.value) {
+      progressValRef.value.innerHTML = getDisplayValue();
     }
   };
 
@@ -95,12 +95,12 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
    * 根据鼠标位置计算滑块值
    */
   const calculateValueFromPosition = (clientX: number): number => {
-    if (!progressRef.current) {
+    if (!progressRef.value) {
       return currentValue;
     }
 
     /** 进度条容器的边界矩形 */
-    const rect = progressRef.current.getBoundingClientRect();
+    const rect = progressRef.value.getBoundingClientRect();
     /** 鼠标位置对应的百分比 */
     const percentage = Math.min(
       Math.max(0, ((clientX - rect.left) / rect.width) * 100),
@@ -147,7 +147,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
    * 处理鼠标移动，实时更新滑块位置
    */
   const handleMouseMove = (event: MouseEvent): void => {
-    if (!isDragging || !progressRef.current) {
+    if (!isDragging || !progressRef.value) {
       return;
     }
 
@@ -155,7 +155,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
       currentValue = calculateValueFromPosition(event.clientX);
     } else {
       /** 进度条容器的边界矩形 */
-      const rect = progressRef.current.getBoundingClientRect();
+      const rect = progressRef.value.getBoundingClientRect();
       /** 鼠标移动的水平偏移量 */
       const deltaX = event.clientX - startX;
       /** 偏移量对应的百分比变化 */
@@ -255,14 +255,14 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
         'div',
         {
           class: 'ui-progress-wrap',
-          ref: progressRef,
+          ref: 'progressRef',
           onClick: handleProgressClick,
         },
         h(
           'div',
           {
             class: 'ui-progress-bar',
-            ref: progressBarRef,
+            ref: 'progressBarRef',
           },
           h('span', {
             class: 'ui-progress-dot',
@@ -276,7 +276,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
         {
           class: 'ui-progress-val',
           style: { width: '60px' },
-          ref: progressValRef,
+          ref: 'progressValRef',
         },
         getDisplayValue()
       )

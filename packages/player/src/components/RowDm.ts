@@ -5,7 +5,7 @@
  * 弹幕逻辑使用 src/utils/danmaku 中的 DanmakuManager
  */
 
-import { defineComponent, h, ref } from '@/core';
+import { defineComponent, h, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 // ============================================
@@ -113,16 +113,16 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
   // ============================================
 
   /** 弹幕外层容器 DOM 引用，控制整体暂停状态 */
-  const playerRowDmWrapRef = ref<HTMLDivElement>();
+  const playerRowDmWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerRowDmWrapRef');
 
   /** 高级弹幕容器 DOM 引用，用于放置特殊效果弹幕 */
-  const playerAdvDmWrapRef = ref<HTMLDivElement>();
+  const playerAdvDmWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerAdvDmWrapRef');
 
   /** 基础弹幕容器 DOM 引用，用于放置普通滚动和固定弹幕 */
-  const playerBasDmWrapRef = ref<HTMLDivElement>();
+  const playerBasDmWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerBasDmWrapRef');
 
   /** 旋转弹幕容器 DOM 引用，用于放置旋转特效弹幕 */
-  const danmakuXRotateRef = ref<HTMLDivElement>();
+  const danmakuXRotateRef = useTemplateRef<HTMLDivElement>(lifecycle, 'danmakuXRotateRef');
 
   // ============================================
   // 弹幕状态
@@ -218,7 +218,7 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
     element.classList.add('danmaku-x-roll');
 
     /** 弹幕容器的宽度（像素） */
-    const containerWidth = playerRowDmWrapRef.current?.offsetWidth ?? 800;
+    const containerWidth = playerRowDmWrapRef.value?.offsetWidth ?? 800;
     /** 弹幕元素自身的宽度（像素） */
     const elementWidth = element.offsetWidth || 200;
     /** 弹幕起始偏移量，从容器右侧开始 */
@@ -300,7 +300,7 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
    * @param currentTime - 当前播放时间点（秒）
    */
   const createDanmaku = (currentTime: number): void => {
-    if (!playerBasDmWrapRef.current) return;
+    if (!playerBasDmWrapRef.value) return;
 
     /** 当前时间范围内需要显示的弹幕列表 */
     const danmakuList = getTimePointDm(currentTime);
@@ -310,7 +310,7 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
       const element = createDanmuElement(danmaku);
 
       // 先将元素添加到容器以获取正确的 offsetWidth
-      playerBasDmWrapRef.current?.appendChild(element);
+      playerBasDmWrapRef.value?.appendChild(element);
 
       /** 弹幕速度标识键名，默认 moderate */
       const speedKey = danmaku.speed ?? 'moderate';
@@ -367,11 +367,11 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
    * @param playState - 播放状态，'playing' 恢复动画，'paused' 暂停动画
    */
   const playPause = (playState: 'playing' | 'paused'): void => {
-    if (playerRowDmWrapRef.current) {
+    if (playerRowDmWrapRef.value) {
       if (playState === 'playing') {
-        playerRowDmWrapRef.current.classList.remove('danmaku-x-paused');
+        playerRowDmWrapRef.value.classList.remove('danmaku-x-paused');
       } else if (playState === 'paused') {
-        playerRowDmWrapRef.current.classList.add('danmaku-x-paused');
+        playerRowDmWrapRef.value.classList.add('danmaku-x-paused');
       }
     }
   };
@@ -383,10 +383,10 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
   /** 组件挂载后对外暴露弹幕容器引用和控制方法 */
   lifecycle.onMounted = (): void => {
     lifecycle.emit?.('danmakuLayerMounted', {
-      playerRowDmWrap: playerRowDmWrapRef.current,
-      playerAdvDmWrap: playerAdvDmWrapRef.current,
-      playerBasDmWrap: playerBasDmWrapRef.current,
-      danmakuXRotate: danmakuXRotateRef.current,
+      playerRowDmWrap: playerRowDmWrapRef.value,
+      playerAdvDmWrap: playerAdvDmWrapRef.value,
+      playerBasDmWrap: playerBasDmWrapRef.value,
+      danmakuXRotate: danmakuXRotateRef.value,
       playPause,
       createDanmaku,
       showDmTip,
@@ -397,21 +397,21 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
   /** 组件销毁前清理所有弹幕容器内的子节点 */
   lifecycle.onBeforeDestroy = (): void => {
     // 清理基础弹幕容器内所有子节点
-    if (playerBasDmWrapRef.current) {
-      while (playerBasDmWrapRef.current.firstChild) {
-        playerBasDmWrapRef.current.removeChild(playerBasDmWrapRef.current.firstChild);
+    if (playerBasDmWrapRef.value) {
+      while (playerBasDmWrapRef.value.firstChild) {
+        playerBasDmWrapRef.value.removeChild(playerBasDmWrapRef.value.firstChild);
       }
     }
     // 清理高级弹幕容器内所有子节点
-    if (playerAdvDmWrapRef.current) {
-      while (playerAdvDmWrapRef.current.firstChild) {
-        playerAdvDmWrapRef.current.removeChild(playerAdvDmWrapRef.current.firstChild);
+    if (playerAdvDmWrapRef.value) {
+      while (playerAdvDmWrapRef.value.firstChild) {
+        playerAdvDmWrapRef.value.removeChild(playerAdvDmWrapRef.value.firstChild);
       }
     }
     // 清理旋转弹幕容器内所有子节点
-    if (danmakuXRotateRef.current) {
-      while (danmakuXRotateRef.current.firstChild) {
-        danmakuXRotateRef.current.removeChild(danmakuXRotateRef.current.firstChild);
+    if (danmakuXRotateRef.value) {
+      while (danmakuXRotateRef.value.firstChild) {
+        danmakuXRotateRef.value.removeChild(danmakuXRotateRef.value.firstChild);
       }
     }
   };
@@ -426,17 +426,17 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
    */
   return h('div', {
     class: 'player-row-dm-wrap danmaku-x-paused',
-    ref: playerRowDmWrapRef,
+    ref: 'playerRowDmWrapRef',
   },
     // 高级弹幕容器
     h('div', {
       class: 'player-adv-dm-wrap',
-      ref: playerAdvDmWrapRef,
+      ref: 'playerAdvDmWrapRef',
     }),
     // 基础弹幕容器
     h('div', {
       class: 'player-bas-dm-wrap',
-      ref: playerBasDmWrapRef,
+      ref: 'playerBasDmWrapRef',
     },
       h('div', {
         class: 'bas-danmaku bas-danmaku-pause',
@@ -446,7 +446,7 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
     // 旋转弹幕容器
     h('div', {
       class: 'danmaku-x-dm-rotate',
-      ref: danmakuXRotateRef,
+      ref: 'danmakuXRotateRef',
     })
   );
 });

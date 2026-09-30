@@ -38,7 +38,7 @@ import {
   Fragment,
   when,
   each,
-  ref,
+  useTemplateRef,
   createContext,
   useContext,
   provide,
@@ -46,7 +46,6 @@ import {
   createTypedEventBus,
   useState,
 } from "@/core";
-import type { Ref } from "@/core";
 import type { PlayerConfig } from "@/types";
 import { VideoPlayer } from "@/hili-player/player";
 
@@ -183,7 +182,7 @@ interface CounterDisplayProps {
 
 const CounterDisplay = defineComponent<CounterDisplayProps>(
   (props, lifecycle) => {
-    const counterRef: Ref<HTMLSpanElement> = ref<HTMLSpanElement>();
+    const counterRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'counterRef');
 
     lifecycle.onBeforeMount = () => {
       appEventBus.emit("ACTION_LOG", {
@@ -199,17 +198,17 @@ const CounterDisplay = defineComponent<CounterDisplayProps>(
       });
       appEventBus.emit("HYDRATION_CHECK", {
         id: "CounterDisplay:ref",
-        pass: !!counterRef.current,
+        pass: !!counterRef.value,
         detail: "ref.current 应指向 span.counter-value",
       });
-      lifecycle.expose?.(counterRef.current);
+      lifecycle.expose?.(counterRef.value);
     };
 
     return h(
       "span",
       {
         class: "counter-value",
-        ref: counterRef,
+        ref: 'counterRef',
       },
       String(props.count),
     );
@@ -230,7 +229,7 @@ const CounterPanel = defineComponent<
   Record<string, unknown>,
   CounterPanelEvents
 >((_props, lifecycle) => {
-  const counterRef: Ref<HTMLElement> = ref();
+  const counterRef = useTemplateRef<HTMLElement>(lifecycle, 'counterRef');
 
   lifecycle.onBeforeMount = () => {
     appEventBus.emit("ACTION_LOG", {
@@ -250,15 +249,15 @@ const CounterPanel = defineComponent<
     });
     appEventBus.emit("HYDRATION_CHECK", {
       id: "CounterPanel:ref(子组件DOM)",
-      pass: !!counterRef.current,
+      pass: !!counterRef.value,
     });
 
     useState(
       appState,
       "app.count",
       (newVal: number) => {
-        if (counterRef.current) {
-          counterRef.current.textContent = String(newVal);
+        if (counterRef.value) {
+          counterRef.value.textContent = String(newVal);
         }
       },
       lifecycle,
@@ -308,7 +307,7 @@ const CounterPanel = defineComponent<
         h(IconMinus, { size: 14 }),
         "减少",
       ),
-      h(CounterDisplay, { count, ref: counterRef }),
+      h(CounterDisplay, { count, ref: 'counterRef' }),
       h(
         "button",
         {
@@ -399,9 +398,9 @@ const ThemeSwitcher = defineComponent<
   Record<string, unknown>,
   ThemeSwitcherEvents
 >((_props, lifecycle) => {
-  const themeBtnRef: Ref<HTMLElement> = ref();
-  const themeIconRef: Ref<HTMLElement> = ref();
-  const themeLabelRef: Ref<HTMLElement> = ref();
+  const themeBtnRef = useTemplateRef<HTMLElement>(lifecycle, 'themeBtnRef');
+  const themeIconRef = useTemplateRef<HTMLElement>(lifecycle, 'themeIconRef');
+  const themeLabelRef = useTemplateRef<HTMLElement>(lifecycle, 'themeLabelRef');
 
   lifecycle.onMounted = () => {
     appEventBus.emit("ACTION_LOG", {
@@ -414,18 +413,18 @@ const ThemeSwitcher = defineComponent<
       "app.theme",
       (newTheme: string) => {
         const isDark = newTheme === "dark";
-        if (themeLabelRef.current) {
-          themeLabelRef.current.textContent = isDark ? "切换到亮色" : "切换到暗色";
+        if (themeLabelRef.value) {
+          themeLabelRef.value.textContent = isDark ? "切换到亮色" : "切换到暗色";
         }
         // 通过 data 属性标记当前主题图标，初次的图标由 SSR 渲染决定
-        if (themeIconRef.current) {
-          themeIconRef.current.setAttribute(
+        if (themeIconRef.value) {
+          themeIconRef.value.setAttribute(
             "data-theme-icon",
             isDark ? "moon" : "sun",
           );
         }
-        if (themeBtnRef.current) {
-          themeBtnRef.current.style.background = isDark
+        if (themeBtnRef.value) {
+          themeBtnRef.value.style.background = isDark
             ? "rgba(255,255,255,0.06)"
             : "rgba(255,255,255,0.18)";
         }
@@ -455,17 +454,17 @@ const ThemeSwitcher = defineComponent<
       h(
         "button",
         {
-          ref: themeBtnRef,
+          ref: 'themeBtnRef',
           onClick: handleToggle,
           class: "btn",
           "aria-label": "切换主题",
         },
         h(
           "span",
-          { ref: themeIconRef, class: "theme-icon-wrap" },
+          { ref: 'themeIconRef', class: "theme-icon-wrap" },
           isDark ? h(IconMoon, { size: 14 }) : h(IconSun, { size: 14 }),
         ),
-        h("span", { ref: themeLabelRef }, isDark ? "切换到亮色" : "切换到暗色"),
+        h("span", { ref: 'themeLabelRef' }, isDark ? "切换到亮色" : "切换到暗色"),
       ),
     ),
   );
@@ -568,13 +567,13 @@ const ChildWithExpose = defineComponent<
   ChildWithExposeProps,
   ChildWithExposeEvents
 >((props, lifecycle) => {
-  const inputRef: Ref<HTMLInputElement> = ref();
+  const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
   let value = props.initialValue ?? "";
 
   lifecycle.onMounted = () => {
     appEventBus.emit("HYDRATION_CHECK", {
       id: "ChildWithExpose:ref(input)",
-      pass: !!inputRef.current,
+      pass: !!inputRef.value,
     });
 
     // expose API：父组件可以通过 ref.current 调用子组件方法
@@ -582,9 +581,9 @@ const ChildWithExpose = defineComponent<
       getValue: () => value,
       setValue: (v: string) => {
         value = v;
-        if (inputRef.current) inputRef.current.value = v;
+        if (inputRef.value) inputRef.value.value = v;
       },
-      focus: () => inputRef.current?.focus(),
+      focus: () => inputRef.value?.focus(),
     });
   };
 
@@ -599,7 +598,7 @@ const ChildWithExpose = defineComponent<
       class: "input-row",
     },
     h("input", {
-      ref: inputRef,
+      ref: 'inputRef',
       type: "text",
       value: props.initialValue ?? "",
       onInput: handleInput,
@@ -613,10 +612,7 @@ const ChildWithExpose = defineComponent<
 // 子组件8：事件日志（ref 回调 + 事件总线）
 // ============================================
 
-const EventLog = defineComponent(() => {
-  const logRef: Ref<HTMLDivElement> = ref();
-  const countRef: Ref<HTMLSpanElement> = ref();
-
+const EventLog = defineComponent((_props, _lifecycle) => {
   return h(
     "div",
     { class: "panel event-log" },
@@ -632,14 +628,12 @@ const EventLog = defineComponent(() => {
       h(
         "span",
         {
-          ref: countRef,
           class: "log-count",
         },
         "0 条",
       ),
     ),
     h("div", {
-      ref: logRef,
       class: "log-content",
     }),
   );
@@ -720,21 +714,21 @@ interface SearchBoxEvents {
 
 const SearchBox = defineComponent<Record<string, unknown>, SearchBoxEvents>(
   (_props, lifecycle) => {
-    const inputRef: Ref<HTMLInputElement> = ref();
-    const hintRef: Ref<HTMLSpanElement> = ref();
+    const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
+    const hintRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'hintRef');
 
     lifecycle.onMounted = () => {
       appEventBus.emit("HYDRATION_CHECK", {
         id: "SearchBox:ref(input)",
-        pass: !!inputRef.current,
+        pass: !!inputRef.value,
       });
 
       useState(
         appState,
         "app.searchQuery",
         (query: string) => {
-          if (hintRef.current) {
-            hintRef.current.textContent = query
+          if (hintRef.value) {
+            hintRef.value.textContent = query
               ? "当前查询: " + query
               : "等待输入...";
           }
@@ -775,7 +769,7 @@ const SearchBox = defineComponent<Record<string, unknown>, SearchBoxEvents>(
             class: "search-icon",
           }, h(IconSearch, { size: 14 })),
           h("input", {
-            ref: inputRef,
+            ref: 'inputRef',
             type: "text",
             placeholder: "输入内容，回车确认...",
             onInput: handleInput,
@@ -786,7 +780,7 @@ const SearchBox = defineComponent<Record<string, unknown>, SearchBoxEvents>(
         h(
           "span",
           {
-            ref: hintRef,
+            ref: 'hintRef',
             class: "search-hint",
           },
           "等待输入...",
@@ -814,31 +808,31 @@ interface TodoAppEvents {
 
 const TodoApp = defineComponent<Record<string, unknown>, TodoAppEvents>(
   (_props, lifecycle) => {
-    const inputRef: Ref<HTMLInputElement> = ref();
-    const listRef: Ref<HTMLUListElement> = ref();
+    const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
+    const listRef = useTemplateRef<HTMLUListElement>(lifecycle, 'listRef');
     let nextId = 1;
     let todos: TodoItem[] = [
       { id: 0, text: "学习 h() 函数", done: true },
     ];
 
     const renderList = () => {
-      if (!listRef.current) return;
+      if (!listRef.value) return;
       // 简化：直接通过事件日志反馈，DOM 操作由用户点击触发
     };
 
     lifecycle.onMounted = () => {
       appEventBus.emit("HYDRATION_CHECK", {
         id: "TodoApp:ref(input+list)",
-        pass: !!inputRef.current && !!listRef.current,
+        pass: !!inputRef.value && !!listRef.value,
       });
       renderList();
     };
 
     const handleAdd = () => {
-      if (!inputRef.current || !inputRef.current.value.trim()) return;
-      const text = inputRef.current.value.trim();
+      if (!inputRef.value || !inputRef.value.value.trim()) return;
+      const text = inputRef.value.value.trim();
       todos = [...todos, { id: nextId++, text, done: false }];
-      inputRef.current.value = "";
+      inputRef.value.value = "";
       appEventBus.emit("ACTION_LOG", {
         action: "TodoApp: 添加 - " + text,
         timestamp: Date.now(),
@@ -849,11 +843,11 @@ const TodoApp = defineComponent<Record<string, unknown>, TodoAppEvents>(
     };
 
     const appendTodoItem = (text: string) => {
-      if (!listRef.current) return;
+      if (!listRef.value) return;
       const li = document.createElement("li");
       li.className = "todo-item";
       li.textContent = text;
-      listRef.current.appendChild(li);
+      listRef.value.appendChild(li);
     };
 
     const handleInputKeyDown = (e: KeyboardEvent) => {
@@ -868,7 +862,7 @@ const TodoApp = defineComponent<Record<string, unknown>, TodoAppEvents>(
         "div",
         { class: "todo-add-row" },
         h("input", {
-          ref: inputRef,
+          ref: 'inputRef',
           type: "text",
           placeholder: "输入待办事项，回车添加...",
           onKeyDown: handleInputKeyDown,
@@ -884,7 +878,7 @@ const TodoApp = defineComponent<Record<string, unknown>, TodoAppEvents>(
       h(
         "ul",
         {
-          ref: listRef,
+          ref: 'listRef',
           class: "todo-list",
         },
         ...each(todos, (todo) =>
@@ -969,12 +963,12 @@ const FragmentDemo = defineComponent(() => {
 // ============================================
 
 const Tabs = defineComponent((_props, lifecycle) => {
-  const contentRef: Ref<HTMLDivElement> = ref();
+  const contentRef = useTemplateRef<HTMLDivElement>(lifecycle, 'contentRef');
 
   lifecycle.onMounted = () => {
     appEventBus.emit("HYDRATION_CHECK", {
       id: "Tabs:ref(content)",
-      pass: !!contentRef.current,
+      pass: !!contentRef.value,
     });
   };
 
@@ -1012,15 +1006,15 @@ const Tabs = defineComponent((_props, lifecycle) => {
     appState.set("app.activeTab", tabId);
     appEventBus.emit("TAB_CHANGE", { tab: tabId });
     // 通过 ref 手动更新内容
-    if (contentRef.current) {
-      contentRef.current.innerHTML = "";
+    if (contentRef.value) {
+      contentRef.value.innerHTML = "";
       // 简化：直接通过 textContent 显示
       const text: string = {
         home: "首页内容：欢迎来到 Hili Framework",
         profile: "个人信息：HiliDev - 前端开发者",
         settings: "设置：主题切换、语言选择等",
       }[tabId] ?? "";
-      contentRef.current.textContent = text;
+      contentRef.value.textContent = text;
     }
   };
 
@@ -1051,7 +1045,7 @@ const Tabs = defineComponent((_props, lifecycle) => {
     h(
       "div",
       {
-        ref: contentRef,
+        ref: 'contentRef',
         class: "tab-content",
       },
       contents[activeTab]?.() ?? contents.home(),
@@ -1063,11 +1057,7 @@ const Tabs = defineComponent((_props, lifecycle) => {
 // 子组件16：水合检测面板（SSR 占位，水合后填充）
 // ============================================
 
-const HydrationPanel = defineComponent(() => {
-  const listRef: Ref<HTMLDivElement> = ref();
-  const summaryRef: Ref<HTMLSpanElement> = ref();
-  const ssrTimeRef: Ref<HTMLSpanElement> = ref();
-
+const HydrationPanel = defineComponent((_props, _lifecycle) => {
   return h(
     "div",
     {
@@ -1085,7 +1075,6 @@ const HydrationPanel = defineComponent(() => {
       h(
         "span",
         {
-          ref: summaryRef,
           class: "hydration-summary",
         },
         "等待水合...",
@@ -1102,13 +1091,12 @@ const HydrationPanel = defineComponent(() => {
         "SSR 渲染耗时: ",
         h(
           "span",
-          { ref: ssrTimeRef, class: "hydration-time" },
+          { class: "hydration-time" },
           "—",
         ),
       ),
     ),
     h("div", {
-      ref: listRef,
       class: "hydration-list",
     }),
   );
@@ -1251,7 +1239,7 @@ const App = defineComponent((_props, lifecycle) => {
     { id: 5, text: "完成 Hydrate 水合", done: false },
   ];
 
-  const appRootRef: Ref<HTMLElement> = ref();
+  const appRootRef = useTemplateRef<HTMLElement>(lifecycle, 'appRootRef');
 
   /**
    * 生成主题 CSS 自定义属性
@@ -1280,7 +1268,7 @@ const App = defineComponent((_props, lifecycle) => {
     });
     appEventBus.emit("HYDRATION_CHECK", {
       id: "App:ref(app-root)",
-      pass: !!appRootRef.current,
+      pass: !!appRootRef.value,
     });
 
     useState(
@@ -1289,9 +1277,9 @@ const App = defineComponent((_props, lifecycle) => {
       (newTheme: string) => {
         const isDark = newTheme === "dark";
         const vars = getThemeVars(isDark);
-        if (appRootRef.current) {
+        if (appRootRef.value) {
           for (const [key, value] of Object.entries(vars)) {
-            appRootRef.current.style.setProperty(key, value);
+            appRootRef.value.style.setProperty(key, value);
           }
         }
       },
@@ -1306,7 +1294,7 @@ const App = defineComponent((_props, lifecycle) => {
     "div",
     {
       class: "app-root",
-      ref: appRootRef,
+      ref: 'appRootRef',
       style: themeVars,
     },
     // ===== 顶部标题 =====

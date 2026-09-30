@@ -14,15 +14,17 @@
 import {
   h,
   defineComponent,
-  ref,
   createTypedStateManager,
-  useState,
-} from '../core/index.ts';
-import type { Ref } from '../core/index.ts';
+  useTemplateRef,
+  signal,
+  computed,
+  effect,
+  onEffect,
+} from "../core/index.ts";
+import type { Signal } from "../core/index.ts";
 
-// ★ 从构建产物导入播放器，验证打包是否正确
-// 构建产物由 packages/player/vite.config.ts 控制，包含 hiliCompile 编译优化
-import { VideoPlayer } from '../packages/player/dist/index.es.js';
+// ★ 从构建产物导入播放器（monorepo 链接到 packages/player/dist）
+import { VideoPlayer } from "@hili-player/player";
 
 // ============================================
 // 全局状态：简单的计数器，用于验证 useState + hydrate
@@ -30,7 +32,7 @@ import { VideoPlayer } from '../packages/player/dist/index.es.js';
 
 /** 状态路径 → 类型映射 */
 interface AppState {
-  'app.count': number;
+  "app.count": number;
 }
 
 /** 创建类型安全的状态管理器，初始值 count = 0 */
@@ -49,7 +51,7 @@ const appState = createTypedStateManager<AppState>({ app: { count: 0 } });
 const PlayerSection = defineComponent(() => {
   // 播放器配置：MP4 视频源，静音自动播放
   const cfg = {
-    src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    src: "http://127.0.0.1:9000/hfs/2477ae7a06076094f88e58417a9211797648bfde5f6244713b12404de1372440.mp4",
     autoplay: false,
     muted: true,
     volume: 0.8,
@@ -60,103 +62,276 @@ const PlayerSection = defineComponent(() => {
   // 创建播放器实例（SSR 安全，不访问浏览器 API）
   const player = new VideoPlayer(cfg as never);
 
-  return h('div', { class: 'panel' },
+  return h(
+    "div",
+    { class: "panel" },
     // 面板标题
-    h('h2', { class: 'panel-title' }, 'VideoPlayer · 构建产物验证'),
+    h("h2", { class: "panel-title" }, "VideoPlayer · 构建产物验证"),
 
     // 播放器容器：嵌入 player.render() 返回的 VNode
     // SSR 输出完整 HTML，水合时 PlayerDocker.onMounted 自动绑定事件
-    h('div', {
-      id: 'player-wrapper',
-      class: 'player-wrapper',
-    }, player.render()),
+    h(
+      "div",
+      {
+        id: "player-wrapper",
+        class: "player-wrapper",
+      },
+      player.render(),
+    ),
 
     // 操作按钮行
-    h('div', {
-      style: { display: 'flex', gap: '8px', marginTop: '10px' },
-    },
-      h('button', { id: 'btn-switch', class: 'btn' }, '切换视频源'),
-      h('button', { id: 'btn-destroy', class: 'btn' }, '销毁播放器'),
+    h(
+      "div",
+      {
+        style: { display: "flex", gap: "8px", marginTop: "10px" },
+      },
+      h("button", { id: "btn-switch", class: "btn" }, "切换视频源"),
+      h("button", { id: "btn-destroy", class: "btn" }, "销毁播放器"),
     ),
   );
 });
 
 // ============================================
-// 组件 2：计数器（验证 useState + hydrate）
+// 组件 2：计数器（useTemplateRef + state.signal + onEffect）
 // ============================================
 //
-// 框架无响应式：状态变化不会自动更新 DOM。
-// useState 订阅状态路径，变化时在 updater 回调中手动操作 DOM。
+// 新框架统一为 useTemplateRef + Signal：
+// - useTemplateRef(lifecycle, 'count') 返回 Signal，字符串 key 绑定 DOM，销毁自动清空
+// - state.signal('app.count') 把状态路径变成 Signal，与 signal/effect 同引擎
+// - onEffect 挂载后启动、依赖变化自动重跑、销毁自动 dispose
 
 const Counter = defineComponent((_props, lifecycle) => {
-  // 用 ref 获取 DOM 元素引用（SSR 时 ref.current = null，水合后指向真实 DOM）
-  const countEl: Ref<HTMLElement> = ref();
-  const getCount = (): number => appState.get('app.count') ?? 0;
+  // 用字符串 key 获取 DOM 元素引用（SSR 时 Signal = null，水合后指向真实 DOM）
+  const countEl = useTemplateRef<HTMLElement>(lifecycle, 'count');
+  // 状态路径 → Signal（与 signal/computed 同引擎）
+  const countSig = appState.signal('app.count');
 
-  // onMounted 中订阅状态变化，销毁时自动取消订阅
-  lifecycle.onMounted = () => {
-    useState(
-      appState,
-      'app.count',
-      (c: number) => {
-        // 状态变化时手动更新 DOM（框架无响应式，必须手动操作）
-        if (countEl.current) countEl.current.textContent = String(c);
+  const getCount = (): number => appState.get("app.count") ?? 0;
+
+  // onEffect：首次同步执行完成初始渲染，countSig 变化时自动重跑
+  onEffect(lifecycle, () => {
+    if (countEl.value) countEl.value.textContent = String(countSig.value);
+  });
+
+  return h(
+    "div",
+    { class: "panel" },
+    h("h2", { class: "panel-title" }, "计数器 · useTemplateRef + state.signal + onEffect"),
+
+    h(
+      "div",
+      {
+        style: { display: "flex", alignItems: "center", gap: "12px" },
       },
-      lifecycle, // 传入 lifecycle 以便销毁时自动取消订阅
-    );
-  };
-
-  // 读取当前值（SSR 和客户端首次渲染时使用）
-  const c = getCount();
-
-  return h('div', { class: 'panel' },
-    h('h2', { class: 'panel-title' }, '计数器 · useState + 手动 DOM'),
-
-    h('div', {
-      style: { display: 'flex', alignItems: 'center', gap: '12px' },
-    },
-      // -1 按钮
-      h('button', {
-        class: 'btn',
-        onClick: () => appState.set('app.count', getCount() - 1),
-      }, '−'),
-
-      // 当前数值（SSR 输出初始值 0，水合后手动更新）
-      h('span', {
-        ref: countEl,
-        style: { fontSize: '20px', fontWeight: '700', minWidth: '40px', textAlign: 'center' },
-      }, String(c)),
-
-      // +1 按钮
-      h('button', {
-        class: 'btn',
-        onClick: () => appState.set('app.count', getCount() + 1),
-      }, '+'),
-
-      // 重置按钮
-      h('button', {
-        class: 'btn',
-        onClick: () => appState.set('app.count', 0),
-      }, '重置'),
+      h(
+        "button",
+        {
+          class: "btn",
+          onClick: () => appState.set("app.count", getCount() - 1),
+        },
+        "−",
+      ),
+      h(
+        "span",
+        {
+          ref: 'count',
+          style: {
+            fontSize: "20px",
+            fontWeight: "700",
+            minWidth: "40px",
+            textAlign: "center",
+          },
+        },
+        String(getCount()),
+      ),
+      h(
+        "button",
+        {
+          class: "btn",
+          onClick: () => appState.set("app.count", getCount() + 1),
+        },
+        "+",
+      ),
+      h(
+        "button",
+        {
+          class: "btn",
+          onClick: () => appState.set("app.count", 0),
+        },
+        "重置",
+      ),
     ),
   );
 });
 
 // ============================================
-// 组件 3：SSR 信息展示
+// 组件 3：signal + effect（裸 effect，手动 dispose）
+// ============================================
+//
+// 展示最底层的响应式原语：signal（变量）+ effect（副作用）。
+// 手动在 onMounted 启动、onDestroyed 中 dispose；生产推荐用 onEffect 自动绑定生命周期。
+
+const SignalCounter = defineComponent((_props, lifecycle) => {
+  // signal：响应式变量，读 .value 建立依赖
+  const count = signal(0);
+  const elRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'n');
+
+  let dispose: (() => void) | undefined;
+  lifecycle.onMounted = () => {
+    // effect 首次同步执行 + count 变化自动重跑；返回 dispose 函数
+    dispose = effect(() => {
+      if (elRef.value) elRef.value.textContent = String(count.value);
+    });
+  };
+  lifecycle.onDestroyed = () => {
+    dispose?.();
+  };
+
+  return h(
+    "div",
+    { class: "panel" },
+    h("h2", { class: "panel-title" }, "signal + effect · 裸响应式原语"),
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "12px" } },
+      h("button", { class: "btn", onClick: () => count.value-- }, "−"),
+      h("span", { ref: 'n', style: { fontSize: "20px", fontWeight: "700" } }, "0"),
+      h("button", { class: "btn", onClick: () => count.value++ }, "+"),
+    ),
+  );
+});
+
+// ============================================
+// 组件 4：computed + onEffect（派生值自动更新）
+// ============================================
+
+const ComputedExample = defineComponent((_props, lifecycle) => {
+  const a = signal(2);
+  const b = signal(3);
+  // computed：派生值，依赖 a/b，自动缓存 + 惰性求值
+  const sum = computed(() => a.value + b.value);
+  const sumElRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'sum');
+
+  onEffect(lifecycle, () => {
+    if (sumElRef.value) {
+      sumElRef.value.textContent = `${a.value} + ${b.value} = ${sum.value}`;
+    }
+  });
+
+  return h(
+    "div",
+    { class: "panel" },
+    h("h2", { class: "panel-title" }, "computed + onEffect · 派生值"),
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "12px" } },
+      h("button", { class: "btn", onClick: () => a.value++ }, "a + 1"),
+      h("button", { class: "btn", onClick: () => b.value++ }, "b + 1"),
+      h("span", { ref: 'sum', style: { fontSize: "18px" } }, "2 + 3 = 5"),
+    ),
+  );
+});
+
+// ============================================
+// 组件 5：useTemplateRef（字符串 key 绑定 + 操作 DOM）
+// ============================================
+
+const TemplateRefExample = defineComponent((_props, lifecycle) => {
+  // useTemplateRef：返回 Signal，挂载后自动指向 DOM，销毁自动置 null
+  const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'input');
+  const boxRef = useTemplateRef<HTMLDivElement>(lifecycle, 'box');
+
+  const focus = (): void => {
+    inputRef.value?.focus();
+  };
+  const measure = (): void => {
+    if (boxRef.value) {
+      boxRef.value.textContent = `${boxRef.value.offsetWidth} × ${boxRef.value.offsetHeight}`;
+    }
+  };
+
+  return h(
+    "div",
+    { class: "panel" },
+    h("h2", { class: "panel-title" }, "useTemplateRef · 字符串 key 绑定 DOM"),
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "12px" } },
+      h("input", { ref: 'input', class: "btn", placeholder: "点击按钮聚焦我" }),
+      h("button", { class: "btn", onClick: focus }, "聚焦输入框"),
+    ),
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "12px", marginTop: "12px" } },
+      h("div", {
+        ref: 'box',
+        style: {
+          padding: "16px 24px",
+          background: "rgba(0,180,216,.12)",
+          borderRadius: "8px",
+          border: "1px solid rgba(0,180,216,.35)",
+        },
+      }, "盒子尺寸待测"),
+      h("button", { class: "btn", onClick: measure }, "读取尺寸"),
+    ),
+  );
+});
+
+// ============================================
+// 组件 6：signal 作为 prop 传给子组件（子组件 effect 追踪）
+// ============================================
+//
+// props 是引用传递、无解包，signal 对象原样传给子组件，
+// 子组件在 effect 里读 props.count.value 自动建立依赖。
+
+const SignalChild = defineComponent<{ count: Signal<number> }>((props, lifecycle) => {
+  const elRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'child');
+  onEffect(lifecycle, () => {
+    if (elRef.value) {
+      elRef.value.textContent = `子组件读到 count = ${props.count.value}`;
+    }
+  });
+  return h("span", { ref: 'child', style: { fontSize: "16px", color: "#81c784" } }, "子组件读到 count = 0");
+});
+
+const ParentChildSignal = defineComponent((_props, _lifecycle) => {
+  const shared = signal(0);
+  return h(
+    "div",
+    { class: "panel" },
+    h("h2", { class: "panel-title" }, "signal 作为 prop 传给子组件"),
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "12px" } },
+      h("button", { class: "btn", onClick: () => shared.value++ }, "父组件 +1"),
+      h(SignalChild, { count: shared }),
+    ),
+  );
+});
+
+// ============================================
+// 组件 7：SSR 信息展示
 // ============================================
 
 const Info = defineComponent(() => {
-  return h('div', { class: 'panel' },
-    h('h2', { class: 'panel-title' }, '构建信息'),
+  return h(
+    "div",
+    { class: "panel" },
+    h("h2", { class: "panel-title" }, "构建信息"),
 
-    h('div', {
-      style: { fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: '1.8' },
-    },
-      h('div', {}, '播放器: packages/player/dist/index.es.js'),
-      h('div', {}, '插件:   packages/plugins/dist/'),
-      h('div', {}, '编译:   vite-plugin-hili-compile'),
-      h('div', {}, '渲染:   renderToString → HTML → hydrate'),
+    h(
+      "div",
+      {
+        style: {
+          fontSize: "13px",
+          color: "rgba(255,255,255,0.5)",
+          lineHeight: "1.8",
+        },
+      },
+      h("div", {}, "播放器: packages/player/dist/index.es.js"),
+      h("div", {}, "插件:   packages/plugins/dist/"),
+      h("div", {}, "编译:   vite-plugin-hili-compile"),
+      h("div", {}, "渲染:   renderToString → HTML → hydrate"),
     ),
   );
 });
@@ -166,11 +341,21 @@ const Info = defineComponent(() => {
 // ============================================
 
 const RootLayout = defineComponent(() => {
-  return h('div', { class: 'app-container' },
-    h('h1', {}, 'Hili Player · 构建产物验证'),
-    h('p', { class: 'subtitle' }, 'SSR + Hydration · hiliCompile 编译优化 · SVG 图标'),
+  return h(
+    "div",
+    { class: "app-container" },
+    h("h1", {}, "Hili Player · 构建产物验证"),
+    h(
+      "p",
+      { class: "subtitle" },
+      "SSR + Hydration · hiliCompile 编译优化 · useTemplateRef + Signal 响应式",
+    ),
     PlayerSection({}),
     Counter({}),
+    SignalCounter({}),
+    ComputedExample({}),
+    TemplateRefExample({}),
+    ParentChildSignal({}),
     Info({}),
   );
 });

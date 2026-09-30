@@ -6,7 +6,7 @@
  * 处理垂直滑块拖拽、静音切换、音量数字显示
  */
 
-import { h, defineComponent, ref, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
 import { isBrowser } from '@/utils';
 import { PlayerStateKeyEnum } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
@@ -42,23 +42,20 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   // DOM 引用
   // ============================================
 
-  /** 音量按钮容器元素引用 */
-  const volumeBtnRef = ref<HTMLDivElement>();
-
   /** 音量图标元素引用 */
-  const volumeIconRef = ref<LottieIconApi>();
+  const volumeIconRef = useTemplateRef<LottieIconApi>(lifecycle, 'volumeIconRef');
 
   /** 音量数字显示元素引用 */
-  const volumeNumberRef = ref<HTMLDivElement>();
+  const volumeNumberRef = useTemplateRef<HTMLDivElement>(lifecycle, 'volumeNumberRef');
 
   /** 垂直滑块区域元素引用 */
-  const sliderAreaRef = ref<HTMLDivElement>();
+  const sliderAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderAreaRef');
 
   /** 垂直滑块进度条元素引用 */
-  const sliderBarRef = ref<HTMLDivElement>();
+  const sliderBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderBarRef');
 
   /** 垂直滑块拖拽手柄元素引用 */
-  const sliderThumbRef = ref<HTMLDivElement>();
+  const sliderThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderThumbRef');
 
   // ============================================
   // 状态
@@ -85,7 +82,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    * 音量按钮鼠标进入事件处理
    */
   const mouseVolumeEnter = (): void => {
-    volumeIconRef.current?.play();
+    volumeIconRef.value?.play();
   };
 
 
@@ -104,14 +101,14 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     /** 音量百分比 (0-100) */
     const percent = Math.max(0, Math.min(100, vol * 100));
 
-    if (sliderBarRef.current) {
-      sliderBarRef.current.style.height = `${percent}%`;
+    if (sliderBarRef.value) {
+      sliderBarRef.value.style.height = `${percent}%`;
     }
-    if (sliderThumbRef.current) {
-      sliderThumbRef.current.style.bottom = `${percent}%`;
+    if (sliderThumbRef.value) {
+      sliderThumbRef.value.style.bottom = `${percent}%`;
     }
-    if (volumeNumberRef.current) {
-      volumeNumberRef.current.innerText = `${Math.round(percent)}`;
+    if (volumeNumberRef.value) {
+      volumeNumberRef.value.innerText = `${Math.round(percent)}`;
     }
   };
 
@@ -129,9 +126,9 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    * @returns 音量值 (0-1)
    */
   const getVolumeFromY = (clientY: number): number => {
-    if (!sliderAreaRef.current) return 0;
+    if (!sliderAreaRef.value) return 0;
     /** 滑块区域的边界矩形 */
-    const rect = sliderAreaRef.current.getBoundingClientRect();
+    const rect = sliderAreaRef.value.getBoundingClientRect();
     // 垂直滑块：底部为最大值，顶部为最小值
     /** 鼠标位置在滑块上的比例 (0-1)，底部为 1，顶部为 0 */
     const ratio = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
@@ -179,13 +176,13 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
       (newMuted) => {
         console.log(newMuted);
         isMuted = newMuted;
-        if (volumeIconRef.current) {
+        if (volumeIconRef.value) {
           if (newMuted) {
-            volumeIconRef.current.setSequenceSlot(2);
+            volumeIconRef.value.setSequenceSlot(2);
           } else {
-            volumeIconRef.current.setSequenceSlot(0);
+            volumeIconRef.value.setSequenceSlot(0);
           }
-          volumeIconRef.current.play();
+          volumeIconRef.value.play();
         }
       },
       lifecycle
@@ -210,12 +207,12 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   const handleVolumeIconAnimation = (): void => {
     if (isMuted) {
       isMuted = false;
-      volumeIconRef.current?.setSequenceSlot(0);
+      volumeIconRef.value?.setSequenceSlot(0);
     } else {
       isMuted = true;
-      volumeIconRef.current?.setSequenceSlot(2);
+      volumeIconRef.value?.setSequenceSlot(2);
     }
-    volumeIconRef.current?.play();
+    volumeIconRef.value?.play();
   };
 
   /** 
@@ -331,7 +328,6 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     class: 'player-ctrl-btn player-ctrl-volume',
     role: 'button',
     'aria-label': '音量',
-    ref: volumeBtnRef,
     onClick: handleMuteToggle,
     onMouseEnter: mouseVolumeEnter,
     onMouseLeave: mouseVolumeLeave,
@@ -366,18 +362,18 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
         ],
         loop: false,
         autoplay: false,
-        ref: volumeIconRef
+        ref: 'volumeIconRef'
       })
     ),
     // 音量控制区域
     h('div', { class: 'player-ctrl-volume-box' },
       // 音量数字
-      h('div', { class: 'player-ctrl-volume-number', ref: volumeNumberRef }),
+      h('div', { class: 'player-ctrl-volume-number', ref: 'volumeNumberRef' }),
       // 垂直滑块
       h('div', { class: 'player-ctrl-volume-progress slider' },
         h('div', {
           class: 'slider-area',
-          ref: sliderAreaRef,
+          ref: 'sliderAreaRef',
           onClick: handleSliderClick,
           onMouseDown: handleSliderMouseDown,
         },
@@ -385,13 +381,13 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
             h('div', {
               class: 'slider-bar',
               role: 'progressbar',
-              ref: sliderBarRef,
+              ref: 'sliderBarRef',
             })
           ),
           h('div', {
             class: 'slider-thumb',
             role: 'thumb',
-            ref: sliderThumbRef,
+            ref: 'sliderThumbRef',
           },
             h('div', { class: 'slider-thumb-dot' })
           )

@@ -31,3 +31,6 @@ desktop.ini
 .env
 .env.local
 .env.*.local
+
+# pnpm ÄÚÈİÑ°Ö·´æ´¢ / ÒÀÀµ»º´æ£º²»Èë¿â
+.pnpm-store/

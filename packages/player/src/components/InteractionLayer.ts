@@ -7,7 +7,7 @@
  * 互动插件将自身 DOM 注入到该容器中
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 // ============================================
@@ -45,10 +45,10 @@ export const InteractionLayer = defineComponent<InteractionLayerProps>((props, l
   // ============================================
 
   /** 互动层外层容器 DOM 引用，用于设置边线样式 */
-  const cmdDmWrapRef = ref<HTMLDivElement>();
+  const cmdDmWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'cmdDmWrapRef');
 
   /** 互动层内部容器 DOM 引用，互动插件将内容注入到此容器 */
-  const dmInsideRef = ref<HTMLDivElement>();
+  const dmInsideRef = useTemplateRef<HTMLDivElement>(lifecycle, 'dmInsideRef');
 
   // ============================================
   // 样式计算
@@ -91,12 +91,12 @@ export const InteractionLayer = defineComponent<InteractionLayerProps>((props, l
    * 当 showLines 或 lineVisibility 变化时调用
    */
   const updateLineStyle = (): void => {
-    if (!cmdDmWrapRef.current) return;
+    if (!cmdDmWrapRef.value) return;
 
     /** 计算得到的边线样式对象 */
     const lineStyle = computeLineStyle();
     Object.entries(lineStyle).forEach(([key, value]: [string, string]) => {
-      cmdDmWrapRef.current?.style.setProperty(key, value);
+      cmdDmWrapRef.value?.style.setProperty(key, value);
     });
   };
 
@@ -108,16 +108,16 @@ export const InteractionLayer = defineComponent<InteractionLayerProps>((props, l
   lifecycle.onMounted = (): void => {
     updateLineStyle();
     lifecycle.emit?.('interactionLayerMounted', {
-      container: dmInsideRef.current,
+      container: dmInsideRef.value,
     });
   };
 
   /** 组件销毁前清理容器内的所有子节点 */
   lifecycle.onBeforeDestroy = (): void => {
     // 清理容器内所有子节点
-    if (dmInsideRef.current) {
-      while (dmInsideRef.current.firstChild) {
-        dmInsideRef.current.removeChild(dmInsideRef.current.firstChild);
+    if (dmInsideRef.value) {
+      while (dmInsideRef.value.firstChild) {
+        dmInsideRef.value.removeChild(dmInsideRef.value.firstChild);
       }
     }
   };
@@ -128,12 +128,12 @@ export const InteractionLayer = defineComponent<InteractionLayerProps>((props, l
 
   return h('div', {
     class: 'player-cmd-dm-wrap',
-    ref: cmdDmWrapRef,
+    ref: 'cmdDmWrapRef',
     style: {
       ...computeLineStyle(),
     },
   },
-    h('div', { class: 'player-cmd-dm-inside', ref: dmInsideRef })
+    h('div', { class: 'player-cmd-dm-inside', ref: 'dmInsideRef' })
   );
 });
 

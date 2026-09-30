@@ -11,16 +11,80 @@ import type {
   VNode,
   VNodeAttrs,
   Lifecycle,
-  Ref,
   RefValue,
   DirectiveFn,
 } from "@/types";
+import type { Signal } from "@preact/signals-core";
 import { isBrowser } from "@/utils";
-import { safeCall, ErrorSource, isDev } from "./warning";
+import { safeCall, ErrorSource, isDev, warn, WarnSource } from "./warning";
 import { applyStyle, normalizeClass } from "./normalize";
+import { isRefObject, isSignalRef } from "./templateRef";
 
-function isRefObject(value: unknown): value is Ref<unknown> {
-  return typeof value === "object" && value !== null && "current" in value;
+/**
+ * 沿 __parent 链向上查找最近的组件生命周期注册表，解析字符串模板引用
+ * 字符串 ref 归属「最近的组件」，不跨组件边界
+ */
+function findTemplateRef(
+  vnode: VNode,
+  key: string,
+): Signal<unknown> | undefined {
+  let cur: VNode | undefined = vnode;
+  while (cur) {
+    if (cur.lifecycle) {
+      return cur.lifecycle._templateRefs?.get(key);
+    }
+    cur = cur.__parent;
+  }
+  return undefined;
+}
+
+/**
+ * 统一的 ref 绑定：支持回调 / 字符串模板引用 / Signal / 旧 {current} 对象
+ */
+function bindRef(refValue: unknown, el: Element, vnode: VNode): void {
+  if (refValue === undefined || refValue === null) return;
+  if (typeof refValue === "function") {
+    (refValue as RefValue)(el, vnode);
+    return;
+  }
+  if (typeof refValue === "string") {
+    const sig = findTemplateRef(vnode, refValue);
+    if (sig) {
+      sig.value = el;
+    } else if (isDev()) {
+      warn(
+        WarnSource.MOUNT,
+        `模板引用 "${refValue}" 未注册：请在 setup 中调用 useTemplateRef(lc, "${refValue}")`,
+      );
+    }
+    return;
+  }
+  if (isSignalRef(refValue)) {
+    refValue.value = el;
+    return;
+  }
+  if (isRefObject(refValue)) {
+    refValue.current = el;
+  }
+}
+
+/**
+ * 统一的 ref 清理：销毁时把已绑定的引用清空，避免悬挂 DOM 引用
+ */
+function clearRef(refValue: unknown, vnode: VNode): void {
+  if (refValue === undefined || refValue === null) return;
+  if (typeof refValue === "string") {
+    const sig = findTemplateRef(vnode, refValue);
+    if (sig) sig.value = null;
+    return;
+  }
+  if (isSignalRef(refValue)) {
+    refValue.value = null;
+    return;
+  }
+  if (isRefObject(refValue)) {
+    refValue.current = null;
+  }
 }
 
 /**
@@ -297,15 +361,9 @@ export function applyAttrs(
    * 第一步：优先处理编译期预分类的 __ref（如果存在）
    * 编译期：vite-plugin-hili-compile 将 ref 重命名为 __ref
    * 运行时：优先读取 __ref，fallback 到 ref
+   * 统一支持：回调 / 字符串模板引用 / Signal / 旧 {current} 对象
    */
-  const refValue = attrs.__ref ?? attrs.ref;
-  if (refValue !== undefined && refValue !== null) {
-    if (typeof refValue === "function") {
-      (refValue as RefValue)(el, vnode);
-    } else if (isRefObject(refValue)) {
-      refValue.current = el;
-    }
-  }
+  bindRef(attrs.__ref ?? attrs.ref, el, vnode);
 
   /**
    * 第二步：优先处理编译期预分类的 __events（如果存在）
@@ -547,6 +605,14 @@ export function destroy(vnode: VNode | string): void {
   vnode.lifecycle?._stateCleanups?.forEach((fn) => fn());
 
   /**
+   * 清空元素 ref（回调 / 字符串 / Signal / {current}）
+   * 避免销毁后残留悬挂的 DOM 引用（安全稳定）
+   */
+  if (vnode.attrs) {
+    clearRef(vnode.attrs.__ref ?? vnode.attrs.ref, vnode);
+  }
+
+  /**
    * 递归销毁子节点
    * 子节点的 onBeforeDestroy/onDestroyed 在各自的 destroy() 中调用
    * 销毁顺序：子先父后（子组件先从 DOM 移除，父组件后移除）
@@ -582,26 +648,38 @@ export function destroy(vnode: VNode | string): void {
  * @param method - 生命周期方法名
  */
 function processLifecycleForNode(vnode: VNode, method: keyof Lifecycle): void {
-  if (vnode.lifecycle?.[method]) {
-    /**
-     * 在调用 onMounted 之前，将组件根 DOM 元素设置到 lifecycle.el
-     * 这样组件在 onMounted 钩子中可以通过 lifecycle.el 访问自己的根元素
-     * 用于手动 DOM 更新（框架没有响应式，状态变化后需要手动操作 DOM）
-     *
-     * 与 Vue3 的区别：Vue3 有响应式系统自动更新 DOM，本框架需要手动更新
-     * lifecycle.el 让组件能自行处理 DOM 更新
-     */
-    if (
-      method === "onMounted" &&
-      vnode.el &&
-      vnode.lifecycle &&
-      vnode.el instanceof Element
-    ) {
-      vnode.lifecycle.el = vnode.el;
-    }
+  const lc = vnode.lifecycle;
 
+  /**
+   * onMounted 时先将组件根 DOM 元素设置到 lifecycle.el
+   * 这样组件在 onMounted 钩子和响应式 effect 中可以通过 lifecycle.el
+   * 访问自己的根元素，用于手动 DOM 更新
+   */
+  if (lc && method === "onMounted" && vnode.el && vnode.el instanceof Element) {
+    lc.el = vnode.el;
+  }
+
+  /**
+   * onMounted 时启动响应式 effect（signal/computed + onEffect）
+   * - 在用户 onMounted 之前启动，完成初始渲染
+   * - 此时 ref.current / lifecycle.el 已就绪
+   * - dispose 收集到 _stateCleanups，destroy 时统一清理
+   */
+  if (lc && method === "onMounted" && lc._effects) {
+    const effects = lc._effects;
+    lc._effects = undefined;
+    const cleanups = (lc._stateCleanups ??= []);
+    for (const startEffect of effects) {
+      const dispose = startEffect();
+      if (dispose) {
+        cleanups.push(dispose);
+      }
+    }
+  }
+
+  if (lc?.[method]) {
     safeCall(
-      () => vnode.lifecycle![method]!(),
+      () => lc[method]!(),
       ErrorSource.LIFECYCLE,
       `生命周期钩子执行失败: ${method}`,
     );
@@ -622,27 +700,35 @@ function processLifecycleForNode(vnode: VNode, method: keyof Lifecycle): void {
    */
   if (vnode.lifecycle) {
     if (method === "onMounted" && vnode.lifecycle._ref) {
-      const refObj = vnode.lifecycle._ref;
-      if (typeof refObj === "object" && "current" in refObj) {
-        /**
-         * ref 赋值规则（与 Vue3 一致）：
-         * 1. 组件调用了 expose() → ref.current = 暴露的 API 对象
-         * 2. 组件未调用 expose() → ref.current = 组件根 DOM 元素（lifecycle.el ?? vnode.el）
-         * 3. 普通 DOM 元素 → ref.current = DOM 元素（由 applyAttrs/hydrateNode 处理）
-         */
-        if (vnode.lifecycle._exposed !== undefined) {
-          refObj.current = vnode.lifecycle._exposed;
-        } else {
-          /** 未 expose 时 fallback 到组件根 DOM 元素 */
-          const fallbackEl = vnode.lifecycle.el ?? vnode.el ?? null;
-          refObj.current = fallbackEl as unknown;
-        }
+      const refValue = vnode.lifecycle._ref;
+      /**
+       * ref 赋值规则（与 Vue3 一致）：
+       * 1. 组件调用了 expose() → ref = 暴露的 API 对象
+       * 2. 组件未调用 expose() → ref = 组件根 DOM 元素（lifecycle.el ?? vnode.el）
+       * 3. 普通 DOM 元素 → ref = DOM 元素（由 applyAttrs/hydrateNode 处理）
+       */
+      const exposed = vnode.lifecycle._exposed !== undefined
+        ? vnode.lifecycle._exposed
+        : (vnode.lifecycle.el ?? vnode.el ?? null);
+
+      if (isSignalRef(refValue)) {
+        refValue.value = exposed;
+      } else if (isRefObject(refValue)) {
+        refValue.current = exposed as unknown;
       }
     }
     if (method === "onDestroyed" && vnode.lifecycle._ref) {
-      const refObj = vnode.lifecycle._ref;
-      if (typeof refObj === "object" && "current" in refObj) {
-        refObj.current = null;
+      const refValue = vnode.lifecycle._ref;
+      if (isSignalRef(refValue)) {
+        refValue.value = null;
+      } else if (isRefObject(refValue)) {
+        refValue.current = null;
+      }
+    }
+    // 组件销毁时清空所有模板引用 Signal，避免悬挂 DOM 引用
+    if (method === "onDestroyed" && vnode.lifecycle._templateRefs) {
+      for (const sig of vnode.lifecycle._templateRefs.values()) {
+        sig.value = null;
       }
     }
   }
@@ -776,6 +862,8 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
         continue;
       }
       if (child && domChild) {
+        // ★ 建立 __parent 链（与 materialize 一致），供 useTemplateRef 字符串 ref 沿链解析
+        if (child.__parent === undefined) child.__parent = vnode;
         domChild = hydrateNode(child, domChild);
       }
     }
@@ -795,6 +883,8 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
         current = current.nextSibling;
         continue;
       }
+      // ★ 建立 __parent 链（与 materialize 一致）
+      if (child.__parent === undefined) child.__parent = vnode;
       current = hydrateNode(child, current);
     }
     return current;
@@ -835,24 +925,12 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
     const cleanups: (() => void)[] = [];
 
     /**
-     * 绑定 ref
-     * 支持两种形式：
-     * 1. 回调函数：ref: (el, vnode) => { element = el }
-     * 2. 直接绑定对象：ref: elementRef，其中 elementRef = { current: null }
-     *
-     * 回调 ref 传递 vnode 作为第二个参数，与 mount 中的 applyAttrs 保持一致
+     * 绑定 ref（统一支持回调 / 字符串模板引用 / Signal / 旧 {current} 对象）
      *
      * ★ 优先读取编译期预分类的 __ref（与 applyAttrs 一致）
      * 编译器将 ref → __ref，若只读 attrs.ref，编译产物水合时 ref 会全部失效
      */
-    const refValue = attrs.__ref ?? attrs.ref;
-    if (refValue !== undefined && refValue !== null) {
-      if (typeof refValue === "function") {
-        (refValue as RefValue)(el, vnode);
-      } else if (isRefObject(refValue)) {
-        refValue.current = el;
-      }
-    }
+    bindRef(attrs.__ref ?? attrs.ref, el, vnode);
 
     /**
      * 绑定事件监听器
@@ -927,6 +1005,8 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
       continue;
     }
     if (child && domChild) {
+      // ★ 建立 __parent 链（与 materialize 一致），供 useTemplateRef 字符串 ref 沿链解析
+      if (child.__parent === undefined) child.__parent = vnode;
       domChild = hydrateNode(child, domChild);
     }
   }

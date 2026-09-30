@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { defineComponent, h, ref, useContext } from "@/core";
+import { defineComponent, h, useTemplateRef, useContext } from "@/core";
 import type { TypedStateManager } from "@/core";
 import type { PlayerEventBus } from "@/core/events";
 import {
@@ -108,6 +108,35 @@ export type PlayerDockerEvents = {
   ended: undefined;
   waiting: undefined;
   canplay: undefined;
+
+  // ===== HTML5 媒体元素标准事件（完整 21 个）=====
+  /** 开始加载媒体 */
+  loadStart: undefined;
+  /** 首帧数据加载完成 */
+  loadedData: undefined;
+  /** 媒体时长变化 */
+  durationChange: { duration: number };
+  /** 实际开始播放（缓冲结束后） */
+  playing: undefined;
+  /** 跳转开始 */
+  seeking: { currentTime: number };
+  /** 跳转完成 */
+  seeked: { currentTime: number };
+  /** 音量 / 静音变化 */
+  volumeChange: { volume: number; muted: boolean };
+  /** 播放速率变化 */
+  rateChange: { rate: number };
+  /** 浏览器主动暂停加载（非错误） */
+  suspend: undefined;
+  /** 数据停滞 */
+  stalled: undefined;
+  /** 加载被中止 */
+  abort: undefined;
+  /** 媒体被清空 */
+  emptied: undefined;
+  /** 加载 / 解码错误 */
+  error: { error: MediaError | null | undefined };
+
   contextMenu: { x: number; y: number };
   playerLoaded: undefined;
   danmakuLayerMounted: DanmakuLayerAPI;
@@ -152,28 +181,25 @@ export const PlayerDocker = defineComponent<
   // ============================================
 
   /** 视频元素 */
-  const videoRef = ref<HTMLVideoElement>();
+  const videoRef = useTemplateRef<HTMLVideoElement>(lifecycle, 'videoRef');
 
   /** 播放器外层容器 */
-  const playerDockerRef = ref<HTMLDivElement>();
+  const playerDockerRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerDockerRef');
 
   /** 播放器容器 */
-  const playerContainerRef = ref<HTMLDivElement>();
+  const playerContainerRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerContainerRef');
 
   /** 视频区域 */
-  const playerVideoAreaRef = ref<HTMLDivElement>();
+  const playerVideoAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerVideoAreaRef');
 
   /** 视频占位容器 */
-  const playerVideoPerchRef = ref<HTMLDivElement>();
+  const playerVideoPerchRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerVideoPerchRef');
 
   /** 视频包装容器 */
-  const playerVideoWrapRef = ref<HTMLDivElement>();
-
-  /** 视频海报 */
-  const playerVideoPosterRef = ref<HTMLDivElement>();
+  const playerVideoWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerVideoWrapRef');
 
   /** 发送区域 */
-  const playerSendingAreaRef = ref<HTMLDivElement>();
+  const playerSendingAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerSendingAreaRef');
 
   // ============================================
   // 状态管理器（通过 Context 获取，无需 props 传递）
@@ -244,7 +270,7 @@ export const PlayerDocker = defineComponent<
    * 初始化视频元素，创建 video 标签并绑定事件
    */
   const initVideo = (): void => {
-    const video = videoRef.current;
+    const video = videoRef.value;
     if (!video) return;
 
     video.crossOrigin = "anonymous";
@@ -265,14 +291,33 @@ export const PlayerDocker = defineComponent<
       video.autoplay = true;
     }
 
+    // ===== HTML5 媒体元素标准事件（完整 21 个）=====
+    // 加载生命周期
+    video.addEventListener("loadstart", handleLoadStart);
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
-    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("loadeddata", handleLoadedData);
+    video.addEventListener("canplay", handleCanPlay);
+    video.addEventListener("durationchange", handleDurationChange);
     video.addEventListener("progress", handleProgress);
+    video.addEventListener("suspend", handleSuspend);
+    video.addEventListener("stalled", handleStalled);
+    video.addEventListener("abort", handleAbort);
+    video.addEventListener("emptied", handleEmptied);
+    video.addEventListener("error", handleError);
+    // 播放状态
     video.addEventListener("play", handlePlay);
+    video.addEventListener("playing", handlePlaying);
     video.addEventListener("pause", handlePause);
     video.addEventListener("ended", handleEnded);
+    // 进度与跳转
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("seeking", handleSeeking);
+    video.addEventListener("seeked", handleSeeked);
+    // 音量与速率
+    video.addEventListener("volumechange", handleVolumeChange);
+    video.addEventListener("ratechange", handleRateChange);
+    // 缓冲等待
     video.addEventListener("waiting", handleWaiting);
-    video.addEventListener("canplay", handleCanPlay);
 
     lifecycle.emit?.("videoCreated", { video });
   };
@@ -285,8 +330,8 @@ export const PlayerDocker = defineComponent<
    * 视频元数据加载完成时，初始化时长显示和音量状态
    */
   const handleLoadedMetadata = (): void => {
-    if (!videoRef.current) return;
-    videoInfo.duration = videoRef.current.duration;
+    if (!videoRef.value) return;
+    videoInfo.duration = videoRef.value.duration;
     stateMgr?.set(PlayerStateKeyEnum.DURATION, videoInfo.duration);
     lifecycle.emit?.("loadedMetadata", { duration: videoInfo.duration });
 
@@ -302,8 +347,8 @@ export const PlayerDocker = defineComponent<
    * 视频播放时间更新时，同步更新控制栏进度和弹幕
    */
   const handleTimeUpdate = (): void => {
-    if (!videoRef.current) return;
-    videoInfo.currentTime = videoRef.current.currentTime;
+    if (!videoRef.value) return;
+    videoInfo.currentTime = videoRef.value.currentTime;
     stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, videoInfo.currentTime);
     controlsApi.updateCurrent?.(videoInfo.currentTime);
     rowDmApi.createDanmaku?.(videoInfo.currentTime);
@@ -317,8 +362,8 @@ export const PlayerDocker = defineComponent<
    * 视频缓冲进度更新时，同步更新控制栏缓冲进度
    */
   const handleProgress = (): void => {
-    if (!videoRef.current) return;
-    const buffered = videoRef.current.buffered;
+    if (!videoRef.value) return;
+    const buffered = videoRef.value.buffered;
     if (buffered.length > 0) {
       videoInfo.buffer = buffered.end(buffered.length - 1);
       stateMgr?.set(PlayerStateKeyEnum.BUFFERED, videoInfo.buffer);
@@ -332,7 +377,7 @@ export const PlayerDocker = defineComponent<
    */
   const handlePlay = (): void => {
     playerInfo.isPlaying = true;
-    playerContainerRef.current?.classList.remove("state-paused");
+    playerContainerRef.value?.classList.remove("state-paused");
     rowDmApi.playPause?.("playing");
     stateMgr?.set(PlayerStateKeyEnum.STATE, PlayerState.PLAYING);
     lifecycle.emit?.("play");
@@ -343,7 +388,7 @@ export const PlayerDocker = defineComponent<
    */
   const handlePause = (): void => {
     playerInfo.isPlaying = false;
-    playerContainerRef.current?.classList.add("state-paused");
+    playerContainerRef.value?.classList.add("state-paused");
     rowDmApi.playPause?.("paused");
     stateMgr?.set(PlayerStateKeyEnum.STATE, PlayerState.PAUSED);
     lifecycle.emit?.("pause");
@@ -362,7 +407,7 @@ export const PlayerDocker = defineComponent<
    * 视频缓冲等待时，添加缓冲状态样式
    */
   const handleWaiting = (): void => {
-    playerContainerRef.current?.classList.add("state-buff");
+    playerContainerRef.value?.classList.add("state-buff");
     stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, true);
     lifecycle.emit?.("waiting");
   };
@@ -371,9 +416,106 @@ export const PlayerDocker = defineComponent<
    * 视频缓冲完成可播放时，移除缓冲状态样式
    */
   const handleCanPlay = (): void => {
-    playerContainerRef.current?.classList.remove("state-buff");
+    playerContainerRef.value?.classList.remove("state-buff");
     stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
     lifecycle.emit?.("canplay");
+  };
+
+  // ============================================
+  // HTML5 媒体元素标准事件处理器（补全）
+  // ============================================
+
+  /** loadstart：开始加载媒体 */
+  const handleLoadStart = (): void => {
+    stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, true);
+    lifecycle.emit?.("loadStart");
+  };
+
+  /** loadeddata：首帧数据加载完成 */
+  const handleLoadedData = (): void => {
+    lifecycle.emit?.("loadedData");
+  };
+
+  /** durationchange：时长变化，同步时长显示 */
+  const handleDurationChange = (): void => {
+    if (!videoRef.value) return;
+    videoInfo.duration = videoRef.value.duration;
+    stateMgr?.set(PlayerStateKeyEnum.DURATION, videoInfo.duration);
+    controlsApi.initDuration?.();
+    lifecycle.emit?.("durationChange", { duration: videoInfo.duration });
+  };
+
+  /** playing：实际开始播放（缓冲结束后） */
+  const handlePlaying = (): void => {
+    playerContainerRef.value?.classList.remove("state-buff");
+    playerInfo.isPlaying = true;
+    stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
+    lifecycle.emit?.("playing");
+  };
+
+  /** seeking：跳转开始 */
+  const handleSeeking = (): void => {
+    playerContainerRef.value?.classList.add("state-buff");
+    lifecycle.emit?.("seeking", {
+      currentTime: videoRef.value?.currentTime ?? 0,
+    });
+  };
+
+  /** seeked：跳转完成 */
+  const handleSeeked = (): void => {
+    playerContainerRef.value?.classList.remove("state-buff");
+    const currentTime = videoRef.value?.currentTime ?? 0;
+    stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
+    controlsApi.updateCurrent?.(currentTime);
+    lifecycle.emit?.("seeked", { currentTime });
+  };
+
+  /** volumechange：音量 / 静音变化 */
+  const handleVolumeChange = (): void => {
+    if (!videoRef.value) return;
+    playerInfo.volume = videoRef.value.volume;
+    playerInfo.isMuted = videoRef.value.muted;
+    stateMgr?.set(PlayerStateKeyEnum.VOLUME, videoRef.value.volume);
+    stateMgr?.set(PlayerStateKeyEnum.MUTED, videoRef.value.muted);
+    controlsApi.updateVolumeDisplay?.(videoRef.value.volume);
+    controlsApi.updateMute?.(videoRef.value.muted);
+    lifecycle.emit?.("volumeChange", {
+      volume: videoRef.value.volume,
+      muted: videoRef.value.muted,
+    });
+  };
+
+  /** ratechange：播放速率变化 */
+  const handleRateChange = (): void => {
+    if (!videoRef.value) return;
+    stateMgr?.set(PlayerStateKeyEnum.PLAYBACK_RATE, videoRef.value.playbackRate);
+    lifecycle.emit?.("rateChange", { rate: videoRef.value.playbackRate });
+  };
+
+  /** suspend：浏览器主动暂停加载（非错误） */
+  const handleSuspend = (): void => {
+    lifecycle.emit?.("suspend");
+  };
+
+  /** stalled：数据停滞 */
+  const handleStalled = (): void => {
+    lifecycle.emit?.("stalled");
+  };
+
+  /** abort：加载被中止 */
+  const handleAbort = (): void => {
+    stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
+    lifecycle.emit?.("abort");
+  };
+
+  /** emptied：媒体被清空（重新加载前） */
+  const handleEmptied = (): void => {
+    lifecycle.emit?.("emptied");
+  };
+
+  /** error：加载 / 解码错误 */
+  const handleError = (): void => {
+    lifecycle.emit?.("error", { error: videoRef.value?.error });
   };
 
   // ============================================
@@ -472,37 +614,37 @@ export const PlayerDocker = defineComponent<
 
   /** 切换播放/暂停 */
   const togglePlayPause = (): void => {
-    if (!videoRef.current) return;
+    if (!videoRef.value) return;
     if (playerInfo.isPlaying) {
-      videoRef.current.pause();
+      videoRef.value.pause();
     } else {
-      videoRef.current.play();
+      videoRef.value.play();
     }
   };
 
   /** 切换全屏模式 */
   const toggleFullscreen = (): void => {
-    if (!playerContainerRef.current) return;
+    if (!playerContainerRef.value) return;
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
-      playerContainerRef.current.requestFullscreen();
+      playerContainerRef.value.requestFullscreen();
     }
   };
 
   /** 切换网页全屏模式 */
   const toggleWebFullscreen = (): void => {
-    if (!playerDockerRef.current || !playerContainerRef.current) return;
+    if (!playerDockerRef.value || !playerContainerRef.value) return;
     if (isWebFullscreen) {
-      playerDockerRef.current.classList.remove("mode-webscreen");
+      playerDockerRef.value.classList.remove("mode-webscreen");
       document.body.classList.remove("webscreen-fix");
-      playerContainerRef.current.setAttribute("data-screen", "normal");
+      playerContainerRef.value.setAttribute("data-screen", "normal");
       isWebFullscreen = false;
       stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, false);
     } else {
-      playerDockerRef.current.classList.add("mode-webscreen");
+      playerDockerRef.value.classList.add("mode-webscreen");
       document.body.classList.add("webscreen-fix");
-      playerContainerRef.current.setAttribute("data-screen", "web");
+      playerContainerRef.value.setAttribute("data-screen", "web");
       isWebFullscreen = true;
       stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, true);
     }
@@ -511,8 +653,8 @@ export const PlayerDocker = defineComponent<
   /** 切换静音状态 */
   const toggleMute = (): void => {
     playerInfo.isMuted = !playerInfo.isMuted;
-    if (videoRef.current) {
-      videoRef.current.muted = playerInfo.isMuted;
+    if (videoRef.value) {
+      videoRef.value.muted = playerInfo.isMuted;
     }
     stateMgr?.set(PlayerStateKeyEnum.MUTED, playerInfo.isMuted);
     controlsApi.updateMute?.(playerInfo.isMuted);
@@ -522,25 +664,25 @@ export const PlayerDocker = defineComponent<
   const setVolume = (vol: number): void => {
     const clamped = Math.min(1, Math.max(0, vol));
     playerInfo.volume = clamped;
-    if (videoRef.current) videoRef.current.volume = clamped;
+    if (videoRef.value) videoRef.value.volume = clamped;
     stateMgr?.set(PlayerStateKeyEnum.VOLUME, clamped);
     controlsApi.updateVolumeDisplay?.(clamped);
   };
 
   /** 显示控制栏并重置自动隐藏定时器 */
   const showControls = (): void => {
-    if (!playerContainerRef.current) return;
-    playerContainerRef.current.setAttribute("data-ctrl-hidden", "false");
-    playerContainerRef.current.classList.remove("state-no-cursor");
+    if (!playerContainerRef.value) return;
+    playerContainerRef.value.setAttribute("data-ctrl-hidden", "false");
+    playerContainerRef.value.classList.remove("state-no-cursor");
     controlsApi.showControl?.();
     resetAutoHideTimer();
   };
 
   /** 隐藏控制栏 */
   const hideControls = (): void => {
-    if (!playerContainerRef.current) return;
-    playerContainerRef.current.setAttribute("data-ctrl-hidden", "true");
-    playerContainerRef.current.classList.add("state-no-cursor");
+    if (!playerContainerRef.value) return;
+    playerContainerRef.value.setAttribute("data-ctrl-hidden", "true");
+    playerContainerRef.value.classList.add("state-no-cursor");
     controlsApi.hideControl?.();
   };
 
@@ -596,8 +738,8 @@ export const PlayerDocker = defineComponent<
     },
     setPlaybackRate: (rate: number): void => {
       playerInfo.backrate = rate;
-      if (videoRef.current) {
-        videoRef.current.playbackRate = rate;
+      if (videoRef.value) {
+        videoRef.value.playbackRate = rate;
       }
       stateMgr?.set(PlayerStateKeyEnum.PLAYBACK_RATE, rate);
     },
@@ -609,13 +751,13 @@ export const PlayerDocker = defineComponent<
    * 全屏状态变化时，更新屏幕模式属性
    */
   const onFullscreenChange = (): void => {
-    if (!playerContainerRef.current) return;
+    if (!playerContainerRef.value) return;
     if (document.fullscreenElement) {
-      playerContainerRef.current.setAttribute("data-screen", "full");
+      playerContainerRef.value.setAttribute("data-screen", "full");
       playerInfo.dataScreen = "full";
       stateMgr?.set(PlayerStateKeyEnum.IS_FULLSCREEN, true);
     } else {
-      playerContainerRef.current.setAttribute("data-screen", "normal");
+      playerContainerRef.value.setAttribute("data-screen", "normal");
       playerInfo.dataScreen = "normal";
       stateMgr?.set(PlayerStateKeyEnum.IS_FULLSCREEN, false);
     }
@@ -642,8 +784,8 @@ export const PlayerDocker = defineComponent<
   const resizeObserver = safeResizeObserver((entries) => {
     entries.forEach(() => {
       props.events?.emit(PlayerEventEnum.RESIZE, {
-        width: playerDockerRef.current?.clientWidth ?? 0,
-        height: playerDockerRef.current?.clientHeight ?? 0,
+        width: playerDockerRef.value?.clientWidth ?? 0,
+        height: playerDockerRef.value?.clientHeight ?? 0,
       });
     });
   });
@@ -664,10 +806,10 @@ export const PlayerDocker = defineComponent<
    * 在 onMounted 中调用
    */
   const initEvent = (): void => {
-    const container = playerContainerRef.current;
-    const videoArea = playerVideoAreaRef.current;
-    const perch = playerVideoPerchRef.current;
-    const docker = playerDockerRef.current;
+    const container = playerContainerRef.value;
+    const videoArea = playerVideoAreaRef.value;
+    const perch = playerVideoPerchRef.value;
+    const docker = playerDockerRef.value;
 
     if (!container || !videoArea || !perch || !docker) return;
 
@@ -754,14 +896,14 @@ export const PlayerDocker = defineComponent<
               // 播放器不可见 → 进入迷你播放器模式
               playerInfo.isMinPlayer = true;
               docker.classList.add("mode-mini");
-              playerContainerRef.current?.setAttribute("data-screen", "mini");
+              playerContainerRef.value?.setAttribute("data-screen", "mini");
             });
           } else {
             requestAnimationFrame(() => {
               // 播放器可见 → 退出迷你播放器模式
               playerInfo.isMinPlayer = false;
               docker.classList.remove("mode-mini");
-              playerContainerRef.current?.setAttribute("data-screen", "normal");
+              playerContainerRef.value?.setAttribute("data-screen", "normal");
             });
           }
         });
@@ -785,18 +927,18 @@ export const PlayerDocker = defineComponent<
 
     // 触发挂载完成回调
     if (
-      playerDockerRef.current &&
-      playerVideoAreaRef.current &&
-      playerVideoWrapRef.current &&
-      videoRef.current &&
-      playerSendingAreaRef.current
+      playerDockerRef.value &&
+      playerVideoAreaRef.value &&
+      playerVideoWrapRef.value &&
+      videoRef.value &&
+      playerSendingAreaRef.value
     ) {
       lifecycle.emit?.("mounted", {
-        container: playerDockerRef.current,
-        videoArea: playerVideoAreaRef.current,
-        videoWrap: playerVideoWrapRef.current,
-        video: videoRef.current,
-        sendingArea: playerSendingAreaRef.current,
+        container: playerDockerRef.value,
+        videoArea: playerVideoAreaRef.value,
+        videoWrap: playerVideoWrapRef.value,
+        video: videoRef.value,
+        sendingArea: playerSendingAreaRef.value,
       });
     }
 
@@ -813,23 +955,23 @@ export const PlayerDocker = defineComponent<
 
     // 清理网页全屏状态
     if (isWebFullscreen && isBrowser()) {
-      playerDockerRef.current?.classList.remove("mode-webscreen");
+      playerDockerRef.value?.classList.remove("mode-webscreen");
       document.body.classList.remove("webscreen-fix");
     }
 
     // 清理视频事件监听
-    if (videoRef.current) {
-      videoRef.current.removeEventListener(
+    if (videoRef.value) {
+      videoRef.value.removeEventListener(
         "loadedmetadata",
         handleLoadedMetadata,
       );
-      videoRef.current.removeEventListener("timeupdate", handleTimeUpdate);
-      videoRef.current.removeEventListener("progress", handleProgress);
-      videoRef.current.removeEventListener("play", handlePlay);
-      videoRef.current.removeEventListener("pause", handlePause);
-      videoRef.current.removeEventListener("ended", handleEnded);
-      videoRef.current.removeEventListener("waiting", handleWaiting);
-      videoRef.current.removeEventListener("canplay", handleCanPlay);
+      videoRef.value.removeEventListener("timeupdate", handleTimeUpdate);
+      videoRef.value.removeEventListener("progress", handleProgress);
+      videoRef.value.removeEventListener("play", handlePlay);
+      videoRef.value.removeEventListener("pause", handlePause);
+      videoRef.value.removeEventListener("ended", handleEnded);
+      videoRef.value.removeEventListener("waiting", handleWaiting);
+      videoRef.value.removeEventListener("canplay", handleCanPlay);
     }
 
     // 清理所有 DOM 事件监听
@@ -858,7 +1000,7 @@ export const PlayerDocker = defineComponent<
     {
       class: "player-docker player-docker-major",
       "data-injector": "nano",
-      ref: playerDockerRef,
+      ref: 'playerDockerRef',
     },
     h(
       "div",
@@ -869,7 +1011,7 @@ export const PlayerDocker = defineComponent<
         "data-screen": "normal",
         "data-ctrl-hidden": "false",
         "aria-label": props.playerName || "嗨哩播放器",
-        ref: playerContainerRef,
+        ref: 'playerContainerRef',
       },
       h(
         "div",
@@ -879,28 +1021,28 @@ export const PlayerDocker = defineComponent<
           "div",
           {
             class: "player-video-area",
-            ref: playerVideoAreaRef,
+            ref: 'playerVideoAreaRef',
           },
           // 视频占位容器
           h(
             "div",
             {
               class: "player-video-perch",
-              ref: playerVideoPerchRef,
+              ref: 'playerVideoPerchRef',
             },
             // 视频包装容器
             h(
               "div",
               {
                 class: "player-video-wrap",
-                ref: playerVideoWrapRef,
+                ref: 'playerVideoWrapRef',
               },
               h("video", {
                 class: "player-video",
                 crossorigin: "anonymous",
                 preload: "auto",
                 playsinline: "",
-                ref: videoRef,
+                ref: 'videoRef',
               }),
             ),
           ),
@@ -908,7 +1050,6 @@ export const PlayerDocker = defineComponent<
           h("div", {
             class: "player-video-poster",
             hidden: true,
-            ref: playerVideoPosterRef,
           }),
           // 弹幕容器
           h(RowDm, {
@@ -982,7 +1123,7 @@ export const PlayerDocker = defineComponent<
         // 发送区域（弹幕输入等）
         h("div", {
           class: "player-sending-area",
-          ref: playerSendingAreaRef,
+          ref: 'playerSendingAreaRef',
         }),
       ),
     ),

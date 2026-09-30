@@ -3499,8 +3499,23 @@ export declare interface ManifestPlaylistDetails {
     /** AES-128 分片加密配置（对应 #EXT-X-KEY:METHOD=AES-128） */
     encryption?: ManifestEncryption;
 }
+/**
+ * AES-128 分片加密配置（对应 #EXT-X-KEY:METHOD=AES-128）。
+ *
+ * 【消费点】`_buildLevelDetails()`（对象注入路径）会在构造 LevelDetails 时读它，
+ * 按**文本 HLS 路径同一套**数据结构接上解密链路：
+ *   `ManifestEncryption` → `new LevelKey('AES-128', keyUri, keyFormat, keyFormatVersions, iv)`
+ *   → 每个 `Fragment.levelkeys`（含 init 段）→ `Fragment.decryptdata` getter 按 `sn` 推 IV。
+ * 在这之前对象注入路径完全不消费本字段 ⇒ 密文被当明文解 ⇒ 花屏。
+ *
+ * 【一期口径（与转码脚本 verify_segmentbase.py 的 A4 断言一致）】
+ *   · `keyFormat` 留空或写 `"identity"`：本 fork 的 `LevelKey.isSupported()` 对非 identity
+ *     一律返回 false，密钥会被忽略（静默不加密播放）；
+ *   · `iv` 给 16 字节 hex（不带 `0x`，如 "00000000000000000000000000000001"）；
+ *     不给时按分片序号推 IV（`createInitializationVector(sn)`）。
+ */
 export declare interface ManifestEncryption {
-    /** 密钥获取 URL（对应 #EXT-X-KEY:URI） */
+    /** 密钥获取 URL（对应 #EXT-X-KEY:URI）。相对地址按媒体播放列表 URL 解析。 */
     keyUrl: string;
     /** 初始化向量（16 字节 hex 编码，对应 #EXT-X-KEY:IV=0x...），不传时使用分片序号作为 IV */
     iv?: string;

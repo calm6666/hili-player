@@ -3,7 +3,9 @@
  * Ref 引用工具模块
  * ============================================
  * 提供类型安全的 DOM 元素引用机制
- * 参考 Vue 3.5 的 ref 设计，支持泛型
+ *
+ * @deprecated 推荐使用 useTemplateRef（返回响应式 Signal，销毁自动清理）
+ * 本 ref() 返回 { current } 对象，仅作向后兼容保留。
  */
 
 import type { Ref } from '@/types';
@@ -11,25 +13,13 @@ import type { Ref } from '@/types';
 export type { Ref };
 
 /**
- * 创建一个类型安全的元素引用
- * 用于在组件中获取渲染后的 DOM 元素实例
+ * 创建一个类型安全的元素引用（旧版对象 ref，向后兼容）
+ *
+ * @deprecated 请改用 useTemplateRef：`const el = useTemplateRef<HTMLDivElement>(lc, 'el')`
+ * 并在 h() 中写 `ref: 'el'`。新版返回 Signal，销毁时自动清空，更安全。
  *
  * @typeParam T - 引用的元素类型，默认为 Element
  * @returns 包含 current 属性的引用对象
- *
- * @example
- * ```typescript
- * // 创建引用
- * const containerRef = ref<HTMLDivElement>();
- * const videoRef = ref<HTMLVideoElement>();
- * const inputRef = ref<HTMLInputElement>();
- *
- * // 在 h() 函数中绑定
- * h('div', { ref: containerRef }, '内容')
- *
- * // 挂载后访问 DOM 元素
- * containerRef.current?.classList.add('active')
- * ```
  */
 export function ref<T = Element>(): Ref<T> {
   const result: Ref<T> = { current: null };

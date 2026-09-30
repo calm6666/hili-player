@@ -38989,6 +38989,65 @@ class Hls {
 
     // 设置 endCC（与 M3U8Parser 行为一致）
     details.endCC = 0;
+
+    // ========================================================================
+    // 【AES-128 整片加密】消费对象清单里的 playlist.encryption
+    // （对应文本 HLS 路径的 #EXT-X-KEY：parseKey() → setFragLevelKeys()）
+    //
+    // 文本路径的完整链路是：`#EXT-X-KEY` → parseKey() 造 LevelKey → levelkeys → 每个
+    // Fragment 的 frag.levelkeys → Fragment.decryptdata getter 按 sn 推 IV。
+    // 对象注入路径以前**完全没有这一段**（ManifestEncryption 一路被忽略）⇒ 密文被当明文解 ⇒ 花屏。
+    // 这里按**同一套**数据结构补上，所以 KeyLoader / 解密器 / ABR 的既有行为一个字都不用改。
+    //
+    // ⚠ 本 fork 的 LevelDetails **没有** .key 字段（文本路径也是把 levelkeys 挂在 Fragment 上），
+    //   所以这里与文本路径一致：挂 levelkeys，让 Fragments 的 decryptdata getter 自然长出 decryptdata。
+    // ========================================================================
+    const encryption = playlist.encryption;
+    if (encryption && encryption.keyUrl) {
+      const keyFormat = encryption.keyFormat || 'identity';
+      // 与 parseKey() 一致：keyUri 用 M3U8Parser.resolve() 解析（绝对 URL 会被保留）
+      const keyUri = M3U8Parser.resolve(encryption.keyUrl, baseUrl);
+      // KEYFORMATVERSIONS：文本路径按 '/' 切分后转数字（默认 [1]）
+      const keyFormatVersions = (encryption.keyFormatVersions
+        ? String(encryption.keyFormatVersions)
+        : '1').split('/').map(Number).filter(Number.isFinite);
+      let iv = null;
+      if (encryption.iv) {
+        // hex 字符串 → 字节。AttrList.hexadecimalInteger() 期望 '0x' 前缀，这里补上，
+        // 与文本路径对 `IV=0x…` 的处理**完全同源**（避免两套 hex 解析）。
+        const ivHex = String(encryption.iv).trim();
+        iv = new AttrList({
+          IV: ivHex.startsWith('0x') || ivHex.startsWith('0X') ? ivHex : '0x' + ivHex
+        }).hexadecimalInteger('IV');
+        if (!iv || iv.length !== 16) {
+          logger.warn(`[manifest] invalid IV for AES-128 key "${keyUri}": "${encryption.iv}" - expected 16 bytes (32 hex chars)`);
+          iv = null;
+        }
+      }
+      const levelKey = new LevelKey('AES-128', keyUri, keyFormat, keyFormatVersions, iv);
+      if (levelKey.isSupported()) {
+        const levelkeys = {};
+        levelkeys[levelKey.keyFormat] = levelKey;
+        // 与文本路径**逐字同源**（M3U8Parser.parseLevelPlaylist 的 setFragLevelKeys / init 段处理）：
+        //   ① 每个 Fragment 挂 levelkeys —— 支撑 frag.encrypted；
+        //   ② 顺手把 _decryptdata 定下来 —— 因为 Fragment.decryptdata getter 里
+        //      `levelkeys.identity.getDecryptData(this.sn)` **少传了 levelKeys 参数**
+        //      （:721，是本 fork 的既有小瑕疵）；事先定好就绕开了它，
+        //      也顺手把 IV 定死（不再走 getter 里按 sn 推的分支）。
+        //   init 段与文本路径一样取序号 0 的 IV（相当于 getDecryptData(0)）。
+        for (let i = 0; i < details.fragments.length; i++) {
+          const frag = details.fragments[i];
+          frag.levelkeys = levelkeys;
+          frag._decryptdata = levelKey.getDecryptData(frag.sn, levelkeys);
+        }
+        if (initSeg) {
+          initSeg.levelkeys = levelkeys;
+          initSeg._decryptdata = levelKey.getDecryptData(0, levelkeys);
+        }
+      } else {
+        logger.warn(`[manifest] ignoring unsupported encryption key format "${keyFormat}" (uri: ${keyUri})`);
+      }
+    }
     return details;
   }
 }

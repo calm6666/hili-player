@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { createStateManager } from '@/core/state';
+import { batch } from '@/core';
 
 describe('StateManager', () => {
   it('should create StateManager with empty initial state', () => {
@@ -110,5 +111,20 @@ describe('StateManager', () => {
     state.subscribe('count', normalListener);
     expect(() => state.set('count', 5)).not.toThrow();
     await vi.waitFor(() => expect(normalListener).toHaveBeenCalled());
+  });
+
+  it('effect 触发机构尊重 batch：批量内多次 set 合并为一次通知', () => {
+    const state = createStateManager({ count: 0 });
+    const listener = vi.fn();
+    state.subscribe('count', listener);
+
+    batch(() => {
+      state.set('count', 1);
+      state.set('count', 2);
+    });
+
+    // 批量内两次 set 只触发一次通知，oldVal 为批量前的初始值
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(2, 0);
   });
 });

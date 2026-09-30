@@ -5,7 +5,7 @@
  * 独立的函数组件，拥有自己的生命周期
  */
 
-import { h, defineComponent, ref, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
@@ -75,26 +75,17 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   // DOM 引用
   // ============================================
 
-  /** 选集按钮元素引用 */
-  const ctrlEplistBtnRef = ref<HTMLDivElement>();
-
-  /** 选集结果显示元素引用 */
-  const eplistResultRef = ref<HTMLDivElement>();
-
-  /** 选集菜单列表元素引用 */
-  const eplistMenuRef = ref<HTMLUListElement>();
-
   /** 画中画按钮元素引用 */
-  const pipBtnRef = ref<HTMLDivElement>();
+  const pipBtnRef = useTemplateRef<HTMLDivElement>(lifecycle, 'pipBtnRef');
 
   /** 宽屏按钮元素引用 */
-  const wideBtnRef = ref<HTMLDivElement>();
+  const wideBtnRef = useTemplateRef<HTMLDivElement>(lifecycle, 'wideBtnRef');
 
   /** 网页全屏按钮元素引用 */
-  const webBtnRef = ref<HTMLDivElement>();
+  const webBtnRef = useTemplateRef<HTMLDivElement>(lifecycle, 'webBtnRef');
 
   /** 全屏按钮元素引用 */
-  const fullBtnRef = ref<HTMLDivElement>();
+  const fullBtnRef = useTemplateRef<HTMLDivElement>(lifecycle, 'fullBtnRef');
 
   // ============================================
   // 事件处理函数
@@ -121,13 +112,13 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   const toggleWide = (): void => { lifecycle.emit?.('wide'); };
 
   /** 全屏按钮 API 引用 */
-  const fullscreenRef = ref<LottieIconApi>();
+  const fullscreenRef = useTemplateRef<LottieIconApi>(lifecycle, 'fullscreenRef');
   /** 网页全屏按钮 API 引用 */
-  const webFullscreenRef = ref<LottieIconApi>();
+  const webFullscreenRef = useTemplateRef<LottieIconApi>(lifecycle, 'webFullscreenRef');
   /** 宽屏按钮 API 引用 */
-  const wideRef = ref<LottieIconApi>();
+  const wideRef = useTemplateRef<LottieIconApi>(lifecycle, 'wideRef');
   /** 画中画按钮 API 引用 */
-  const pipRef = ref<LottieIconApi>();
+  const pipRef = useTemplateRef<LottieIconApi>(lifecycle, 'pipRef');
 
 
 
@@ -135,7 +126,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
    * 全屏悬悬停事件处理函数
    */
   const mouseFullscreenEnter = (): void => {
-    fullscreenRef.current?.play();
+    fullscreenRef.value?.play();
   };
 
   /**
@@ -148,7 +139,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
    * 网页全屏悬悬停事件处理函数
    */
   const mouseWebEnter = (): void => {
-    webFullscreenRef.current?.play();
+    webFullscreenRef.value?.play();
   };
 
   /**
@@ -161,7 +152,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
    * 宽屏悬悬停事件处理函数
    */
   const mouseWideEnter = (): void => {
-    wideRef.current?.play();
+    wideRef.value?.play();
   };
 
   /**
@@ -174,7 +165,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
    * 画中画悬悬停事件处理函数
    */
   const mousePipEnter = (): void => {
-    pipRef.current?.play();
+    pipRef.value?.play();
   };
 
   /**
@@ -205,8 +196,8 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       PlayerStateKeyEnum.IS_FULLSCREEN,
       (isFullscreen) => {
         console.log("RightControls isFullscreen: ", isFullscreen);
-        if (fullBtnRef.current) {
-          fullBtnRef.current.classList.toggle('state-active', isFullscreen);
+        if (fullBtnRef.value) {
+          fullBtnRef.value.classList.toggle('state-active', isFullscreen);
         }
       },
       lifecycle
@@ -222,8 +213,8 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       PlayerStateKeyEnum.IS_WEB_FULLSCREEN,
       (isWebFullscreen) => {
         console.log("RightControls isWebFullscreen: ", isWebFullscreen);
-        if (webBtnRef.current) {
-          webBtnRef.current.classList.toggle('state-active', isWebFullscreen);
+        if (webBtnRef.value) {
+          webBtnRef.value.classList.toggle('state-active', isWebFullscreen);
         }
       },
       lifecycle
@@ -239,8 +230,8 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       PlayerStateKeyEnum.IS_PIP,
       (isPip) => {
         console.log("RightControls isPip: ", isPip);
-        if (pipBtnRef.current) {
-          pipBtnRef.current.classList.toggle('state-active', isPip);
+        if (pipBtnRef.value) {
+          pipBtnRef.value.classList.toggle('state-active', isPip);
         }
       },
       lifecycle
@@ -255,8 +246,8 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       state,
       PlayerStateKeyEnum.IS_WIDE_SCREEN,
       (isWide) => {
-        if (wideBtnRef.current) {
-          wideBtnRef.current.classList.toggle('state-active', isWide);
+        if (wideBtnRef.value) {
+          wideBtnRef.value.classList.toggle('state-active', isWide);
         }
       },
       lifecycle
@@ -281,11 +272,10 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         class: 'player-ctrl-btn player-ctrl-eplist',
         role: 'button',
         'aria-label': '选集',
-        ref: ctrlEplistBtnRef,
         onMouseEnter: () => lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'show' }),
         onMouseLeave: () => lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'hide' })
       },
-        h('div', { class: 'player-ctrl-eplist-result', ref: eplistResultRef }, '选集'),
+        h('div', { class: 'player-ctrl-eplist-result' }, '选集'),
         h('div', { class: 'player-ctrl-eplist-menu-wrap', style: { minHeight: '180px' } },
           h('div', { class: 'player-ctrl-eplist-section' },
             h('div', {
@@ -304,7 +294,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
                   transitionDuration: '0ms',
                   transform: 'translate(0px, 0px) scale(1) translateZ(0px)'
                 },
-                ref: eplistMenuRef
               },
                 h('li', { class: 'player-ctrl-eplist-multi-menu-item state-multi-active-item', 'data-cid': '554164205' },
                   h('span', { class: 'common-svg-icon' }),
@@ -340,7 +329,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         class: 'player-ctrl-btn player-ctrl-pip',
         role: 'button',
         'aria-label': '画中画',
-        ref: pipBtnRef,
+        ref: 'pipBtnRef',
         onClick: togglePip,
         onMouseEnter: mousePipEnter,
         onMouseLeave: mousePipLeave,
@@ -360,7 +349,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
                 autoplay: false
               }
             ],
-            ref: pipRef
+            ref: 'pipRef'
           }
           )
         ),
@@ -373,7 +362,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         class: 'player-ctrl-btn player-ctrl-wide',
         role: 'button',
         'aria-label': '宽屏',
-        ref: wideBtnRef,
+        ref: 'wideBtnRef',
         onClick: toggleWide,
         onMouseEnter: mouseWideEnter,
         onMouseLeave: mouseWideLeave,
@@ -393,7 +382,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
                 autoplay: false
               }
             ],
-            ref: wideRef
+            ref: 'wideRef'
           }
           )
         )
@@ -406,7 +395,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         class: 'player-ctrl-btn player-ctrl-web',
         role: 'button',
         'aria-label': '网页全屏',
-        ref: webBtnRef,
+        ref: 'webBtnRef',
         onClick: toggleWebFullscreen,
         onMouseEnter: mouseWebEnter,
         onMouseLeave: mouseWebLeave,
@@ -426,7 +415,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
                 autoplay: false
               }
             ],
-            ref: webFullscreenRef
+            ref: 'webFullscreenRef'
           }
           )
         )
@@ -437,7 +426,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       class: 'player-ctrl-btn player-ctrl-full',
       role: 'button',
       'aria-label': '全屏',
-      ref: fullBtnRef,
+      ref: 'fullBtnRef',
       onMouseEnter: mouseFullscreenEnter,
       onMouseLeave: mouseFullscreenLeave,
       onClick: toggleFullscreen
@@ -447,7 +436,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
           {
             name: 'fullscreen',
             animationData: fullscreenAnimationData,
-            ref: fullscreenRef,
+            ref: 'fullscreenRef',
             autoplay: false
           }
         )

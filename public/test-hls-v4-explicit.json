@@ -1,4 +1,5 @@
 {
+  "mediaSourceType": "hls",
   "duration": 235.5,
   "minBufferTime": 25.0,
   "video": [

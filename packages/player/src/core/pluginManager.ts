@@ -6,17 +6,17 @@
  * 每个插件管理器实例管理一组插件，拥有独立的状态、事件和钩子系统
  */
 
-import type { Plugin, PluginContext } from './plugin';
-import type { VideoPlayer } from '@/hili-player/index';
-import type { StreamPlugin } from '@/types/streamPlugin';
-import { createStateManager } from '@/core/state';
-import { createTypedEventBus } from '@/core/eventBus';
-import { createHookSystem } from '@/core/hooks';
-import type { StateManager, PlayerEventBus, HookSystem } from '@/core';
-import { PlayerEventMap } from '@/core/events';
-import { createLogger } from '@/utils';
+import type { Plugin, PluginContext } from "./plugin";
+import type { VideoPlayer } from "@/hili-player/index";
+import type { StreamPlugin } from "@/types/streamPlugin";
+import { createStateManager } from "@/core/state";
+import { createTypedEventBus } from "@/core/eventBus";
+import { createHookSystem } from "@/core/hooks";
+import type { TypedStateManager, PlayerEventBus, HookSystem } from "@/core";
+import { PlayerEventMap } from "@/core/events";
+import { createLogger } from "@/utils";
 
-const logger = createLogger('PluginManager');
+const logger = createLogger("PluginManager");
 
 /**
  * 插件管理器类
@@ -39,7 +39,7 @@ export class PluginManager {
    * 插件专用的状态管理器
    * 插件可以使用此状态管理器存储自己的状态
    */
-  state: StateManager;
+  state: TypedStateManager;
 
   /**
    * 插件专用的事件总线
@@ -77,7 +77,7 @@ export class PluginManager {
    * @returns 是否为 StreamPlugin
    */
   private isStreamPlugin(p: Plugin): p is Plugin & StreamPlugin {
-    return 'type' in p && 'load' in p && 'getStats' in p;
+    return "type" in p && "load" in p && "getStats" in p;
   }
 
   /**
@@ -105,9 +105,14 @@ export class PluginManager {
     plugin.install(this.player);
 
     // 调试模式继承：如果插件有 options 且 options.debug 未定义，则继承播放器的 debug 设置
-    if ('options' in plugin) {
-      const pluginWithOpts = plugin as Plugin & { options: Record<string, unknown> };
-      if (pluginWithOpts.options && pluginWithOpts.options.debug === undefined) {
+    if ("options" in plugin) {
+      const pluginWithOpts = plugin as Plugin & {
+        options: Record<string, unknown>;
+      };
+      if (
+        pluginWithOpts.options &&
+        pluginWithOpts.options.debug === undefined
+      ) {
         pluginWithOpts.options.debug = this.player.props.debug;
       }
     }

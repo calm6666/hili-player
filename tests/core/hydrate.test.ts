@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { h, defineComponent, hydrate, ref, _createEl } from '@/core';
+import { h, defineComponent, hydrate, ref, _createEl, useTemplateRef, signal, onEffect } from '@/core';
+import type { Signal } from '@/core';
 
 describe('hydrate', () => {
   let container: HTMLElement;
@@ -101,5 +102,27 @@ describe('hydrate', () => {
     hydrate(vnode, container);
 
     expect(container.textContent).toBe('Hello World');
+  });
+
+  it('should bind nested useTemplateRef 字符串 ref 并让 onEffect 更新 DOM', () => {
+    container.innerHTML = '<div class="box"><span class="n">0</span></div>';
+    const count = signal(0);
+
+    const Comp = defineComponent<{ count: Signal<number> }>((props, lc) => {
+      // 嵌套元素上的字符串 ref：水合时必须沿 __parent 链解析到组件 _templateRefs
+      const nRef = useTemplateRef<HTMLSpanElement>(lc, 'n');
+      onEffect(lc, () => {
+        if (nRef.value) nRef.value.textContent = String(props.count.value);
+      });
+      return h('div', { class: 'box' }, h('span', { class: 'n', ref: 'n' }, '0'));
+    });
+
+    hydrate(h(Comp, { count }), container);
+
+    const n = container.querySelector('.n')!;
+    expect(n.textContent).toBe('0');
+
+    count.value = 42;
+    expect(n.textContent).toBe('42');
   });
 });

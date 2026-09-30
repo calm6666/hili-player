@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -34,7 +34,7 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
   /**
    * 复选框盒子元素引用
    */
-  const checkboxBoxRef = ref<HTMLSpanElement>();
+  const checkboxBoxRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'checkboxBoxRef');
 
   /**
    * 处理点击事件
@@ -44,11 +44,11 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
     checked = !checked;
 
     // 更新 DOM 类名
-    if (checkboxBoxRef.current) {
+    if (checkboxBoxRef.value) {
       if (checked) {
-        checkboxBoxRef.current.classList.add('checkbox-checked');
+        checkboxBoxRef.value.classList.add('checkbox-checked');
       } else {
-        checkboxBoxRef.current.classList.remove('checkbox-checked');
+        checkboxBoxRef.value.classList.remove('checkbox-checked');
       }
     }
 
@@ -81,11 +81,11 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
    */
   const setChecked = (value: boolean): void => {
     checked = value;
-    if (checkboxBoxRef.current) {
+    if (checkboxBoxRef.value) {
       if (checked) {
-        checkboxBoxRef.current.classList.add('checkbox-checked');
+        checkboxBoxRef.value.classList.add('checkbox-checked');
       } else {
-        checkboxBoxRef.current.classList.remove('checkbox-checked');
+        checkboxBoxRef.value.classList.remove('checkbox-checked');
       }
     }
   };
@@ -119,7 +119,7 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
       },
         h('span', {
           class: 'checkbox-box',
-          ref: checkboxBoxRef,
+          ref: 'checkboxBoxRef',
         }),
         renderLabel()
       )

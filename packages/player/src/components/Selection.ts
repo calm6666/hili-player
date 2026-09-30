@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -66,13 +66,10 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle: Comp
   // ============================================
 
   /** 颜色输入框元素引用 */
-  const inputRef = ref<HTMLInputElement>();
+  const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
 
   /** 颜色预览方块元素引用 */
-  const colorBoxRef = ref<HTMLDivElement>();
-
-  /** 颜色选择器列表元素引用 */
-  const colorPickerRef = ref<HTMLUListElement>();
+  const colorBoxRef = useTemplateRef<HTMLDivElement>(lifecycle, 'colorBoxRef');
 
   // ============================================
   // 事件处理
@@ -83,11 +80,11 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle: Comp
    * @param color - 选中的颜色值
    */
   const handleColorSelect = (color: string): void => {
-    if (inputRef.current) {
-      inputRef.current.value = color;
+    if (inputRef.value) {
+      inputRef.value.value = color;
     }
-    if (colorBoxRef.current) {
-      colorBoxRef.current.style.background = color;
+    if (colorBoxRef.value) {
+      colorBoxRef.value.style.background = color;
     }
     props.onColorChange?.(color);
     lifecycle.emit?.('colorChange', color);
@@ -122,11 +119,11 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle: Comp
    * @param color - 颜色值
    */
   const setColor = (color: string): void => {
-    if (inputRef.current) {
-      inputRef.current.value = color;
+    if (inputRef.value) {
+      inputRef.value.value = color;
     }
-    if (colorBoxRef.current) {
-      colorBoxRef.current.style.background = color;
+    if (colorBoxRef.value) {
+      colorBoxRef.value.style.background = color;
     }
   };
 
@@ -231,11 +228,11 @@ export const Selection = defineComponent<SelectionProps>((props, lifecycle: Comp
       h('div', { class: 'row-title' }, '颜色'),
       h('div', { class: 'row-selection' },
         h('div', { class: 'color-input-warp' },
-          h('input', { type: 'text', ref: inputRef }),
-          h('div', { class: 'color-input-box', ref: colorBoxRef })
+          h('input', { type: 'text', ref: 'inputRef' }),
+          h('div', { class: 'color-input-box', ref: 'colorBoxRef' })
         )
       ),
-      h('ul', { class: 'color-picker-options', ref: colorPickerRef }, ...renderColorOptions())
+      h('ul', { class: 'color-picker-options' }, ...renderColorOptions())
     );
   };
 

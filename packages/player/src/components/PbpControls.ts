@@ -5,7 +5,7 @@
  * 独立的函数组件，拥有自己的生命周期
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 
 export interface PbpControlsProps {
   visible?: boolean;
@@ -23,7 +23,7 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
   // ============================================
 
   /** 高能进度条容器元素引用 */
-  const pbpRef = ref<HTMLDivElement>();
+  const pbpRef = useTemplateRef<HTMLDivElement>(lifecycle, 'pbpRef');
 
   // ============================================
   // DOM 更新方法
@@ -33,8 +33,8 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
    * 显示高能进度条组件
    */
   const show = (): void => {
-    if (pbpRef.current) {
-      pbpRef.current.style.display = '';
+    if (pbpRef.value) {
+      pbpRef.value.style.display = '';
     }
   };
 
@@ -42,8 +42,8 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
    * 隐藏高能进度条组件
    */
   const hide = (): void => {
-    if (pbpRef.current) {
-      pbpRef.current.style.display = 'none';
+    if (pbpRef.value) {
+      pbpRef.value.style.display = 'none';
     }
   };
 
@@ -85,7 +85,7 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
   // ============================================
   // 主渲染函数
   // ============================================
-  return h('div', { class: 'player-pbp', ref: pbpRef, onClick: handlePbpClick, style: { display: props.visible ? '' : 'none' } },
+  return h('div', { class: 'player-pbp', ref: 'pbpRef', onClick: handlePbpClick, style: { display: props.visible ? '' : 'none' } },
     h('span', { class: 'common-svg-icon' }),
     h('div', { class: 'player-pbp-pin', onClick: handlePinClick },
       h('div', { class: 'player-pbp-pin-icon' },

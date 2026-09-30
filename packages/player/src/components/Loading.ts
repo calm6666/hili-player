@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -26,10 +26,10 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
   // ============================================
 
   /** 加载面板容器元素引用 */
-  const loadingPanelRef = ref<HTMLDivElement>();
+  const loadingPanelRef = useTemplateRef<HTMLDivElement>(lifecycle, 'loadingPanelRef');
 
   /** 加载文本元素引用 */
-  const loadingTextRef = ref<HTMLDivElement>();
+  const loadingTextRef = useTemplateRef<HTMLDivElement>(lifecycle, 'loadingTextRef');
 
   // ============================================
   // DOM 更新函数
@@ -39,8 +39,8 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
    * 显示加载面板
    */
   const show = (): void => {
-    if (loadingPanelRef.current) {
-      loadingPanelRef.current.style.display = '';
+    if (loadingPanelRef.value) {
+      loadingPanelRef.value.style.display = '';
     }
   };
 
@@ -48,8 +48,8 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
    * 隐藏加载面板，移除加载状态样式
    */
   const hide = (): void => {
-    if (loadingPanelRef.current) {
-      loadingPanelRef.current.classList.remove('state-loading');
+    if (loadingPanelRef.value) {
+      loadingPanelRef.value.classList.remove('state-loading');
     }
   };
 
@@ -58,8 +58,8 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
    * @param text - 提示文本内容
    */
   const setText = (text: string): void => {
-    if (loadingTextRef.current) {
-      loadingTextRef.current.textContent = text;
+    if (loadingTextRef.value) {
+      loadingTextRef.value.textContent = text;
     }
   };
 
@@ -72,8 +72,8 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
     if (props.loading === false) {
       hide();
     }
-    if (props.text && loadingTextRef.current) {
-      loadingTextRef.current.innerHTML = props.text;
+    if (props.text && loadingTextRef.value) {
+      loadingTextRef.value.innerHTML = props.text;
     }
 
     lifecycle.emit?.('loadingMounted', {
@@ -95,11 +95,11 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
     'div',
     {
       class: 'player-loading-panel',
-      ref: loadingPanelRef,
+      ref: 'loadingPanelRef',
     },
     h('div', {
       class: 'player-loading-panel-text',
-      ref: loadingTextRef,
+      ref: 'loadingTextRef',
     }),
     h(
       'div',

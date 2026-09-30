@@ -5,7 +5,7 @@
  * 视频播放结束后展示的结尾面板，包含 UP 主信息、互动按钮、相关视频和分享功能
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { VNode } from '@/types';
 
 /**
@@ -69,13 +69,7 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
   // ============================================
 
   /** 结尾面板外层容器 DOM 引用，通过 data-select 属性控制显示哪个子面板 */
-  const endingWrapRef = ref<HTMLDivElement>();
-
-  /** 结尾内容面板 DOM 引用 */
-  const endingPanelRef = ref<HTMLDivElement>();
-
-  /** 分享面板 DOM 引用 */
-  const sharePanelRef = ref<HTMLDivElement>();
+  const endingWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'endingWrapRef');
 
   // ============================================
   // 方法
@@ -83,19 +77,19 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
 
   /** 显示结尾面板，将 data-select 设为 "1" 切换到结尾内容视图 */
   const showEndWrap = (): void => {
-    endingWrapRef.current?.setAttribute('data-select', '1');
+    endingWrapRef.value?.setAttribute('data-select', '1');
     lifecycle.emit?.('showEnd');
   };
 
   /** 显示分享面板，将 data-select 设为 "2" 切换到分享视图 */
   const showSharePanel = (): void => {
-    endingWrapRef.current?.setAttribute('data-select', '2');
+    endingWrapRef.value?.setAttribute('data-select', '2');
     lifecycle.emit?.('showShare');
   };
 
   /** 关闭分享面板，将 data-select 恢复为 "1" 回到结尾内容视图 */
   const closeSharePanel = (): void => {
-    endingWrapRef.current?.setAttribute('data-select', '1');
+    endingWrapRef.value?.setAttribute('data-select', '1');
     lifecycle.emit?.('closeShare');
   };
 
@@ -243,9 +237,9 @@ export const Ending = defineComponent<EndingProps>((props, lifecycle) => {
   // 组件渲染
   // ============================================
 
-  return h('div', { class: 'player-ending-wrap', ref: endingWrapRef },
+  return h('div', { class: 'player-ending-wrap', ref: 'endingWrapRef' },
     h('div', { class: 'player-ending-back' }),
-    h('div', { class: 'player-ending-panel', 'data-option': '1', ref: endingPanelRef }, renderEndingContent()),
-    h('div', { class: 'player-share-panel', 'data-option': '2', ref: sharePanelRef }, renderSharePanel())
+    h('div', { class: 'player-ending-panel', 'data-option': '1' }, renderEndingContent()),
+    h('div', { class: 'player-share-panel', 'data-option': '2' }, renderSharePanel())
   );
 });

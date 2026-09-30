@@ -6,7 +6,7 @@
  * 菜单悬停动画回调
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { VNode } from '@/types';
 
 /**
@@ -47,14 +47,8 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
   // DOM 引用
   // ============================================
 
-  /** 清晰度按钮根元素引用 */
-  const qualityBtnRef = ref<HTMLDivElement>();
-
   /** 当前清晰度显示文本元素引用 */
-  const qualityResultRef = ref<HTMLDivElement>();
-
-  /** 清晰度下拉菜单列表元素引用 */
-  const qualityMenuRef = ref<HTMLUListElement>();
+  const qualityResultRef = useTemplateRef<HTMLDivElement>(lifecycle, 'qualityResultRef');
 
   // ============================================
   // 事件处理函数
@@ -92,8 +86,8 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
       onClick: () => {
         lifecycle.emit?.('qualityChange', item.value);
         // 更新当前清晰度显示
-        if (qualityResultRef.current) {
-          qualityResultRef.current.innerText = item.label;
+        if (qualityResultRef.value) {
+          qualityResultRef.value.innerText = item.label;
         }
       },
     },
@@ -113,10 +107,10 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
    */
   lifecycle.onMounted = (): void => {
     // 设置初始清晰度显示文本
-    if (qualityResultRef.current && currentQuality) {
+    if (qualityResultRef.value && currentQuality) {
       const current = qualities.find((q) => q.value === currentQuality);
       if (current) {
-        qualityResultRef.current.innerText = current.label;
+        qualityResultRef.value.innerText = current.label;
       }
     }
     lifecycle.emit?.('qualityMenuMounted');
@@ -129,15 +123,14 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
     class: 'player-ctrl-btn player-ctrl-quality',
     role: 'button',
     'aria-label': '清晰度',
-    ref: qualityBtnRef,
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
   },
     // 当前清晰度显示
-    h('div', { class: 'player-ctrl-quality-result', ref: qualityResultRef }, '自动'),
+    h('div', { class: 'player-ctrl-quality-result', ref: 'qualityResultRef' }, '自动'),
     // 清晰度下拉菜单
     h('div', { class: 'player-ctrl-quality-menu-wrap' },
-      h('ul', { class: 'player-ctrl-quality-menu', ref: qualityMenuRef },
+      h('ul', { class: 'player-ctrl-quality-menu' },
         ...qualities.map((item) => renderQualityItem(item))
       )
     )

@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -47,7 +47,7 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
   /**
    * 开关根元素引用
    */
-  const switchRef = ref<HTMLDivElement>();
+  const switchRef = useTemplateRef<HTMLDivElement>(lifecycle, 'switchRef');
 
   /**
    * 处理开关状态切换事件
@@ -61,11 +61,11 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
     checked = !checked;
 
     // 更新 DOM 类名
-    if (switchRef.current) {
+    if (switchRef.value) {
       if (checked) {
-        switchRef.current.classList.add('switch-checked');
+        switchRef.value.classList.add('switch-checked');
       } else {
-        switchRef.current.classList.remove('switch-checked');
+        switchRef.value.classList.remove('switch-checked');
       }
     }
 
@@ -95,11 +95,11 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
    */
   const setChecked = (value: boolean): void => {
     checked = value;
-    if (switchRef.current) {
+    if (switchRef.value) {
       if (checked) {
-        switchRef.current.classList.add('switch-checked');
+        switchRef.value.classList.add('switch-checked');
       } else {
-        switchRef.current.classList.remove('switch-checked');
+        switchRef.value.classList.remove('switch-checked');
       }
     }
   };
@@ -110,11 +110,11 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
    */
   const setDisabled = (value: boolean): void => {
     disabled = value;
-    if (switchRef.current) {
+    if (switchRef.value) {
       if (disabled) {
-        switchRef.current.classList.add('switch-disabled');
+        switchRef.value.classList.add('switch-disabled');
       } else {
-        switchRef.current.classList.remove('switch-disabled');
+        switchRef.value.classList.remove('switch-disabled');
       }
     }
   };
@@ -138,7 +138,7 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
 
   return h('div', {
     class: 'ui-switch',
-    ref: switchRef,
+    ref: 'switchRef',
   },
     h('input', {
       type: 'checkbox',

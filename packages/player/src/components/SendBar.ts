@@ -5,7 +5,7 @@
  * 提供弹幕输入、发送、弹幕开关和设置面板等交互功能
  */
 
-import { h, defineComponent, ref } from '@/core';
+import { h, defineComponent, useTemplateRef } from '@/core';
 import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
 import type { AnimationFrameID } from '@/utils/rafTimeout';
 import type { ComponentLifecycle } from '@/types';
@@ -108,26 +108,23 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
   // DOM 元素引用
   // ============================================
 
-  /** 发送栏外层容器 DOM 引用 */
-  const sendingBarRef = ref<HTMLDivElement>();
-
   /** 弹幕设置图标 DOM 引用，用于绑定鼠标悬停事件 */
-  const settingIconRef = ref<HTMLDivElement>();
+  const settingIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'settingIconRef');
 
   /** 弹幕类型选择图标 DOM 引用，用于绑定鼠标悬停事件 */
-  const textSettingIconRef = ref<HTMLDivElement>();
+  const textSettingIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'textSettingIconRef');
 
   /** 弹幕设置面板容器 DOM 引用，用于控制面板的显示/隐藏 */
-  const settingWrapRef = ref<HTMLDivElement>();
+  const settingWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'settingWrapRef');
 
   /** 弹幕类型选择面板容器 DOM 引用，用于控制面板的显示/隐藏 */
-  const selectionContainerRef = ref<HTMLDivElement>();
+  const selectionContainerRef = useTemplateRef<HTMLDivElement>(lifecycle, 'selectionContainerRef');
 
   /** 弹幕输入框 DOM 引用 */
-  const inputRef = ref<HTMLInputElement>();
+  const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
 
   /** 弹幕开关复选框 DOM 引用 */
-  const switchInputRef = ref<HTMLInputElement>();
+  const switchInputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'switchInputRef');
 
   // ============================================
   // 事件处理
@@ -159,8 +156,8 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
     if (inputValue.trim()) {
       props.onSendDanmaku?.(inputValue.trim());
       lifecycle.emit?.('sendDanmaku', inputValue.trim());
-      if (inputRef.current) {
-        inputRef.current.value = '';
+      if (inputRef.value) {
+        inputRef.value.value = '';
         inputValue = '';
       }
     }
@@ -208,13 +205,13 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
       case 'setting':
         cancelRaf(dmShowpanel.setting.hideTimer!);
         dmShowpanel.setting.showTimer = rafTimeout(() => {
-          settingWrapRef.current?.classList.add('player-dm-setting-show');
+          settingWrapRef.value?.classList.add('player-dm-setting-show');
         }, 300);
         break;
       case 'selection':
         cancelRaf(dmShowpanel.selection.hideTimer!);
         dmShowpanel.selection.showTimer = rafTimeout(() => {
-          selectionContainerRef.current?.classList.add('player-mode-selection-show');
+          selectionContainerRef.value?.classList.add('player-mode-selection-show');
         }, 300);
         break;
     }
@@ -229,13 +226,13 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
       case 'setting':
         cancelRaf(dmShowpanel.setting.showTimer!);
         dmShowpanel.setting.hideTimer = rafTimeout(() => {
-          settingWrapRef.current?.classList.remove('player-dm-setting-show');
+          settingWrapRef.value?.classList.remove('player-dm-setting-show');
         }, 300);
         break;
       case 'selection':
         cancelRaf(dmShowpanel.selection.showTimer!);
         dmShowpanel.selection.hideTimer = rafTimeout(() => {
-          selectionContainerRef.current?.classList.remove('player-mode-selection-show');
+          selectionContainerRef.value?.classList.remove('player-mode-selection-show');
         }, 300);
         break;
     }
@@ -251,8 +248,8 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
    */
   const setInputValue = (value: string): void => {
     inputValue = value;
-    if (inputRef.current) {
-      inputRef.current.value = value;
+    if (inputRef.value) {
+      inputRef.value.value = value;
     }
   };
 
@@ -262,19 +259,19 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
    */
   const setDanmakuSwitch = (enabled: boolean): void => {
     isDanmakuEnabled = enabled;
-    if (switchInputRef.current) {
-      switchInputRef.current.checked = enabled;
+    if (switchInputRef.value) {
+      switchInputRef.value.checked = enabled;
     }
   };
 
   /** 聚焦弹幕输入框 */
   const focusInput = (): void => {
-    inputRef.current?.focus();
+    inputRef.value?.focus();
   };
 
   /** 让弹幕输入框失去焦点 */
   const blurInput = (): void => {
-    inputRef.current?.blur();
+    inputRef.value?.blur();
   };
 
   // ============================================
@@ -293,26 +290,26 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
   /** 组件挂载后绑定鼠标悬停事件并对外暴露控制方法 */
   lifecycle.onMounted = (): void => {
     // 添加事件监听
-    settingIconRef.current?.addEventListener('mouseenter', handleSettingMouseEnter);
-    settingIconRef.current?.addEventListener('mouseleave', handleSettingMouseLeave);
-    textSettingIconRef.current?.addEventListener('mouseenter', handleTextSettingMouseEnter);
-    textSettingIconRef.current?.addEventListener('mouseleave', handleTextSettingMouseLeave);
+    settingIconRef.value?.addEventListener('mouseenter', handleSettingMouseEnter);
+    settingIconRef.value?.addEventListener('mouseleave', handleSettingMouseLeave);
+    textSettingIconRef.value?.addEventListener('mouseenter', handleTextSettingMouseEnter);
+    textSettingIconRef.value?.addEventListener('mouseleave', handleTextSettingMouseLeave);
 
     lifecycle.emit?.('sendBarMounted', { setInputValue, setDanmakuSwitch, focusInput, blurInput });
   };
 
   /** 组件销毁前移除鼠标悬停事件监听 */
   lifecycle.onBeforeDestroy = (): void => {
-    settingIconRef.current?.removeEventListener('mouseenter', handleSettingMouseEnter);
-    settingIconRef.current?.removeEventListener('mouseleave', handleSettingMouseLeave);
-    textSettingIconRef.current?.removeEventListener('mouseenter', handleTextSettingMouseEnter);
-    textSettingIconRef.current?.removeEventListener('mouseleave', handleTextSettingMouseLeave);
+    settingIconRef.value?.removeEventListener('mouseenter', handleSettingMouseEnter);
+    settingIconRef.value?.removeEventListener('mouseleave', handleSettingMouseLeave);
+    textSettingIconRef.value?.removeEventListener('mouseenter', handleTextSettingMouseEnter);
+    textSettingIconRef.value?.removeEventListener('mouseleave', handleTextSettingMouseLeave);
   };
 
   // ============================================
   // 组件渲染
   // ============================================
-  return h('div', { class: 'player-sending-bar', ref: sendingBarRef },
+  return h('div', { class: 'player-sending-bar' },
     // 视频信息
     h('div', { class: 'player-video-info' },
       h('div', { class: 'player-video-info-online' },
@@ -335,7 +332,7 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
             class: 'danmaku-switch-input',
             type: 'checkbox',
             checked: isDanmakuEnabled,
-            ref: switchInputRef,
+            ref: 'switchInputRef',
             onChange: handleSwitchChange,
           }),
           h('label', { class: 'danmaku-switch-label' },
@@ -351,10 +348,10 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
       // 弹幕设置
       h('div', {
         class: 'player-dm-setting',
-        ref: settingIconRef,
+        ref: 'settingIconRef',
       },
         h('span', { class: 'common-svg-icon' }),
-        h('div', { class: 'player-dm-setting-wrap', ref: settingWrapRef },
+        h('div', { class: 'player-dm-setting-wrap', ref: 'settingWrapRef' },
           h('div', { class: 'player-dm-setting-box ui ui-panel ui-dark' })
         )
       ),
@@ -364,12 +361,12 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
           // 弹幕类型按钮
           h('div', {
             class: 'player-video-btn-dm',
-            ref: textSettingIconRef,
+            ref: 'textSettingIconRef',
           },
             h('span', { class: 'player-iconfont player-iconfont-danmakutype' },
               h('span', { class: 'common-svg-icon' })
             ),
-            h('div', { class: 'player-mode-selection-container', ref: selectionContainerRef })
+            h('div', { class: 'player-mode-selection-container', ref: 'selectionContainerRef' })
           ),
           // 登录提示
           props.showLoginTip ? h('div', { class: 'player-dm-wrap' },
@@ -384,7 +381,7 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
             placeholder: props.placeholder || '发个友善的弹幕见证当下',
             autocomplete: 'off',
             style: { display: props.showLoginTip ? 'none' : 'block' },
-            ref: inputRef,
+            ref: 'inputRef',
             onFocus: handleInputFocus,
             onBlur: handleInputBlur,
             onInput: handleInputChange,

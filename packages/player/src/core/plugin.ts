@@ -6,8 +6,8 @@
  * 包括插件接口、状态管理器、事件总线、钩子系统等
  */
 
-import type { VideoPlayer } from '@/hili-player/index';
-import type { PlayerEventBus } from '@/core/events';
+import type { VideoPlayer } from "@/hili-player/index";
+import type { TypedStateManager, PlayerEventBus } from "@/core";
 export type { PlayerEventBus };
 
 /**
@@ -89,7 +89,10 @@ export interface StateManager {
    * @param listener - 状态变化时的回调函数，接收新值和旧值
    * @returns 取消订阅的函数
    */
-  subscribe(path: string, listener: (newVal: unknown, oldVal: unknown) => void): () => void;
+  subscribe(
+    path: string,
+    listener: (newVal: unknown, oldVal: unknown) => void,
+  ): () => void;
 }
 
 /**
@@ -122,7 +125,7 @@ export interface PluginContext {
   /** 播放器实例 */
   player: VideoPlayer;
   /** 状态管理器 */
-  state: StateManager;
+  state: TypedStateManager;
   /** 事件总线 */
   events: PlayerEventBus;
   /** 钩子系统 */
@@ -137,11 +140,11 @@ export interface PluginContext {
  */
 export const PlayerHooks = {
   /** 播放前钩子，可用于修改播放参数 */
-  BEFORE_PLAY: 'player:beforePlay',
+  BEFORE_PLAY: "player:beforePlay",
   /** 播放后钩子，可用于统计播放次数 */
-  AFTER_PLAY: 'player:afterPlay',
+  AFTER_PLAY: "player:afterPlay",
   /** 跳转前钩子，可用于修改跳转目标时间 */
-  BEFORE_SEEK: 'player:beforeSeek',
+  BEFORE_SEEK: "player:beforeSeek",
   /** 跳转后钩子，可用于记录跳转历史 */
-  AFTER_SEEK: 'player:afterSeek',
+  AFTER_SEEK: "player:afterSeek",
 } as const;

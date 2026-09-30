@@ -1,0 +1,11 @@
+{
+  "name": "demo-prod",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "生产构建验证 demo：通过 monorepo 链接导入打包后的 @hili-player/player 与 @hili-player/plugins",
+  "dependencies": {
+    "@hili-player/player": "workspace:*",
+    "@hili-player/plugins": "workspace:*"
+  }
+}
