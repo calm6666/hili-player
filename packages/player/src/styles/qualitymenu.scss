@@ -1,0 +1,307 @@
+// ============================================
+// 清晰度面板样式 (QualityMenu)
+// ============================================
+// 对应组件：packages/player/src/components/QualityMenu.ts
+// DOM 参考：bilibili 播放器 .bpx-player-ctrl-quality-*（类名改写为 player-ctrl-quality-*）
+//
+// ── 为什么每条规则都带 :not(#player-ctrl-quality-boost) ──────────────────────
+// styles/index.scss 的 .player-docker{...} 巨型块里**重复定义**了一份 .player-ctrl-quality-*，
+// 编译后最深的旧规则是：
+//   .player-docker .player-container .player-primary-area .player-video-area .player-control-wrap
+//   .player-control-entity .player-control-bottom .player-control-bottom-right
+//   .player-ctrl-quality .player-ctrl-quality-menu-wrap .player-ctrl-quality-menu
+//   .player-ctrl-quality-menu-item .player-ctrl-quality-badge          → 13 个类
+// （styles/controls.scss 里还有一份同族规则，最深 5 个类，同样排在本文件之后。）
+// 本文件被 @use 在 index.scss 顶部 → 先输出，**同特异性时后出的旧规则会赢**。
+// 只用 .player-docker .player-control-bottom-right（3 个类）压不过 13 个类。
+//
+// 因此统一前缀：
+//   .player-docker .player-control-bottom-right .player-ctrl-quality:not(#player-ctrl-quality-boost)
+// :not(#…) 只贡献 1 个 id 权重（DOM 里不存在该 id，纯提权、不改变匹配范围），
+// 一次提权即可压过任意数量的类选择器，选择器依旧短、易读、不依赖 8 层祖先链。
+//
+// 为什么不用 !important：
+//   1. 本组件的显隐由 JS 写内联 style（根按钮的 visibility/width、自动徽标与气泡的 display），
+//      !important 会压过内联样式，直接把显隐逻辑打死；
+//   2. RightControls.ts 也会往根节点写内联 style.display（设置里关掉清晰度按钮），同理不能压。
+//
+// 约定：
+//   - 类名统一 player- 前缀，禁用 bpx- / bui-
+//   - 选中态统一 player-state-active
+//   - 主题色只用 var(--player-primary-color, #00a1d6) / var(--player-fn-color, #00aeec)
+
+/// 特异性提权片段：:not(#…) = 1 个 id 权重
+$q-boost: ':not(#player-ctrl-quality-boost)';
+
+/// 面板底色 / 条目配色（沿用既有 index.scss 的 .player-ctrl-quality-menu-wrap 底色）
+$q-menu-bg: hsla(0, 0%, 8%, 0.9);
+$q-item-color: hsla(0, 0%, 100%, 0.9);
+$q-item-hover-bg: hsla(0, 0%, 100%, 0.1);
+$q-badge-bg: hsla(0, 0%, 100%, 0.1);
+$q-badge-border: hsla(0, 0%, 100%, 0.24);
+$q-badge-color: hsla(0, 0%, 100%, 0.6);
+/// 会员粉（沿用既有 .player-ctrl-quality-badge-bigvip 的配色，并非主题色）
+$q-vip-bg: #f25d8e;
+/// 主题色
+$q-primary: var(--player-primary-color, #00a1d6);
+/// 功能色（hover 等次级强调）
+$q-fn: var(--player-fn-color, #00aeec);
+
+// ============================================
+// 1. 根节点 + 顶部「当前清晰度」
+// ============================================
+
+.player-docker .player-control-bottom-right .player-ctrl-quality#{$q-boost} {
+  align-items: center;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  // .player-ctrl-btn 基态 font-size:0，这里恢复面板字号
+  font-size: 12px;
+  width: auto;
+
+  .player-ctrl-quality-result {
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .player-ctrl-quality-result-wrap {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+    position: relative;
+  }
+
+  .player-ctrl-quality-result-name {
+    display: block;
+    max-width: 132px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 「自动」徽标：是否显示由组件写内联 display 控制（非自动档 → none）
+  // 参考 DOM 里它是绝对定位的上标；这里改为文档流内紧跟档位名的小胶囊，
+  // 长档位名被 ellipsis 截断时不会出现上标压在文字上的情况
+  .player-ctrl-quality-result-auto-badge {
+    align-items: center;
+    background-color: hsla(0, 0%, 100%, 0.12);
+    border: 0.5px solid hsla(0, 0%, 100%, 0.3);
+    border-radius: 3px;
+    box-sizing: border-box;
+    color: hsla(0, 0%, 100%, 0.5);
+    display: inline-flex;
+    flex: none;
+    font-size: 8px;
+    font-weight: 400;
+    height: 13px;
+    justify-content: center;
+    line-height: 1;
+    padding: 0 3px;
+    white-space: nowrap;
+  }
+
+  // ============================================
+  // 2. 下拉面板
+  // ============================================
+
+  .player-ctrl-quality-menu-wrap {
+    background-color: $q-menu-bg;
+    border-radius: 2px;
+    bottom: 41px;
+    box-sizing: border-box;
+    cursor: pointer;
+    left: 50%;
+    margin: 0;
+    max-height: 580px;
+    // 旧规则是 overflow:hidden（档位多时会被裁掉），改为纵向可滚 + 细滚动条
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 0;
+    position: absolute;
+    scrollbar-color: hsla(0, 0%, 100%, 0.3) transparent;
+    scrollbar-width: thin;
+    transform: translateX(-50%);
+
+    // Chromium / WebKit
+    &::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: hsla(0, 0%, 100%, 0.3);
+      border-radius: 3px;
+
+      &:hover {
+        background: hsla(0, 0%, 100%, 0.45);
+      }
+    }
+
+    &::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
+    // 基态收起；展开由第 3 节的 .state-show 规则负责
+    .player-ctrl-quality-menu {
+      display: none;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .player-ctrl-quality-menu-item {
+      align-items: center;
+      // 旧规则是 content-box + width:145px（实际占 169px），统一为 border-box
+      box-sizing: border-box;
+      color: $q-item-color;
+      cursor: pointer;
+      display: flex;
+      font-size: 12px;
+      gap: 8px;
+      height: 36px;
+      justify-content: space-between;
+      line-height: 1;
+      min-width: 145px;
+      padding: 0 12px;
+      // 参考 DOM 的 li 是 position:relative（徽标定位基准）
+      position: relative;
+      white-space: nowrap;
+      width: auto;
+
+      // 点击落到 li 上，与既有规则一致
+      > span {
+        pointer-events: none;
+      }
+
+      &:hover {
+        background-color: $q-item-hover-bg;
+      }
+
+      // 选中态：统一 player-state-active
+      &.player-state-active {
+        color: $q-primary;
+      }
+
+      .player-ctrl-quality-text {
+        flex: 0 1 auto;
+        max-width: 190px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      // 徽标底样式
+      // 旧规则是 position:absolute; right:12px（会浮在档位名上），这里改回文档流，
+      // 由 li 的 flex + space-between 把徽标推到最右侧
+      .player-ctrl-quality-badge {
+        align-items: center;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        box-sizing: border-box;
+        display: inline-flex;
+        flex: none;
+        font-size: 10px;
+        font-weight: 400;
+        height: 16px;
+        justify-content: center;
+        line-height: 1;
+        padding: 0 4px;
+        position: static;
+        right: auto;
+        white-space: nowrap;
+      }
+
+      // 编码格式徽标：AVC / HEVC / AV1 / VP9 …（数据无 codec 时组件不渲染该节点）
+      .player-ctrl-quality-badge-codec {
+        background-color: $q-badge-bg;
+        border-color: $q-badge-border;
+        color: $q-badge-color;
+        letter-spacing: 0.5px;
+      }
+
+      // hover 提示：次级强调色。
+      // 必须写在下面「选中态强调」之前 —— 两者特异性相同（都是 1 个 id + 8 个类），
+      // 靠后的一条生效，这样悬停当前档位时主色强调不会被 hover 色盖掉
+      &:hover .player-ctrl-quality-badge-codec {
+        color: $q-fn;
+      }
+
+      // 当前档位的编码徽标：主色描边 + 主色文字 + 加粗（强调「当前清晰度的编码格式」）
+      // 两个选择器都写：组件会给徽标自身也加 player-state-active，任一处成立都生效
+      &.player-state-active .player-ctrl-quality-badge-codec,
+      .player-ctrl-quality-badge-codec.player-state-active {
+        background-color: transparent;
+        border-color: currentColor;
+        color: $q-primary;
+        font-weight: 600;
+      }
+
+      // 会员类徽标：数据带标记时组件才渲染
+      .player-ctrl-quality-badge-vip {
+        background-color: $q-vip-bg;
+        border-color: $q-vip-bg;
+        color: #fff;
+      }
+    }
+  }
+
+  // 气泡：节点常驻，组件用内联 style="display:none" 收起（与参考 DOM 一致）
+  .player-ctrl-quality-bubble {
+    bottom: 50px;
+    position: absolute;
+  }
+}
+
+// ============================================
+// 3. 显隐：沿用项目统一机制
+// ============================================
+// Controls.ts:313 把 state-show 加到根按钮上（.player-ctrl-btn.player-ctrl-quality），
+// 这里显式再声明一次，保证只引入本文件时也成立
+
+.player-docker .player-control-bottom-right .player-ctrl-quality#{$q-boost}.state-show {
+  .player-ctrl-quality-menu-wrap {
+    .player-ctrl-quality-menu {
+      display: block;
+    }
+  }
+}
+
+// ============================================
+// 4. 网页全屏 / 浏览器全屏适配
+// ============================================
+// 与 index.scss:4894 screen-style() 同断点（750px）：
+// 旧规则在这里把 result 提到 16px、menu-wrap 提到 bottom:74px
+
+@media screen and (min-width: 750px) {
+  .player-container[data-screen="web"],
+  .player-container[data-screen="full"] {
+    .player-control-bottom-right .player-ctrl-quality#{$q-boost} {
+      .player-ctrl-quality-result {
+        font-size: 16px;
+      }
+
+      .player-ctrl-quality-menu-wrap {
+        bottom: 74px;
+      }
+
+      .player-ctrl-quality-bubble {
+        bottom: 78px;
+      }
+
+      .player-ctrl-quality-result-auto-badge {
+        font-size: 8px;
+        height: 13px;
+        padding: 0 3px;
+      }
+    }
+  }
+}

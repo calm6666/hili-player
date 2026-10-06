@@ -67,6 +67,8 @@ export enum PlayerStateKeyEnum {
   QUALITY_SWITCH_STATE = "player.qualitySwitchState",
 
   // 播放列表
+  /** 播放列表条目快照（右侧选集面板的数据源） */
+  PLAYLIST = "player.playlist",
   /** 当前播放项索引 */
   PLAYLIST_INDEX = "player.playlistIndex",
   /** 播放列表长度 */
@@ -111,6 +113,21 @@ export enum PlayerStateKeyEnum {
 }
 
 /**
+ * 播放列表条目快照（运行时状态 player.playlist 的元素类型）
+ *
+ * 结构与 `components/EpisodesMenu.ts` 的 `EpisodeOption` 一致；
+ * 这里就地定义而不从组件模块导入，避免 store ↔ components 循环依赖。
+ */
+export interface PlayerPlaylistItem {
+  /** 唯一标识（对应 MediaItem.id） */
+  id?: string | number;
+  /** 显示标题（对应 MediaItem.title） */
+  title?: string;
+  /** 下标（必须与数组下标一致，即点击时回传给播放器的值） */
+  index: number;
+}
+
+/**
  * 播放器状态路径到类型的映射
  * 用于 TypedStateManager 的类型安全访问
  * key 为 PlayerStateKeyEnum 的枚举值（路径式字符串），value 为对应的数据类型
@@ -147,6 +164,8 @@ export type PlayerStateMap = {
   "player.qualityMode": "none" | "static" | "adaptive";
   /** 清晰度切换生命周期 */
   "player.qualitySwitchState": "idle" | "switching" | "switched" | "failed";
+  /** 播放列表条目快照（右侧选集面板数据源） */
+  "player.playlist": PlayerPlaylistItem[];
   /** 当前播放项索引 */
   "player.playlistIndex": number;
   /** 播放列表长度 */
@@ -218,6 +237,8 @@ export interface RuntimeState {
   qualitySwitchState: "idle" | "switching" | "switched" | "failed";
 
   // 播放列表
+  /** 播放列表条目快照（右侧选集面板数据源） */
+  playlist: PlayerPlaylistItem[];
   /** 当前播放项索引 */
   playlistIndex: number;
   /** 播放列表长度 */
@@ -282,6 +303,7 @@ export const defaultRuntimeState: RuntimeState = {
   qualityCurrent: "auto",
   qualityMode: "none",
   qualitySwitchState: "idle",
+  playlist: [],
   playlistIndex: 0,
   playlistLength: 0,
   videoWidth: 0,
@@ -359,6 +381,8 @@ export function createRuntimeStateManager(
       initialState.qualitySwitchState ?? defaultRuntimeState.qualitySwitchState,
 
     // 播放列表
+    [PlayerStateKeyEnum.PLAYLIST]:
+      initialState.playlist ?? defaultRuntimeState.playlist,
     [PlayerStateKeyEnum.PLAYLIST_INDEX]:
       initialState.playlistIndex ?? defaultRuntimeState.playlistIndex,
     [PlayerStateKeyEnum.PLAYLIST_LENGTH]:

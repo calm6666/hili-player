@@ -27,7 +27,7 @@ import type { MediaPlayerClass, ErrorEvent, Representation } from 'dashjs';
 import type { MediaManifest } from '../vendor/types';
 import { manifestToDash } from '../vendor/manifest-to-dash';
 import type { VideoPlayer } from '@hili-player/player';
-import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
+import { StreamPluginTypeEnum, StreamPluginEventEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import { PlayerEventEnum } from '@/core/events';
@@ -651,20 +651,72 @@ export class DashPlugin implements StreamPlugin {
   }
 
   /**
+   * 取某个 representation 的视频编码原始串（库原始 API → 我们的 codecString）
+   * 依据本地 dashjs@5.1.1 的 index.d.ts（node_modules/.pnpm/dashjs@5.1.1_[hash]/node_modules/dashjs/index.d.ts）：
+   * - L986 `codecs: string | null`（如 "avc1.640028" / "hvc1.1.6.L93.B0" / "av01.0.08M.08"，首选）
+   * - L999 `mimeType: string | null`（容器类型，如 "video/mp4"；dash.js 的 getMimeType() 才会拼上 codecs，
+   *   单独的 mimeType 不含编码信息，这里只作为兜底，解析不出编码时由 resolveVideoCodec 返回空）
+   *
+   * @param rep - dash.js 的 Representation
+   * @returns 视频编码原始串；取不到返回 undefined
+   */
+  private extractVideoCodecString(rep: Representation): string | undefined {
+    return rep.codecs || rep.mimeType || undefined;
+  }
+
+  /**
    * 获取可用画质列表
    * 从 dash.js 获取所有可用的视频码率/分辨率列表
+   *
+   * 列表结构（自动档放在最前，即 index 0）：
+   * - 第 0 项（ABR 可用时才有）：自动档，id='auto' / isAuto=true；
+   *   width/height/bitrate/codec 取「当前生效的视频 representation」，供 UI 拼出「自动(1080P 高清)」
+   * - 其余项：真实档位，id 为 dash.js 的 representation.index 字符串，原有字段与顺序保持不变
    *
    * @returns 画质等级列表（QualityLevel[]）
    */
   getQualities(): QualityLevel[] {
-    const representations = this.dashPlayer?.getRepresentationsByType('video') ?? [];
-    return representations.map((rep) => ({
-      id: String(rep.index),
-      label: `${rep.width}x${rep.height}`,
-      width: rep.width,
-      height: rep.height,
-      bitrate: rep.bandwidth,
-    }));
+    const dash = this.dashPlayer;
+    if (!dash) return [];
+
+    // 依据 index.d.ts L2153 getRepresentationsByType(type, streamId?)：取全部视频 representation
+    const representations = dash.getRepresentationsByType('video') ?? [];
+
+    // 真实档位：dash.js 的 Representation.codecs → 我们的 codec / codecString
+    const list: QualityLevel[] = representations.map((rep) => {
+      const { codec, codecString } = resolveVideoCodec(this.extractVideoCodecString(rep));
+      return {
+        id: String(rep.index),
+        label: `${rep.width}x${rep.height}`,
+        width: rep.width,
+        height: rep.height,
+        bitrate: rep.bandwidth,
+        isAuto: false,
+        codec,
+        codecString,
+      };
+    });
+
+    // 无 ABR 场景（单档，没有可自适应的码率）不产出自动档
+    if (representations.length <= 1) return list;
+
+    // 自动档当前实际生效的档位：
+    // index.d.ts L2119 `getCurrentRepresentationForType(type: MediaType): Representation | null`
+    // 返回当前渲染的视频 representation（ABR 自动切档后即为 ABR 选中的那一档）
+    const current = dash.getCurrentRepresentationForType('video');
+    const autoCodec = resolveVideoCodec(current ? this.extractVideoCodecString(current) : undefined);
+    list.unshift({
+      id: AUTO_QUALITY_ID,
+      label: '自动',
+      width: current?.width ?? 0,
+      height: current?.height ?? 0,
+      bitrate: current?.bandwidth ?? 0,
+      isAuto: true,
+      codec: autoCodec.codec,
+      codecString: autoCodec.codecString,
+    });
+
+    return list;
   }
 
   /**
@@ -672,27 +724,38 @@ export class DashPlugin implements StreamPlugin {
    * - 'auto'：开启视频轨 ABR 自动切档（不走手动选档）
    * - 具体档位：先关闭 ABR，避免自动切档覆盖手动选择，再手动选中对应 representation
    *
-   * @param quality - 画质标识（QualityLevel.id，或 'auto'）
+   * 「切回自动」的确切 API（依据本地 dashjs@5.1.1 index.d.ts）：
+   * dash.js 没有 setAutoSwitchQuality 之类的方法，ABR 开关只存在于 settings 中：
+   * - L2285 `updateSettings(settings: MediaPlayerSettingClass): void`（唯一的写入入口）
+   * - L1925-1928 `autoSwitchBitrate?: { audio?: boolean; video?: boolean }`（位于 streaming.abr 下）
+   * 因此把 streaming.abr.autoSwitchBitrate.video 置为 true 就是切回自动；
+   * 之后 dash.js 的 ABR 控制器会在下一个切档点自行选档（getCurrentQuality() 也据此判定为 'auto'）。
+   *
+   * @param quality - 画质标识（QualityLevel.id，或 AUTO_QUALITY_ID）
    */
   setQuality(quality: string): void {
-    if (!this.dashPlayer) return;
+    const dash = this.dashPlayer;
+    if (!dash) return;
 
-    if (quality === 'auto') {
-      // 切回自动档：dash.js 无 setAutoSwitchQuality API，需通过 updateSettings 修改 ABR 配置
-      this.dashPlayer.updateSettings({
+    if (quality === AUTO_QUALITY_ID) {
+      // 切回自动档：dash.js 无 setAutoSwitchQuality API，需通过 updateSettings 打开 ABR 开关
+      dash.updateSettings({
         streaming: { abr: { autoSwitchBitrate: { video: true } } },
       });
       return;
     }
 
     const index = Number(quality);
-    if (!isNaN(index)) {
-      // 手动档位：先关闭 ABR，防止自动切档覆盖手动选择
-      this.dashPlayer.updateSettings({
-        streaming: { abr: { autoSwitchBitrate: { video: false } } },
-      });
-      this.dashPlayer.setRepresentationForTypeByIndex('video', index);
+    if (!Number.isInteger(index) || index < 0) {
+      logger.warn(`忽略非法的画质档位: ${quality}`);
+      return;
     }
+
+    // 手动档位：先关闭 ABR，防止自动切档覆盖手动选择
+    dash.updateSettings({
+      streaming: { abr: { autoSwitchBitrate: { video: false } } },
+    });
+    dash.setRepresentationForTypeByIndex('video', index);
   }
 
   /**

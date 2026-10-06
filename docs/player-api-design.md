@@ -427,7 +427,7 @@ getCurrentIndex(): number;
 | `pipToggle` | — | `togglePip()` |
 | `webFullscreenToggle` | — | `toggleWebFullscreen()` |
 | `prev` / `next` | — | 向上 emit，由 `VideoPlayer.prev()/next()` 处理 |
-| `eplistChange` | `string` | 向上 emit，由 `VideoPlayer.switchTo()` 处理 |
+| `eplistChange` | `number`（选集列表下标） | 向上 emit，由 `VideoPlayer.switchTo(index)` 处理 |
 | `settingChange` | `{key, value}` | 应用到对应画面/播放设置 |
 | `moreSettingClick` | — | 打开更多设置面板 |
 | `showTooltip` / `hideTooltip` | `Tooltip` | 转发给 tooltip 层 |

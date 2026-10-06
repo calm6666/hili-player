@@ -31,6 +31,7 @@ type MenuType =
   | "quality"
   | "eplist"
   | "playbackrate"
+  | "subtitle"
   | "volume"
   | "setting";
 
@@ -54,6 +55,8 @@ interface MenuConfig {
   quality?: MenuElement;
   /** 选集菜单元素配置 */
   eplist?: MenuElement;
+  /** 字幕设置面板挂载点 */
+  subtitle?: MenuElement;
   /** 播放倍速菜单元素配置 */
   playbackrate?: MenuElement;
   /** 设置菜单元素配置 */
@@ -96,7 +99,12 @@ export type ControlsEvents = {
   prev: undefined;
   next: undefined;
   qualityChange: string;
-  eplistChange: string;
+  /** 选集面板选择某一集，值为列表下标 */
+  eplistChange: number;
+  subtitleToggle: boolean;
+  subtitleLangChange: string;
+  subtitleStyleChange: { fontSize?: number; color?: string; position?: "top" | "bottom"; offset?: number; strokeColor?: string; strokeWidth?: number; opacity?: number; scale?: boolean; fade?: boolean };
+  bilingualChange: boolean;
   settingChange: { key: string; value: boolean | string | number };
   moreSettingClick: undefined;
   showTooltip: Tooltip;
@@ -167,6 +175,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       viewpoint: { showTimer: null, hideTimer: null },
       quality: { showTimer: null, hideTimer: null },
       eplist: { showTimer: null, hideTimer: null },
+    subtitle: { showTimer: null, hideTimer: null },
       playbackrate: { showTimer: null, hideTimer: null },
       volume: { showTimer: null, hideTimer: null },
       setting: { showTimer: null, hideTimer: null },
@@ -184,6 +193,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       viewpoint: ".player-ctrl-btn.player-ctrl-viewpoint",
       quality: ".player-ctrl-btn.player-ctrl-quality",
       eplist: ".player-ctrl-btn.player-ctrl-eplist",
+  subtitle: ".player-ctrl-btn.player-ctrl-subtitle",
       playbackrate: ".player-ctrl-btn.player-ctrl-playbackrate",
       volume: ".player-ctrl-btn.player-ctrl-volume",
       setting: ".player-ctrl-btn.player-ctrl-setting",
@@ -304,6 +314,17 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       const menuCfg = menuConfig[type];
       if (!menuCfg) {
         return;
+      }
+      /**
+       * 挂载点可能在运行期被重建（选集面板列表变化时 RightControls 会原地
+       * 重建 EpisodesMenu，按钮元素换成新节点），此时缓存元素已脱离文档，
+       * 按选择器重新解析一次，保证面板展开/收起动画仍然生效
+       */
+      if (menuCfg.element && !menuCfg.element.isConnected) {
+        menuCfg.element =
+          controlEntityRef.value?.querySelector<HTMLDivElement>(
+            MENU_SELECTORS[type],
+          ) ?? null;
       }
       const control = ctrlShowMenu[type];
       cancelRaf(control.showTimer!);
@@ -527,6 +548,41 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       lifecycle.emit?.("qualityChange", quality);
     };
 
+    /** 选集面板选择某一集：仅透传下标，由上层接到 VideoPlayer.switchTo(index) */
+    /** 字幕：开关向上转发 */
+  const handleRightSubtitleToggle = (visible: boolean): void => {
+    lifecycle.emit?.("subtitleToggle", visible);
+  };
+
+  /** 字幕：语言切换向上转发 */
+  const handleRightSubtitleLangChange = (lang: string): void => {
+    lifecycle.emit?.("subtitleLangChange", lang);
+  };
+
+  /** 字幕：样式变化向上转发 */
+  const handleRightSubtitleStyleChange = (patch: {
+    fontSize?: number;
+    color?: string;
+    position?: "top" | "bottom";
+    offset?: number;
+    strokeColor?: string;
+    strokeWidth?: number;
+    opacity?: number;
+    scale?: boolean;
+    fade?: boolean;
+  }): void => {
+    lifecycle.emit?.("subtitleStyleChange", patch);
+  };
+
+  /** 字幕：双语开关向上转发 */
+  const handleRightBilingualChange = (enabled: boolean): void => {
+    lifecycle.emit?.("bilingualChange", enabled);
+  };
+
+  const handleRightEplistChange = (index: number): void => {
+      lifecycle.emit?.("eplistChange", index);
+    };
+
     const handleRightSettingChange = (payload: {
       key: string;
       value: boolean | string | number;
@@ -600,6 +656,11 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
             },
             onMuteToggle: () => lifecycle.emit?.("muteToggle"),
             onQualityChange: handleRightQualityChange,
+            onEplistChange: handleRightEplistChange,
+            onSubtitleToggle: handleRightSubtitleToggle,
+            onSubtitleLangChange: handleRightSubtitleLangChange,
+            onSubtitleStyleChange: handleRightSubtitleStyleChange,
+            onBilingualChange: handleRightBilingualChange,
             onSettingChange: handleRightSettingChange,
             onMenuAnimation: handleRightMenuAnimation,
             onMoreSettingClick: () => lifecycle.emit?.("moreSettingClick"),

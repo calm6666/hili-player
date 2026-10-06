@@ -1,0 +1,500 @@
+/**
+ * ============================================
+ * 字幕设置面板样式（SubtitleMenu）
+ * ============================================
+ * 类名全部来自 `components/SubtitleMenu.ts`（`player-ctrl-subtitle-*`），
+ * 不再使用 bilibili 的 `bpx-` / `bui-` 前缀。
+ *
+ * 约定（与本播放器其它控制栏面板保持一致）：
+ * - 面板显隐由祖先按钮上的 `state-show` 类控制（不写内联 style、不用 display 控制按钮自身）；
+ * - 二级页“更多设置”由 `.ui-area` 上的 `state-show-right` 类控制（左隐右显 + 宽度动画）；
+ * - 主题色一律走 CSS 变量，`#00a1d6` 只作为 `var()` 的兜底值出现。
+ */
+
+// 主题色（与 index.scss:30-47 的变量一致，这里只做兜底引用）
+$primary: var(--player-primary-color, #00a1d6);
+$fn-color: var(--player-fn-color, #00aeec);
+
+/* ============================================
+ * 按钮与结果文本
+ * ============================================ */
+
+.player-ctrl-btn.player-ctrl-subtitle {
+  width: 36px;
+
+  .player-ctrl-subtitle-result-wrap {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    position: relative;
+  }
+
+  .player-ctrl-subtitle-result {
+    font-size: 13px;
+    line-height: 22px;
+    white-space: nowrap;
+  }
+
+  .player-ctrl-subtitle-result-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 2px;
+
+    svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+  }
+}
+
+/* ============================================
+ * 面板容器：基态隐藏，按钮带 state-show 时显示
+ * ============================================ */
+
+.player-ctrl-subtitle-box {
+  display: none;
+  position: absolute;
+  bottom: 41px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+.player-ctrl-btn.player-ctrl-subtitle.state-show .player-ctrl-subtitle-box {
+  display: block;
+}
+
+.player-ctrl-subtitle-menu {
+  background-color: rgba(24, 25, 28, 0.92);
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: #fff;
+  font-size: 12px;
+  list-style: none;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  width: 320px;
+
+  .ui-area {
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* 第 2 页默认隐藏（由 state-show-right 切换） */
+  .player-ctrl-subtitle-menu-right {
+    display: none;
+  }
+
+  /* 点击“字幕设置”后：隐藏第 1 页，显示第 2 页并向右展开 */
+  .ui-area.state-show-right {
+    .player-ctrl-subtitle-menu-origin {
+      display: none;
+    }
+
+    .player-ctrl-subtitle-menu-right {
+      animation: subtitle-expand-width 0.5s forwards;
+      display: block;
+    }
+  }
+}
+
+@keyframes subtitle-expand-width {
+  0% {
+    width: 320px;
+  }
+
+  100% {
+    width: 360px;
+  }
+}
+
+/* ============================================
+ * 通用行 / 标题 / 内容
+ * ============================================ */
+
+.player-ctrl-subtitle-item {
+  box-sizing: border-box;
+  padding: 6px 12px;
+}
+
+.player-ctrl-subtitle-item-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.player-ctrl-subtitle-title-area {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+}
+
+.player-ctrl-subtitle-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.player-ctrl-subtitle-add {
+  color: $fn-color;
+  cursor: pointer;
+}
+
+.player-ctrl-subtitle-separator,
+.player-ctrl-subtitle-separator-bottom {
+  background-color: hsla(0, 0%, 100%, 0.12);
+  height: 1px;
+  margin: 6px 0;
+}
+
+/* 各设置组：字号 / 颜色 / 描边 / 位置 / 其它 */
+.player-ctrl-subtitle-fontsize,
+.player-ctrl-subtitle-color,
+.player-ctrl-subtitle-shadow,
+.player-ctrl-subtitle-position,
+.player-ctrl-subtitle-other,
+.player-ctrl-subtitle-major,
+.player-ctrl-subtitle-opacity {
+  margin: 6px 0;
+  min-width: 0;
+  flex: 1 1 0;
+
+  .player-ctrl-subtitle-fontsize-title,
+  .player-ctrl-subtitle-color-title,
+  .player-ctrl-subtitle-shadow-title,
+  .player-ctrl-subtitle-position-title,
+  .player-ctrl-subtitle-other-title,
+  .player-ctrl-subtitle-opacity-title {
+    color: hsla(0, 0%, 100%, 0.65);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+}
+
+.player-ctrl-subtitle-settings-scroller {
+  max-height: 340px;
+  overflow-y: auto;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: hsla(0, 0%, 100%, 0.25);
+    border-radius: 3px;
+  }
+}
+
+.player-ctrl-subtitle-settings-content {
+  padding: 0 4px;
+}
+
+.player-ctrl-subtitle-settings-footer {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.player-ctrl-subtitle-reset {
+  background-color: hsla(0, 0%, 100%, 0.12);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 4px 14px;
+
+  &:hover {
+    background-color: hsla(0, 0%, 100%, 0.2);
+  }
+}
+
+/* 进入“更多设置”的入口行 */
+.player-ctrl-subtitle-setting {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+
+  &:hover {
+    background-color: hsla(0, 0%, 100%, 0.1);
+  }
+
+  .player-ctrl-subtitle-setting-icon svg {
+    fill: currentColor;
+    height: 12px;
+    width: 12px;
+  }
+}
+
+/* ============================================
+ * 自写下拉（renderSelect）
+ * ============================================ */
+
+.player-ctrl-subtitle-select {
+  position: relative;
+  user-select: none;
+
+  .player-ctrl-subtitle-select-header {
+    align-items: center;
+    background-color: hsla(0, 0%, 100%, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    height: 26px;
+    padding: 0 6px;
+
+    &:hover {
+      background-color: hsla(0, 0%, 100%, 0.16);
+    }
+  }
+
+  .player-ctrl-subtitle-select-result {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .player-ctrl-subtitle-select-arrow {
+    display: inline-flex;
+    flex: 0 0 16px;
+    justify-content: center;
+
+    svg {
+      height: 16px;
+      width: 16px;
+      fill: currentColor;
+    }
+  }
+
+  .player-ctrl-subtitle-select-swatch {
+    border: 1px solid hsla(0, 0%, 100%, 0.4);
+    border-radius: 2px;
+    flex: 0 0 12px;
+    height: 12px;
+    margin-right: 6px;
+    width: 12px;
+  }
+
+  /* 列表默认隐藏，展开类由组件的 renderSelect 运行时添加 */
+  .player-ctrl-subtitle-select-list {
+    background-color: rgba(24, 25, 28, 0.96);
+    border-radius: 4px;
+    display: none;
+    left: 0;
+    list-style: none;
+    margin: 4px 0 0;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 4px 0;
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    z-index: 30;
+  }
+
+  &.player-ctrl-subtitle-select-unfold .player-ctrl-subtitle-select-list {
+    display: block;
+  }
+
+  .player-ctrl-subtitle-select-item {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    height: 26px;
+    padding: 0 8px;
+
+    &:hover {
+      background-color: hsla(0, 0%, 100%, 0.12);
+    }
+
+    &.player-state-active {
+      color: $primary;
+    }
+  }
+
+  .player-ctrl-subtitle-select-item-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ============================================
+ * 复选行（等比缩放 / 淡入淡出）
+ * ============================================ */
+
+.player-ctrl-subtitle-checkbox {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+
+  .player-ctrl-subtitle-checkbox-input {
+    display: none;
+  }
+
+  .player-ctrl-subtitle-checkbox-label {
+    align-items: center;
+    display: flex;
+  }
+
+  .player-ctrl-subtitle-checkbox-icon {
+    display: inline-flex;
+    margin-right: 4px;
+
+    svg {
+      fill: currentColor;
+      height: 14px;
+      width: 14px;
+    }
+  }
+
+  .player-ctrl-subtitle-checkbox-icon-selected {
+    color: $primary;
+    display: none;
+  }
+
+  /* 原生 checkbox 与图标是兄弟节点：用 :checked 控制显隐（无需 JS 参与） */
+  .player-ctrl-subtitle-checkbox-input:checked ~ .player-ctrl-subtitle-checkbox-label {
+    .player-ctrl-subtitle-checkbox-icon-selected {
+      display: inline-flex;
+    }
+
+    .player-ctrl-subtitle-checkbox-icon-default {
+      display: none;
+    }
+  }
+}
+
+/* 体内 Switch 的隐藏 input（组件用 applySwitchChecked 同步视觉） */
+.player-ctrl-subtitle-switch-hidden {
+  display: none;
+}
+
+/* ============================================
+ * 不透明度滑条
+ * ============================================ */
+
+.player-ctrl-subtitle-opacity-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.player-ctrl-subtitle-opacity-percent {
+  color: hsla(0, 0%, 100%, 0.65);
+}
+
+.player-ctrl-subtitle-opacity-track {
+  background-color: hsla(0, 0%, 100%, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  height: 4px;
+  position: relative;
+  width: 100%;
+}
+
+.player-ctrl-subtitle-opacity-bar {
+  background-color: $primary;
+  border-radius: 2px;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: left center;
+}
+
+.player-ctrl-subtitle-opacity-thumb {
+  background-color: #fff;
+  border-radius: 50%;
+  height: 12px;
+  left: 0;
+  position: absolute;
+  top: -4px;
+  width: 12px;
+}
+
+/* ============================================
+ * 语言列表
+ * ============================================ */
+
+.player-ctrl-subtitle-language {
+  padding: 4px 0;
+}
+
+.player-ctrl-subtitle-language-item {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  height: 30px;
+  padding: 0 12px;
+
+  &:hover {
+    background-color: hsla(0, 0%, 100%, 0.1);
+  }
+
+  &.player-state-active {
+    color: $primary;
+  }
+
+  .player-ctrl-subtitle-language-item-icon {
+    display: inline-flex;
+    margin-right: 6px;
+    width: 12px;
+
+    svg {
+      fill: currentColor;
+      height: 12px;
+      width: 12px;
+    }
+  }
+
+  .player-ctrl-subtitle-language-item-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* 翻译页 / 空态提示（后端未接入时仅作结构占位） */
+.player-ctrl-subtitle-menu-translation,
+.player-ctrl-subtitle-nolan {
+  color: hsla(0, 0%, 100%, 0.5);
+  padding: 12px;
+  text-align: center;
+}
+
+/* 双语开关行 */
+.player-ctrl-subtitle-bilingual-above,
+.player-ctrl-subtitle-bilingual-bottom {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+}
+
+.player-ctrl-subtitle-bilingual-name {
+  color: hsla(0, 0%, 100%, 0.85);
+}
+
+/* 开关式的“关闭字幕”行 */
+.player-ctrl-subtitle-close-switch {
+  cursor: pointer;
+}
+
+/* 拖拽示例类（组件未使用，保留以免历史引用报错） */
+.player-ctrl-subtitle-xxx {
+  display: none;
+}
+
+/* 全屏 / 网页全屏下控制栏更高，面板同步抬高（与既有面板一致） */
+.player-container[data-screen="web"] .player-ctrl-subtitle-box,
+.player-container[data-screen="full"] .player-ctrl-subtitle-box {
+  bottom: 74px;
+}

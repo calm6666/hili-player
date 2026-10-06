@@ -102,18 +102,133 @@ export interface StreamConfig {
 
 /** 画质等级 */
 export interface QualityLevel {
-  /** 画质标识 */
+  /** 画质标识（自动档为 AUTO_QUALITY_ID，即 'auto'） */
   id: string;
   /** 画质显示名称 */
   label: string;
-  /** 视频宽度 */
+  /** 视频宽度（自动档为当前 ABR 实际选中档位的宽度） */
   width: number;
-  /** 视频高度 */
+  /** 视频高度（自动档为当前 ABR 实际选中档位的高度） */
   height: number;
-  /** 码率 (比特/秒) */
+  /** 码率 (比特/秒)（自动档为当前 ABR 实际选中档位的码率） */
   bitrate: number;
   /** 是否为自动档（ABR）。MP4 场景恒为 false */
   isAuto?: boolean;
+  /**
+   * 视频编码格式（规范化后的短名，取值见 VideoCodecEnum：AVC / HEVC / AV1 / VP9 …）
+   * 供控制栏清晰度面板渲染编码徽标；无法识别时缺省（不产出徽标）
+   */
+  codec?: string;
+  /** 视频编码原始串（如 avc1.640028 / hvc1.1.6.L93.B0），便于排查与二次解析 */
+  codecString?: string;
+}
+
+/** 自动档（ABR）档位 id：QualityLevel.id / setQuality() / getCurrentQuality() 共用 */
+export const AUTO_QUALITY_ID = 'auto';
+
+/**
+ * 视频编码格式枚举（规范化后的短名）
+ * 各流媒体插件把库返回的原始编码串（hls.js 的 avc1.640028、dash.js 的 hvc1.1.6.L93.B0 等）
+ * 统一映射为下列短名，控制栏清晰度面板直接用它渲染编码徽标。
+ */
+export enum VideoCodecEnum {
+  /** H.264 / AVC（avc1、avc3） */
+  AVC = 'AVC',
+  /** H.265 / HEVC（hvc1、hev1、hvc2、hev2、dvh1、dvhe） */
+  HEVC = 'HEVC',
+  /** AV1（av01） */
+  AV1 = 'AV1',
+  /** VP9（vp09、vp9） */
+  VP9 = 'VP9',
+  /** VP8（vp08、vp8） */
+  VP8 = 'VP8',
+  /** MPEG-4 Visual（mp4v） */
+  MPEG4 = 'MPEG4',
+}
+
+/** 音频编码 fourCC 前缀（用于从 CODECS 全串中剔除音频项，只保留视频项） */
+const AUDIO_CODEC_PREFIXES = [
+  'mp4a', 'ac-3', 'ec-3', 'ac-4', 'opus', 'vorbis', 'flac',
+  'dtsc', 'dtsh', 'dtsl', 'dtse', 'alac', 'mp3',
+];
+
+/**
+ * 把编码 fourCC 规范化成 VideoCodecEnum 短名
+ * 映射表（取第一个「.」之前的一段，忽略大小写）：
+ * - avc1 / avc3 → AVC（H.264）
+ * - hvc1 / hev1 / hvc2 / hev2 / dvh1 / dvhe → HEVC（H.265；dvh1/dvhe 为 HEVC 基底的 Dolby Vision）
+ * - av01 → AV1
+ * - vp09 / vp9 → VP9
+ * - vp08 / vp8 → VP8
+ * - mp4v → MPEG4
+ * - 其它 → undefined（不产出徽标，原始串仍可由 codecString 拿到）
+ *
+ * @param codecString - 原始编码串，如 'avc1.640028' 或 'hvc1.1.6.L93.B0'
+ * @returns 规范化短名；无法识别返回 undefined
+ */
+export function normalizeVideoCodec(codecString?: string | null): VideoCodecEnum | undefined {
+  if (!codecString) return undefined;
+
+  const fourCC = codecString.trim().toLowerCase().split('.')[0];
+  switch (fourCC) {
+    case 'avc1':
+    case 'avc3':
+      return VideoCodecEnum.AVC;
+    case 'hvc1':
+    case 'hev1':
+    case 'hvc2':
+    case 'hev2':
+    case 'dvh1':
+    case 'dvhe':
+      return VideoCodecEnum.HEVC;
+    case 'av01':
+      return VideoCodecEnum.AV1;
+    case 'vp09':
+    case 'vp9':
+      return VideoCodecEnum.VP9;
+    case 'vp08':
+    case 'vp8':
+      return VideoCodecEnum.VP8;
+    case 'mp4v':
+      return VideoCodecEnum.MPEG4;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * 从编解码串解析出视频编码，产出可直接写进 QualityLevel 的 codec / codecString
+ * 输入可以是单个 fourCC（'avc1.640028'）、CODECS 全串（'avc1.640028,mp4a.40.2'），
+ * 或带 codecs 参数的 mimeType（'video/mp4; codecs="avc1.640028"'）。
+ *
+ * @param codecs - 原始编码串 / CODECS 列表 / 带 codecs 参数的 mimeType
+ * @returns codec（规范化短名）与 codecString（原始视频编码串）；解析不出时两者皆缺省
+ */
+export function resolveVideoCodec(codecs?: string | null): {
+  codec?: VideoCodecEnum;
+  codecString?: string;
+} {
+  if (!codecs) return {};
+
+  // 兼容 mimeType 形式：截取 codecs= 之后的内容并去掉引号
+  let raw = codecs;
+  const codecsIndex = raw.toLowerCase().indexOf('codecs=');
+  if (codecsIndex >= 0) {
+    raw = raw.slice(codecsIndex + 'codecs='.length);
+  }
+  raw = raw.replace(/["']/g, '');
+
+  // CODECS 串里通常同时含音频项（mp4a.40.2 / ec-3 …），取第一项视频编码；
+  // 含「/」的项是容器 mimeType（video/mp4），不是编码串，跳过
+  const videoCodec = raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0 && !item.includes('/'))
+    .find((item) => !AUDIO_CODEC_PREFIXES.some((prefix) => item.toLowerCase().startsWith(prefix)));
+
+  if (!videoCodec) return {};
+
+  return { codec: normalizeVideoCodec(videoCodec), codecString: videoCodec };
 }
 
 /**

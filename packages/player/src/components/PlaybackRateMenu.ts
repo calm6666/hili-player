@@ -4,10 +4,20 @@
  * ============================================
  * 播放倍速选择下拉菜单，支持倍速列表渲染、
  * 当前倍率高亮、菜单悬停动画回调
+ *
+ * 本次修正：
+ * 1. 选中态类名由 `active` 改为 `player-state-active`，与 scss 选择器
+ *    `.player-ctrl-playbackrate-menu-item.player-state-active` 对齐
+ *    （此前类名不匹配，选中项高亮实际不生效）；
+ * 2. 新增对运行时状态 `player.playbackRate` 的订阅：倍速被外部改变
+ *    （播放器 API / 快捷键 / 配置恢复）时，结果文本与高亮会同步更新
+ *    （此前只在挂载时读取一次）；
+ * 3. 挂载时通过 `playbackRateMenuMounted` 回传 `setRate`，父层可主动同步。
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
 import type { VNode } from '@/types';
+import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
 
 /**
  * PlaybackRateMenu 组件 Props 接口
@@ -20,7 +30,8 @@ export interface PlaybackRateMenuProps {
 export type PlaybackRateMenuEvents = {
   rateChange: number;
   menuAnimation: { type: 'playbackrate'; action: 'show' | 'hide' };
-  playbackRateMenuMounted: undefined;
+  /** 挂载完成回传控制方法（供父层在倍速被外部改变时同步 UI） */
+  playbackRateMenuMounted: { setRate: (rate: number) => void };
 };
 
 /**
@@ -28,8 +39,11 @@ export type PlaybackRateMenuEvents = {
  * 渲染播放倍速选择菜单，支持当前倍速高亮
  */
 export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackRateMenuEvents>((props, lifecycle) => {
-  /** 当前播放倍速，默认为 1 倍速 */
+  /** 初始倍速与可选档位 */
   const { rate = 1, rates = [2, 1.5, 1.25, 1, 0.75, 0.5] } = props;
+
+  /** 运行时状态管理器（用于订阅当前倍速） */
+  const state = useContext(StateContext);
 
   // ============================================
   // DOM 引用
@@ -47,6 +61,52 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
 
   /** 倍速菜单项 DOM 元素列表，用于切换高亮状态 */
   const menuItems: HTMLLIElement[] = [];
+
+  /** 当前倍速（可变：订阅到状态变化后更新） */
+  let currentRate = rate;
+
+  // ============================================
+  // 渲染辅助函数
+  // ============================================
+
+  /**
+   * 格式化倍速标签文本
+   * @param rateValue - 倍速值
+   * @returns 格式化后的显示文本
+   */
+  const formatRateLabel = (rateValue: number): string => {
+    return rateValue === 1 ? '1.0X' : `${rateValue}X`;
+  };
+
+  /**
+   * 刷新结果文本：1 倍速显示「倍速」，其它显示具体档位
+   */
+  const applyResultText = (): void => {
+    if (backrateResultTextRef.value) {
+      backrateResultTextRef.value.innerText =
+        currentRate === 1 ? '倍速' : formatRateLabel(currentRate);
+    }
+  };
+
+  /**
+   * 同步选中态（框架无 diff，必须手动互斥）
+   */
+  const updateActive = (): void => {
+    menuItems.forEach((item) => {
+      const value = Number(item.getAttribute('data-value'));
+      item.classList.toggle('player-state-active', value === currentRate);
+    });
+  };
+
+  /**
+   * 统一的倍速更新入口：更新当前值并刷新文本与高亮
+   * @param next - 新的倍速值
+   */
+  const setRate = (next: number): void => {
+    currentRate = next;
+    applyResultText();
+    updateActive();
+  };
 
   // ============================================
   // 事件处理函数
@@ -66,19 +126,6 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
     lifecycle.emit?.('menuAnimation', { type: 'playbackrate', action: 'hide' });
   };
 
-  // ============================================
-  // 渲染辅助函数
-  // ============================================
-
-  /**
-   * 格式化倍速标签文本
-   * @param rateValue - 倍速值
-   * @returns 格式化后的显示文本
-   */
-  const formatRateLabel = (rateValue: number): string => {
-    return rateValue === 1 ? '1.0X' : `${rateValue}X`;
-  };
-
   /**
    * 渲染单个倍速菜单项
    * @param rateValue - 倍速值
@@ -86,33 +133,45 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
    */
   const renderRateItem = (rateValue: number): VNode => {
     /** 是否为当前选中的倍速 */
-    const isActive = rateValue === rate;
+    const isActive = rateValue === currentRate;
     return h('li', {
-      class: ['player-ctrl-playbackrate-menu-item', isActive ? 'active' : ''].filter(Boolean).join(' '),
+      class: [
+        'player-ctrl-playbackrate-menu-item',
+        isActive ? 'player-state-active' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
       'data-value': rateValue.toString(),
-      onClick: (e: MouseEvent) => {
-        /** 点击的目标元素 */
-        const target = e.currentTarget;
-        if (target instanceof HTMLElement) {
-          // 更新菜单项高亮
-          menuItems.forEach((item) => item.classList.remove('active'));
-          target.classList.add('active');
-        }
-        // 更新倍速显示文本
-        if (backrateResultTextRef.value) {
-          backrateResultTextRef.value.innerText = rateValue === 1 ? '倍速' : formatRateLabel(rateValue);
-        }
+      onClick: () => {
+        // 先本地反馈，随后由运行时状态订阅统一校正
+        setRate(rateValue);
         lifecycle.emit?.('rateChange', rateValue);
       },
     }, formatRateLabel(rateValue));
   };
 
   // ============================================
+  // 状态监听
+  // ============================================
+
+  // 框架无响应式：倍速被外部改变时不会自动更新 DOM，必须在回调里手动刷新
+  if (state) {
+    useState(
+      state,
+      PlayerStateKeyEnum.PLAYBACK_RATE,
+      (next) => {
+        setRate(next);
+      },
+      lifecycle,
+    );
+  }
+
+  // ============================================
   // 生命周期钩子
   // ============================================
 
   /**
-   * 组件挂载后的回调，收集菜单项 DOM 元素并设置初始倍速显示
+   * 组件挂载后的回调，收集菜单项 DOM 元素并同步初始倍速显示
    */
   lifecycle.onMounted = (): void => {
     // 收集菜单项 DOM 元素
@@ -126,17 +185,18 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
       });
     }
 
-    // 设置初始倍速显示
-    if (backrateResultTextRef.value) {
-      backrateResultTextRef.value.innerText = rate === 1 ? '倍速' : formatRateLabel(rate);
-    }
+    // 同步初始倍速的文本与高亮
+    applyResultText();
+    updateActive();
 
-    lifecycle.emit?.('playbackRateMenuMounted');
+    // 回传控制方法，供父层主动同步
+    lifecycle.emit?.('playbackRateMenuMounted', { setRate });
   };
 
   // ============================================
   // 主渲染函数
   // ============================================
+
   return h('div', {
     class: 'player-ctrl-btn player-ctrl-playbackrate',
     role: 'button',

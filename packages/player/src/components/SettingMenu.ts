@@ -120,14 +120,32 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
   };
 
   /**
+   * 统一应用单选选中态（框架无 diff，必须手动互斥）
+   *
+   * 修复：旧实现只 `forEach(btn => remove('active'))` 清空本组，**从不给被点项加回 active**，
+   * 导致点击后整组没有任何高亮。现在「先清空本组、再给被点项加上」。
+   *
+   * @param group - 该单选组的根元素
+   * @param event - 点击事件（取其 currentTarget 作为被选项）
+   */
+  const applyRadioActive = (group: HTMLElement | null, event?: MouseEvent): void => {
+    if (!group) return;
+    group
+      .querySelectorAll('.radio-button')
+      .forEach((btn) => btn.classList.remove('active'));
+    const target = event?.currentTarget;
+    if (target instanceof HTMLElement) {
+      target.classList.add('active');
+    }
+  };
+
+  /**
    * 播放方式选项切换处理
    * @param value - 选中的播放方式值
+   * @param event - 点击事件
    */
-  const handleHandoffChange = (value: string): void => {
-    if (handoffRadioRef.value) {
-      const buttons = handoffRadioRef.value.querySelectorAll('.radio-button');
-      buttons.forEach((btn) => btn.classList.remove('active'));
-    }
+  const handleHandoffChange = (value: string, event?: MouseEvent): void => {
+    applyRadioActive(handoffRadioRef.value, event);
     lifecycle.emit?.('settingChange', { key: 'handoff', value: value });
   };
 
@@ -135,11 +153,8 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
    * 视频比例选项切换处理
    * @param value - 选中的视频比例值
    */
-  const handleAspectChange = (value: string): void => {
-    if (aspectRadioRef.value) {
-      const buttons = aspectRadioRef.value.querySelectorAll('.radio-button');
-      buttons.forEach((btn) => btn.classList.remove('active'));
-    }
+  const handleAspectChange = (value: string, event?: MouseEvent): void => {
+    applyRadioActive(aspectRadioRef.value, event);
     lifecycle.emit?.('settingChange', { key: 'aspect', value: value });
   };
 
@@ -147,11 +162,8 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
    * 播放策略选项切换处理
    * @param value - 选中的播放策略值
    */
-  const handleCodecChange = (value: string): void => {
-    if (codecRadioRef.value) {
-      const buttons = codecRadioRef.value.querySelectorAll('.radio-button');
-      buttons.forEach((btn) => btn.classList.remove('active'));
-    }
+  const handleCodecChange = (value: string, event?: MouseEvent): void => {
+    applyRadioActive(codecRadioRef.value, event);
     lifecycle.emit?.('settingChange', { key: 'codec', value: value });
   };
 
@@ -239,11 +251,11 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
                   h('div', { class: 'bui-radio-wrap-button', ref: 'handoffRadioRef' },
                     h('div', {
                       class: 'radio-button active',
-                      onClick: () => handleHandoffChange('自动切集'),
+                      onClick: (e: MouseEvent) => handleHandoffChange('自动切集', e),
                     }, h('span', {}, '自动切集')),
                     h('div', {
                       class: 'radio-button',
-                      onClick: () => handleHandoffChange('播完暂停'),
+                      onClick: (e: MouseEvent) => handleHandoffChange('播完暂停', e),
                     }, h('span', {}, '播完暂停'))
                   )
                 )
@@ -255,15 +267,15 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
                   h('div', { class: 'bui-radio-wrap-button', ref: 'aspectRadioRef' },
                     h('div', {
                       class: 'radio-button active',
-                      onClick: () => handleAspectChange('自动'),
+                      onClick: (e: MouseEvent) => handleAspectChange('自动', e),
                     }, h('span', {}, '自动')),
                     h('div', {
                       class: 'radio-button',
-                      onClick: () => handleAspectChange('4:3'),
+                      onClick: (e: MouseEvent) => handleAspectChange('4:3', e),
                     }, h('span', {}, '4:3')),
                     h('div', {
                       class: 'radio-button',
-                      onClick: () => handleAspectChange('16:9'),
+                      onClick: (e: MouseEvent) => handleAspectChange('16:9', e),
                     }, h('span', {}, '16:9'))
                   )
                 )
@@ -275,19 +287,19 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
                   h('div', { class: 'bui-radio-wrap-button', ref: 'codecRadioRef' },
                     h('div', {
                       class: 'radio-button active',
-                      onClick: () => handleCodecChange('默认'),
+                      onClick: (e: MouseEvent) => handleCodecChange('默认', e),
                     }, h('span', {}, '默认')),
                     h('div', {
                       class: 'radio-button',
-                      onClick: () => handleCodecChange('AV1'),
+                      onClick: (e: MouseEvent) => handleCodecChange('AV1', e),
                     }, h('span', {}, 'AV1')),
                     h('div', {
                       class: 'radio-button',
-                      onClick: () => handleCodecChange('HEVC'),
+                      onClick: (e: MouseEvent) => handleCodecChange('HEVC', e),
                     }, h('span', {}, 'HEVC')),
                     h('div', {
                       class: 'radio-button',
-                      onClick: () => handleCodecChange('AVC'),
+                      onClick: (e: MouseEvent) => handleCodecChange('AVC', e),
                     }, h('span', {}, 'AVC'))
                   )
                 )

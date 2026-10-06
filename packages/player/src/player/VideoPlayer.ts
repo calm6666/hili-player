@@ -51,6 +51,7 @@ import {
   ConfigStoreContext,
 } from '@/store/configStore';
 import type { ConfigStore } from '@/store/configStore';
+import type { PlayerPlaylistItem } from '@/store/runtimeState';
 import { PluginManager } from '@/hili-player/core/pluginManager';
 import { createPlayerStore } from '@/hili-player/store';
 import type { PlayerStore } from '@/hili-player/store';
@@ -411,6 +412,13 @@ export class VideoPlayer
         aspectRatio: 0,
       },
     });
+
+    /**
+     * 首帧同步播放列表到运行时状态（选集面板的数据源）：
+     * 构造函数早于 render()/mount()，UI 组件渲染时即可读到列表，
+     * 不必等到用户切集。
+     */
+    this.syncPlaylistState();
 
     /** 初始化事件总线 */
     this.events = createTypedEventBus<PlayerEventMap>();
@@ -862,6 +870,60 @@ export class VideoPlayer
       },
       onNext: () => {
         void this.next();
+      },
+      /** 选集面板点击某一集：按列表下标切集（UI → 播放列表） */
+      onEplistChange: (index: number) => {
+        void this.switchTo(index);
+      },
+      // 字幕设置面板：开关 / 语言 / 样式 / 双语 —— 落到播放器真实 API
+      onSubtitleToggle: (visible: boolean) => {
+        this.setSubtitleVisible(visible);
+      },
+      onSubtitleLangChange: (lang: string) => {
+        this.setSubtitleLang(lang);
+      },
+      onSubtitleStyleChange: (patch: {
+        fontSize?: number;
+        color?: string;
+        position?: "top" | "bottom";
+        offset?: number;
+        strokeColor?: string;
+        strokeWidth?: number;
+        opacity?: number;
+        scale?: boolean;
+        fade?: boolean;
+      }) => {
+        // 样式项直接下发给字幕插件（有对应能力才调用，未接入的项忽略）
+        // getPluginAPI 的泛型受 Plugin 约束，这里取回实例后按所需能力做结构化断言
+        const api = this.getPluginAPI("subtitle") as
+          | {
+              setFontSize?: (size: number) => void;
+              setColor?: (color: string) => void;
+              setPosition?: (position?: "top" | "bottom", offset?: number) => void;
+              setStroke?: (color?: string, width?: number) => void;
+              setStyle?: (style: Record<string, unknown>) => void;
+            }
+          | undefined;
+        if (!api) return;
+        if (patch.fontSize !== undefined) api.setFontSize?.(patch.fontSize);
+        if (patch.color !== undefined && patch.strokeColor === undefined) {
+          api.setColor?.(patch.color);
+        }
+        if (patch.position !== undefined || patch.offset !== undefined) {
+          api.setPosition?.(patch.position, patch.offset);
+        }
+        if (patch.strokeColor !== undefined || patch.strokeWidth !== undefined) {
+          api.setStroke?.(patch.strokeColor, patch.strokeWidth);
+        }
+        const rest: Record<string, unknown> = {};
+        if (patch.opacity !== undefined) rest.opacity = patch.opacity;
+        if (patch.scale !== undefined) rest.scale = patch.scale;
+        if (patch.fade !== undefined) rest.fade = patch.fade;
+        if (Object.keys(rest).length > 0) api.setStyle?.(rest);
+      },
+      onBilingualChange: (enabled: boolean) => {
+        // 双语字幕：转发到事件总线，由字幕插件自行处理（无对应能力时仅广播）
+        this.events.emit(PlayerEventEnum.SUBTITLE_SWITCH, { lang: enabled ? "bilingual" : "" });
       },
       onDanmakuToggle: () => {
         this.toggleDanmaku();
@@ -1493,8 +1555,8 @@ export class VideoPlayer
         0,
         Math.max(0, this.playlist.length - 1),
       );
-      this.state.set(PlayerStateKeyEnum.PLAYLIST_LENGTH, this.playlist.length);
-      this.state.set(PlayerStateKeyEnum.PLAYLIST_INDEX, this.currentIndex);
+      /** 列表已归一化：同步 PLAYLIST / PLAYLIST_INDEX / PLAYLIST_LENGTH */
+      this.syncPlaylistState();
       this.events.emit(PlayerEventEnum.PLAYLIST_CHANGE, {
         index: this.currentIndex,
         total: this.playlist.length,
@@ -2343,12 +2405,44 @@ export class VideoPlayer
     resolve?.();
   }
 
+  /**
+   * 播放列表 → 运行时状态快照（选集面板的数据源）
+   *
+   * - `id` / `title` 取 `MediaItem` 对应字段，`index` 取数组下标
+   * - 每次调用都产生新的数组引用，订阅方（选集面板）据此感知列表变化
+   *
+   * @returns 结构为 `EpisodeOption[]` 的列表快照
+   */
+  private toPlaylistItems(): PlayerPlaylistItem[] {
+    return this.playlist.map((item, index) => ({
+      id: item.id,
+      title: item.title,
+      index,
+    }));
+  }
+
+  /**
+   * 同步播放列表相关的 3 个运行时状态键
+   *
+   * - `PLAYLIST`：列表快照（选集面板渲染用）
+   * - `PLAYLIST_INDEX`：当前下标（选集面板高亮跟随用）
+   * - `PLAYLIST_LENGTH`：列表长度
+   *
+   * 写入时机：构造期（首帧数据）、`emitEpisodeChange()`（切集完成）、
+   * `setConfig()` 替换列表时。
+   */
+  private syncPlaylistState(): void {
+    this.state.set(PlayerStateKeyEnum.PLAYLIST, this.toPlaylistItems());
+    this.state.set(PlayerStateKeyEnum.PLAYLIST_INDEX, this.currentIndex);
+    this.state.set(PlayerStateKeyEnum.PLAYLIST_LENGTH, this.playlist.length);
+  }
+
   /** 广播当前播放条目变化 */
   private emitEpisodeChange(): void {
     const total = this.playlist.length;
     const item = this.playlist[this.currentIndex];
-    this.state.set(PlayerStateKeyEnum.PLAYLIST_INDEX, this.currentIndex);
-    this.state.set(PlayerStateKeyEnum.PLAYLIST_LENGTH, total);
+    /** 同步选集面板数据（PLAYLIST / PLAYLIST_INDEX / PLAYLIST_LENGTH） */
+    this.syncPlaylistState();
     this.events.emit(PlayerEventEnum.EPISODE_CHANGE, {
       index: this.currentIndex,
       total,

@@ -22,6 +22,7 @@ export interface CtrlShowMenu {
   viewpoint: CtrlShowMenuItem;
   quality: CtrlShowMenuItem;
   eplist: CtrlShowMenuItem;
+  subtitle: CtrlShowMenuItem;
   playbackrate: CtrlShowMenuItem;
   volume: CtrlShowMenuItem;
   setting: CtrlShowMenuItem;

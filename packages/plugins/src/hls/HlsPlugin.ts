@@ -26,11 +26,11 @@
  */
 
 import Hls from 'hls.js';
-import type { ManifestVariant, ManifestAudioGroup, ManifestParsedData, ErrorData, LevelSwitchedData } from 'hls.js';
+import type { ManifestVariant, ManifestAudioGroup, ManifestParsedData, ErrorData, LevelSwitchedData, Level } from 'hls.js';
 import type { MediaManifest } from '../vendor/types';
 import { manifestToHls } from '../vendor/manifest-to-hls';
 import type { VideoPlayer } from '@hili-player/player';
-import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
+import { StreamPluginTypeEnum, StreamPluginEventEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import { PlayerEventEnum } from '@/core/events';
@@ -781,33 +781,135 @@ export class HlsPlugin implements StreamPlugin {
   }
 
   /**
+   * 取某个 level 的视频编码原始串（库原始 API → 我们的 codecString）
+   * 依据本地 hls-fork/dist/hls.d.ts：
+   * - L3030 `readonly videoCodec: string | undefined`（清单解析出的视频编码，首选）
+   * - L3077 `CODECS?: string`（LevelAttributes，即 #EXT-X-STREAM-INF 的 CODECS 原串，如 "avc1.640028,mp4a.40.2"）
+   * - L3052 `get codecs(): string`（同一 CODECS 串的 getter）
+   * - L3023 `readonly codecSet: string`（由 videoCodec/audioCodec 拼成，见 hls-fork/src/types/level.ts:153）
+   *
+   * @param level - hls.js 的 Level 对象
+   * @returns 视频编码原始串；取不到返回 undefined
+   */
+  private extractVideoCodecString(level: Level): string | undefined {
+    if (level.videoCodec) return level.videoCodec;
+    const raw = level.attrs?.CODECS || level.codecs || level.codecSet;
+    return raw || undefined;
+  }
+
+  /**
+   * ABR（自动档）是否可用
+   * 判据：hls.js 实例就绪 且 levels 中存在多个真实档位。
+   * 只有一档时不存在可自适应的码率，视为「无 ABR 场景」，列表里不出现自动档。
+   * 注意：手动锁定某档后 autoLevelEnabled 会变成 false，但 ABR 能力仍在，
+   * 此时自动档必须保留（否则用户无法切回自动），因此判据不含 autoLevelEnabled。
+   */
+  private isAbrAvailable(): boolean {
+    return (this.hlsPlayer?.levels?.length ?? 0) > 1;
+  }
+
+  /**
+   * 取自动档当前实际生效的档位对象（供 UI 显示「自动(1080P 高清)」）
+   * 依据本地 hls-fork/dist/hls.d.ts：
+   * - L1996-1998 `get currentLevel(): number`「Index of quality level (variant) currently played」
+   *   —— 自动档下它返回 ABR 实际选中的档位索引（不是 -1），仅起播前为 -1
+   * - L2014-2017 `get loadLevel(): number`（当前/最近一次加载片段的档位）
+   * - L2104-2107 `get nextAutoLevel(): number`（ABR 预估的下一档）
+   *
+   * @returns 命中的档位；三级取值都不可用时返回 undefined
+   */
+  private getAutoLevelInfo(): Level | undefined {
+    const hls = this.hlsPlayer;
+    if (!hls) return undefined;
+
+    const levels = hls.levels ?? [];
+    for (const index of [hls.currentLevel, hls.loadLevel, hls.nextAutoLevel]) {
+      if (index >= 0 && index < levels.length) return levels[index];
+    }
+    return undefined;
+  }
+
+  /**
    * 获取可用画质列表
    * 从 hls.js 获取所有可用的码率/分辨率级别
    *
-   * @returns 画质列表（id + label + 码率 + 分辨率）
+   * 列表结构（自动档放在最前，即 index 0）：
+   * - 第 0 项（ABR 可用时才有）：自动档，id='auto' / isAuto=true；
+   *   width/height/bitrate/codec 取「当前 ABR 实际选中的档位」，供 UI 拼出「自动(1080P 高清)」
+   * - 其余项：真实档位，id 为 hls.js 的 level 索引字符串，原有字段与顺序保持不变
+   *
+   * @returns 画质列表（id + label + 分辨率 + 码率 + 编码 + 是否自动档）
    */
   getQualities(): QualityLevel[] {
-    if (!this.hlsPlayer) return [];
-    return this.hlsPlayer.levels.map((level, index) => ({
-      id: String(index),
-      label: level.height ? `${level.height}p` : `Level ${index}`,
-      width: level.width,
-      height: level.height,
-      bitrate: level.bitrate,
-    }));
+    const hls = this.hlsPlayer;
+    if (!hls) return [];
+
+    const levels = hls.levels ?? [];
+
+    // 真实档位：hls.js 的 Level.videoCodec / attrs.CODECS → 我们的 codec / codecString
+    const list: QualityLevel[] = levels.map((level, index) => {
+      const { codec, codecString } = resolveVideoCodec(this.extractVideoCodecString(level));
+      return {
+        id: String(index),
+        label: level.height ? `${level.height}p` : `Level ${index}`,
+        width: level.width,
+        height: level.height,
+        bitrate: level.bitrate,
+        isAuto: false,
+        codec,
+        codecString,
+      };
+    });
+
+    // 无 ABR 场景（单档）不产出自动档
+    if (!this.isAbrAvailable()) return list;
+
+    const autoLevel = this.getAutoLevelInfo();
+    const autoCodec = resolveVideoCodec(autoLevel ? this.extractVideoCodecString(autoLevel) : undefined);
+    list.unshift({
+      id: AUTO_QUALITY_ID,
+      label: '自动',
+      width: autoLevel?.width ?? 0,
+      height: autoLevel?.height ?? 0,
+      bitrate: autoLevel?.bitrate ?? 0,
+      isAuto: true,
+      codec: autoCodec.codec,
+      codecString: autoCodec.codecString,
+    });
+
+    return list;
   }
 
   /**
    * 设置播放画质
-   * 切换到指定索引的码率层级（'-1' 或 'auto' 表示自动选择）
+   * - 'auto' / '-1'：切回 ABR 自动档
+   * - 其它：切到指定索引的真实档位
    *
-   * @param quality - 画质标识（级别索引字符串，或 'auto'）
+   * 「切回自动」的确切 API（依据本地 hls-fork/dist/hls.d.ts）：
+   * - L2000-2002 `set currentLevel(newLevel: number)`，其 JSDoc 明写
+   *   「Set to -1 for automatic level selection」，因此 `currentLevel = -1` 就是切回自动的入口；
+   * - hls-fork/src/hls.ts:1022-1026 该 setter 内部执行 `levelController.manualLevel = -1`
+   *   并调用 `streamController.immediateLevelSwitch()`，切换真实生效；
+   * - autoLevelEnabled 是只读 getter（d.ts L2088-2090 / src/hls.ts:1220-1221
+   *   `return this.levelController.manualLevel === -1`），不能直接赋值，
+   *   所以只能通过 currentLevel = -1 把 manualLevel 复位为 -1 来间接打开 ABR。
+   *
+   * @param quality - 画质标识（级别索引字符串，或 AUTO_QUALITY_ID / '-1'）
    */
   setQuality(quality: string): void {
-    if (this.hlsPlayer) {
-      const level = quality === 'auto' ? -1 : Number(quality);
-      this.hlsPlayer.currentLevel = level;
+    const hls = this.hlsPlayer;
+    if (!hls) return;
+
+    // 'auto' 与 '-1' 等价：都表示切回 ABR 自动档
+    const level = quality === AUTO_QUALITY_ID ? -1 : Number(quality);
+
+    // 非法档位（非整数、超出 levels 范围）直接忽略，避免把 NaN/-2 写进 hls.js
+    if (!Number.isInteger(level) || level < -1 || level >= (hls.levels?.length ?? 0)) {
+      logger.warn(`忽略非法的画质档位: ${quality}`);
+      return;
     }
+
+    hls.currentLevel = level;
   }
 
   /**

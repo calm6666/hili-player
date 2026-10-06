@@ -1,0 +1,225 @@
+// ============================================
+// 选集面板样式 (EpisodesMenu)
+// ============================================
+// 对应组件：packages/player/src/components/EpisodesMenu.ts
+//
+// 内容分三块：
+//   1. 可见性（本任务重点）：普通模式隐藏 / 网页全屏与浏览器全屏可见
+//   2. 面板与列表（结构、选中态、播放中图标、省略号）
+//   3. 滚动容器（自写细滚动条，未复用组件 —— 项目里没有可用的 ScrollView 实现）
+//
+// 约定：
+//   - 类名统一 player- 前缀，选中态统一 player-state-active
+//   - 主题色只用 var(--player-primary-color) / var(--player-fn-color)
+//   - 显隐一律 visibility / width，禁止 display（父层 RightControls.ts:100
+//     会写内联 el.style.display，内联优先级最高会打架）
+
+/** 列表区最大高度与滚动条宽度（两处联动，抽出变量避免写歪） */
+$eplist-list-max-height: 520px;
+$eplist-scrollbar-width: 6px;
+
+// ============================================
+// 1. 可见性
+// ============================================
+
+// 基态：不可见且不占位（与参考实现 .bpx-player-ctrl-eplist{visibility:hidden;width:0} 一致）
+.player-ctrl-btn.player-ctrl-eplist {
+  visibility: hidden;
+  width: 0;
+}
+
+// 网页全屏 / 浏览器全屏时可见。
+// 祖先链依据（已核对）：
+//   .player-docker.mode-webscreen —— PlayerDocker.ts:1507 加类，index.scss:5161 定义
+//   .player-container[data-screen="web"] —— PlayerDocker.ts:450 / VideoPlayer.ts:1945 写属性
+//   .player-container[data-screen="full"] —— PlayerDocker.ts:1749 写属性
+.player-docker.mode-webscreen .player-ctrl-btn.player-ctrl-eplist,
+.player-container[data-screen="web"] .player-ctrl-btn.player-ctrl-eplist,
+.player-container[data-screen="full"] .player-ctrl-btn.player-ctrl-eplist {
+  visibility: visible;
+  width: auto;
+}
+
+// 全屏 / 网页全屏下面板更高（控制栏 73px，与既有面板 bottom:74px 对齐：
+// 见 index.scss:5023 quality、index.scss:5031 eplist、index.scss:5054 setting）
+.player-container[data-screen="web"] .player-ctrl-eplist-menu-wrap,
+.player-container[data-screen="full"] .player-ctrl-eplist-menu-wrap {
+  bottom: 74px;
+}
+
+// 面板显隐沿用项目统一机制：祖先按钮加 state-show 后展开
+// （编译后为 .player-ctrl-btn.player-ctrl-eplist.state-show .player-ctrl-eplist-menu-wrap，
+//   与 styles/controls.scss:551-576 的 .state-show 规则同族，此处显式再声明一次以保证
+//   只引入本文件时也成立；显隐用 opacity/visibility，不用 display）
+.player-ctrl-btn.player-ctrl-eplist.state-show {
+  .player-ctrl-eplist-menu-wrap {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+// ============================================
+// 2. 面板
+// ============================================
+
+.player-ctrl-eplist {
+  font-size: 14px;
+
+  .player-ctrl-eplist-result {
+    cursor: pointer;
+    font-weight: 600;
+    width: 100%;
+  }
+
+  .player-ctrl-eplist-menu-wrap {
+    background-color: hsla(0, 0%, 8%, 0.9);
+    border-radius: 2px;
+    bottom: 41px;
+    box-sizing: border-box;
+    left: 50%;
+    max-height: 580px;
+    opacity: 0;
+    overflow: hidden;
+    position: absolute;
+    text-align: left;
+    transform: translateX(-50%);
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    visibility: hidden;
+    width: 320px;
+  }
+
+  .player-ctrl-eplist-section {
+    padding: 0;
+    width: 100%;
+
+    .player-ctrl-eplist-section-bottom {
+      max-height: $eplist-list-max-height;
+      overflow: hidden;
+      position: relative;
+
+      // 滚动容器：列表自身滚动，外层负责裁剪（圆角 / 不撑破面板）
+      .player-ctrl-eplist-section-content {
+        list-style: none;
+        margin: 0;
+        max-height: $eplist-list-max-height;
+        outline: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 0;
+        scrollbar-color: hsla(0, 0%, 100%, 0.3) transparent;
+        scrollbar-width: thin;
+
+        .player-ctrl-eplist-multi-menu-item {
+          align-items: center;
+          cursor: pointer;
+          display: flex;
+          font-size: 12px;
+          height: 30px;
+          line-height: 30px;
+          overflow: hidden;
+          padding: 0 20px;
+          position: relative;
+          white-space: nowrap;
+
+          &:hover {
+            background-color: hsla(0, 0%, 100%, 0.1);
+          }
+
+          .player-ctrl-eplist-multi-menu-item-text {
+            flex-grow: 1;
+            min-width: 0;
+            overflow: hidden;
+            pointer-events: none;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .player-ctrl-eplist-multi-menu-item-icon {
+            color: var(--player-primary-color, #00a1d6);
+            fill: currentColor;
+            flex-shrink: 0;
+            height: 12px;
+            margin-right: 4px;
+            pointer-events: none;
+            width: 12px;
+
+            svg {
+              display: block;
+              fill: currentColor;
+              height: 12px;
+              width: 12px;
+            }
+          }
+        }
+
+        // 当前集：高亮主题色 + 不可点（:hover 背景也压掉，避免"可切换"的错误暗示）
+        .player-ctrl-eplist-multi-menu-item.player-state-active {
+          color: var(--player-primary-color, #00a1d6);
+          cursor: default;
+
+          &:hover {
+            background-color: transparent;
+          }
+        }
+
+        // 空态（episodes 为空数组）
+        .player-ctrl-eplist-empty {
+          color: hsla(0, 0%, 100%, 0.6);
+          cursor: default;
+
+          &:hover {
+            background-color: transparent;
+          }
+        }
+      }
+    }
+  }
+}
+
+// ============================================
+// 3. 滚动条（自写细滚动条，不引入第三方库）
+// ============================================
+
+.player-ctrl-eplist .player-ctrl-eplist-section-content {
+  // Chromium / WebKit
+  &::-webkit-scrollbar {
+    height: $eplist-scrollbar-width;
+    width: $eplist-scrollbar-width;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: hsla(0, 0%, 100%, 0.08);
+    border-radius: calc(#{$eplist-scrollbar-width} / 2);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: hsla(0, 0%, 100%, 0.3);
+    border-radius: calc(#{$eplist-scrollbar-width} / 2);
+
+    &:hover {
+      background: hsla(0, 0%, 100%, 0.45);
+    }
+
+    &:active {
+      background: hsla(0, 0%, 100%, 0.6);
+    }
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+// ============================================
+// 4. 大屏适配（与既有面板 rules 同断点：index.scss:4895 screen-style 用 750px）
+// ============================================
+
+@media screen and (min-width: 750px) {
+  .player-container[data-screen="web"] .player-ctrl-btn.player-ctrl-eplist,
+  .player-container[data-screen="full"] .player-ctrl-btn.player-ctrl-eplist {
+    .player-ctrl-eplist-result {
+      font-size: 16px;
+    }
+  }
+}

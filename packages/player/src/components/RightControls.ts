@@ -5,7 +5,7 @@
  * 独立的函数组件，拥有自己的生命周期
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext, mount, destroy } from '@/core';
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
@@ -14,6 +14,10 @@ import { VolumeSlider } from './VolumeSlider';
 import { QualityMenu } from './QualityMenu';
 import { PlaybackRateMenu } from './PlaybackRateMenu';
 import { SettingMenu } from './SettingMenu';
+import { EpisodesMenu } from './EpisodesMenu';
+import { SubtitleMenu } from './SubtitleMenu';
+import type { SubtitleStylePatch } from './SubtitleMenu';
+import type { EpisodeOption } from './EpisodesMenu';
 import { LottieIcon, type LottieIconApi } from './LottieIcon';
 import fullscreenAnimationData from '../assets/lottie-icon/fullscreen-animation.json';
 import webFullscreenAnimationData from '../assets/lottie-icon/web-fullscreen-animation.json';
@@ -38,8 +42,18 @@ export type RightControlsEvents = {
   volumeChange: number;
   muteToggle: undefined;
   qualityChange: string;
+  /** 选集面板选择某一集，值为列表下标（透传 EpisodesMenu 的 episodeChange） */
+  eplistChange: number;
+  /** 字幕开关变化 */
+  subtitleToggle: boolean;
+  /** 字幕语言切换 */
+  subtitleLangChange: string;
+  /** 字幕样式变化（只带变化字段） */
+  subtitleStyleChange: SubtitleStylePatch;
+  /** 双语字幕开关变化 */
+  bilingualChange: boolean;
   settingChange: { key: string; value: boolean | string | number };
-  menuAnimation: { type: 'quality' | 'eplist' | 'playbackrate' | 'volume' | 'setting'; action: 'show' | 'hide' };
+  menuAnimation: { type: 'quality' | 'eplist' | 'playbackrate' | 'subtitle' | 'volume' | 'setting'; action: 'show' | 'hide' };
   moreSettingClick: undefined;
   rightControlsMounted: undefined;
 };
@@ -134,6 +148,100 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   /** 音量图标点击静音切换事件桥接 */
   const onMuteToggle = (): void => {
     lifecycle.emit?.('muteToggle');
+  };
+
+  // ============================================
+  // 选集面板（EpisodesMenu）数据与事件桥接
+  // ============================================
+
+  /** 选集列表（首帧快照来自运行时状态；后续变化由下方订阅刷新并重建面板） */
+  let episodes: EpisodeOption[] = state?.get(PlayerStateKeyEnum.PLAYLIST) ?? [];
+  /** 当前集下标（首帧快照；切集后的高亮由 EpisodesMenu 内部订阅同一状态键维护） */
+  let currentIndex: number = state?.get(PlayerStateKeyEnum.PLAYLIST_INDEX) ?? 0;
+  /** 选集面板组件节点（列表真正变化时据此原地重建） */
+  let eplistVNode: VNode | null = null;
+
+  /**
+   * 列表内容签名：用于判断 PLAYLIST 通知是否真的换了列表
+   * （切集时 VideoPlayer 会重写 PLAYLIST，但内容不变，此时不应重建面板）
+   * @param list - 选集列表
+   * @returns 内容签名
+   */
+  const episodesKey = (list: EpisodeOption[]): string =>
+    list
+      .map((item) => `${item.index}:${item.id ?? ''}:${item.title ?? ''}`)
+      .join('|');
+
+  /** 当前面板节点对应的列表签名 */
+  let eplistKey = episodesKey(episodes);
+
+  /** 选集面板点击某一集：下标向上抛，最终落到 VideoPlayer.switchTo(index) */
+  const onEpisodeChange = (index: number): void => {
+    lifecycle.emit?.('eplistChange', index);
+  };
+
+  /** 字幕面板：开关 */
+  const onSubtitleToggle = (visible: boolean): void => {
+    lifecycle.emit?.('subtitleToggle', visible);
+  };
+
+  /** 字幕面板：语言切换 */
+  const onSubtitleLangChange = (lang: string): void => {
+    lifecycle.emit?.('subtitleLangChange', lang);
+  };
+
+  /** 字幕面板：样式项变化（只带变化字段） */
+  const onSubtitleStyleChange = (patch: SubtitleStylePatch): void => {
+    lifecycle.emit?.('subtitleStyleChange', patch);
+  };
+
+  /** 字幕面板：双语开关 */
+  const onBilingualChange = (enabled: boolean): void => {
+    lifecycle.emit?.('bilingualChange', enabled);
+  };
+
+  /**
+   * 创建选集面板节点
+   *
+   * 显式注入 StateContext：运行期重建发生在渲染栈之外（状态订阅回调里），
+   * 组件沿 __parent 链取不到 Provider（与 PlayerDocker 懒挂载面板同一处理）。
+   * @returns EpisodesMenu 组件节点
+   */
+  const createEplistVNode = (): VNode =>
+    h(EpisodesMenu, {
+      episodes,
+      currentIndex,
+      onEpisodeChange,
+      onMenuAnimation,
+      __providers: state
+        ? [{ contextId: StateContext.id, value: state }]
+        : undefined,
+    });
+
+  /**
+   * 原地重建选集面板（列表数据真正变化时调用）
+   *
+   * 框架无虚拟 DOM diff：EpisodesMenu 的 episodes 是 props 快照，
+   * 仅靠订阅拿不到新列表，只能销毁旧实例再挂载新实例。
+   * mount 只能追加到容器末尾，故先挂到临时容器，再 insertBefore 插回原位置，
+   * 保证选集按钮在右侧控制栏中的顺序不变。
+   */
+  const rebuildEplist = (): void => {
+    const oldEl = eplistVNode?.el;
+    const host = (oldEl?.parentNode ?? null) as HTMLElement | null;
+    if (!eplistVNode || !oldEl || !host) return; // 尚未挂载：首帧渲染自带最新数据
+
+    const anchor = oldEl.nextSibling;
+    destroy(eplistVNode);
+
+    const next = createEplistVNode();
+    eplistVNode = next;
+
+    const staging = document.createElement('div');
+    mount(next, staging);
+    if (next.el) {
+      host.insertBefore(next.el, anchor);
+    }
   };
 
   // ============================================
@@ -314,6 +422,39 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       },
       lifecycle
     );
+
+    /**
+     * 监听播放列表数据（player.playlist）
+     * 列表内容真正变化时刷新传给 EpisodesMenu 的快照并原地重建面板；
+     * 切集只会重写同内容的 PLAYLIST，签名一致则不重建，按钮节点保持稳定
+     */
+    useState(
+      state,
+      PlayerStateKeyEnum.PLAYLIST,
+      (list) => {
+        const next = list ?? [];
+        const nextKey = episodesKey(next);
+        if (nextKey === eplistKey) return;
+        episodes = next;
+        eplistKey = nextKey;
+        rebuildEplist();
+      },
+      lifecycle
+    );
+
+    /**
+     * 监听当前集下标（player.playlistIndex）
+     * 这里只维护传给组件的快照；「切集后高亮跟随」由 EpisodesMenu
+     * 内部对同一状态键的订阅完成（组件自带，无需父层驱动）
+     */
+    useState(
+      state,
+      PlayerStateKeyEnum.PLAYLIST_INDEX,
+      (index) => {
+        if (typeof index === 'number') currentIndex = index;
+      },
+      lifecycle
+    );
   }
 
   // ============================================
@@ -326,55 +467,42 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     quality: () => {
       return h(QualityMenu, { qualities, currentQuality, onQualityChange, onMenuAnimation });
     },
-    /** 渲染选集菜单 */
+    /** 渲染选集菜单（列表数据 / 当前集高亮由 EpisodesMenu 内部订阅运行时状态维护） */
     eplist: () => {
-      return h('div', {
-        class: 'player-ctrl-btn player-ctrl-eplist',
-        role: 'button',
-        'aria-label': '选集',
-        onMouseEnter: () => lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'show' }),
-        onMouseLeave: () => lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'hide' })
-      },
-        h('div', { class: 'player-ctrl-eplist-result' }, '选集'),
-        h('div', { class: 'player-ctrl-eplist-menu-wrap', style: { minHeight: '180px' } },
-          h('div', { class: 'player-ctrl-eplist-section' },
-            h('div', {
-              class: 'player-ctrl-eplist-section-bottom',
-              style: {
-                touchAction: 'pan-x',
-                userSelect: 'none',
-                webkitUserDrag: 'none',
-                webkitTapHighlightColor: 'rgba(0, 0, 0, 0)'
-              }
-            },
-              h('ul', {
-                class: 'player-ctrl-eplist-section-content',
-                style: {
-                  transitionTimingFunction: 'cubic-bezier(0.165, 0.84, 0.44, 1)',
-                  transitionDuration: '0ms',
-                  transform: 'translate(0px, 0px) scale(1) translateZ(0px)'
-                },
-              },
-                h('li', { class: 'player-ctrl-eplist-multi-menu-item state-multi-active-item', 'data-cid': '554164205' },
-                  h('span', { class: 'common-svg-icon' }),
-                  h('span', { class: 'player-ctrl-eplist-multi-menu-item-text' }, '青岛大学教工足球队2022年3月20日周五中午活动')
-                ),
-                h('li', { class: 'player-ctrl-eplist-multi-menu-item', 'data-cid': '554164027' },
-                  h('span', { class: 'common-svg-icon' }),
-                  h('span', { class: 'player-ctrl-eplist-multi-menu-item-text' }, '青岛大学教工足球队2022年3月20日周日中午活动')
-                ),
-                h('li', { class: 'player-ctrl-eplist-multi-menu-item', 'data-cid': '554164026' },
-                  h('span', { class: 'common-svg-icon' }),
-                  h('span', { class: 'player-ctrl-eplist-multi-menu-item-text' }, 'C0099')
-                )
-              )
-            )
-          )
-        )
-      );
+      eplistVNode = createEplistVNode();
+      return eplistVNode;
     },
     /** 渲染播放速率选择菜单 */
     playbackrate: () => h(PlaybackRateMenu, { rate, rates, onRateChange, onMenuAnimation }),
+    /** 渲染字幕设置面板（开关 / 语言 / 字号颜色位置等 / 双语） */
+    subtitle: () => {
+      /** 字幕样式初值（面板内部会按用户操作命令式更新） */
+      const subtitleStyle = {
+        fontSize: 0,
+        color: '#ffffff',
+        position: 'bottom' as const,
+        offset: 0,
+        strokeColor: 'none',
+        strokeWidth: 0,
+        opacity: 0.87,
+        scale: false,
+        fade: false,
+      };
+      return h(SubtitleMenu, {
+        visible: state?.get(PlayerStateKeyEnum.SUBTITLE_VISIBLE) ?? false,
+        lang: state?.get(PlayerStateKeyEnum.SUBTITLE_LANG) ?? '',
+        // 语言列表：播放器暂无对应运行时状态键；由使用方通过配置提供，缺省为空数组
+        languages: configStore?.getPath<
+          { lang: string; label: string; isDefault?: boolean }[]
+        >('subtitle.list') ?? [],
+        style: subtitleStyle,
+        onSubtitleToggle,
+        onSubtitleLangChange,
+        onSubtitleStyleChange,
+        onBilingualChange,
+        onMenuAnimation,
+      });
+    },
     /** 渲染音量滑块组件（hover 展开 / 拖拽调量 / 静音切换） */
     volume: () => h(VolumeSlider, { onMenuAnimation, onVolumeChange, onMuteToggle }),
     /** 渲染设置菜单 */
@@ -501,7 +629,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   };
 
   /** 底部右侧按钮的渲染顺序配置 */
-  const bottomRightOrder = ['quality', 'eplist', 'playbackrate', 'volume', 'setting', 'pip', 'wide', 'web', 'full'];
+  const bottomRightOrder = ['quality', 'eplist', 'playbackrate', 'subtitle', 'volume', 'setting', 'pip', 'wide', 'web', 'full'];
 
   // ============================================
   // 生命周期钩子

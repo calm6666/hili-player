@@ -231,8 +231,26 @@ export type PlayerDockerEvents = {
   backrateChange: number;
   /** 全屏切换 */
   fullscreenToggle: undefined;
-  /** 选集菜单选择，值为条目 id */
-  eplistChange: string;
+  /** 选集菜单选择，值为列表下标（由 VideoPlayer 接到 switchTo(index)） */
+  eplistChange: number;
+  /** 字幕开关变化 */
+  subtitleToggle: boolean;
+  /** 字幕语言切换 */
+  subtitleLangChange: string;
+  /** 字幕样式变化（只带变化字段） */
+  subtitleStyleChange: {
+    fontSize?: number;
+    color?: string;
+    position?: "top" | "bottom";
+    offset?: number;
+    strokeColor?: string;
+    strokeWidth?: number;
+    opacity?: number;
+    scale?: boolean;
+    fade?: boolean;
+  };
+  /** 双语字幕开关变化 */
+  bilingualChange: boolean;
   /** 设置菜单项变化 */
   settingChange: { key: string; value: boolean | string | number };
   /** 点击「更多设置」 */
@@ -1491,6 +1509,23 @@ export const PlayerDocker = defineComponent<
     document.removeEventListener("wheel", handleVolumeWheel);
   };
 
+  /**
+   * 按当前全屏状态同步滚轮监听（网页全屏或浏览器全屏任一激活即绑定）
+   *
+   * 修复叠加场景：网页全屏 → 再进浏览器全屏 → 退出浏览器全屏时，
+   * 旧实现无条件解绑，导致「仍在网页全屏却没有滚轮调音量」。
+   */
+  const syncVolumeWheelBinding = (): void => {
+    const inFullscreen =
+      (stateMgr?.get(PlayerStateKeyEnum.IS_FULLSCREEN) ?? false) ||
+      (stateMgr?.get(PlayerStateKeyEnum.IS_WEB_FULLSCREEN) ?? false);
+    if (inFullscreen) {
+      bindVolumeWheel();
+    } else {
+      unbindVolumeWheel();
+    }
+  };
+
   /** 切换网页全屏模式 */
   const toggleWebFullscreen = (): void => {
     if (!playerDockerRef.value || !playerContainerRef.value) return;
@@ -1499,8 +1534,8 @@ export const PlayerDocker = defineComponent<
       playerDockerRef.value.classList.remove("mode-webscreen");
       document.body.classList.remove("webscreen-fix");
       applyDisplayMode("normal");
-      // 退出网页全屏：停止监听整页滚轮（既有实现 toggleWebFullscreen:519）
-      unbindVolumeWheel();
+      // 退出网页全屏：按当前是否仍在浏览器全屏来决定是否继续监听整页滚轮
+      syncVolumeWheelBinding();
       // 同步提示工具（与既有实现 toggleWebFullscreen:524-525 一致）
       tooltipsApi.updateTip?.("ctrl:webscreen", "网页全屏");
     } else {
@@ -1508,7 +1543,7 @@ export const PlayerDocker = defineComponent<
       document.body.classList.add("webscreen-fix");
       applyDisplayMode("web");
       // 进入网页全屏：开始监听整页滚轮（既有实现 toggleWebFullscreen:506）
-      bindVolumeWheel();
+      syncVolumeWheelBinding();
       // 同步提示工具（与既有实现 toggleWebFullscreen:511-512 一致）
       tooltipsApi.updateTip?.("ctrl:webscreen", "退出网页全屏");
     }
@@ -1528,6 +1563,13 @@ export const PlayerDocker = defineComponent<
   const setVolume = (vol: number): void => {
     const clamped = Math.min(1, Math.max(0, vol));
     if (videoRef.value) videoRef.value.volume = clamped;
+    // 音量被调到大于 0 时自动解除静音，与主流播放器一致；
+    // 否则静音状态下拖动音量条 / 向上滚轮会「数字在动但没声音」
+    if (clamped > 0 && readMuted()) {
+      if (videoRef.value) videoRef.value.muted = false;
+      stateMgr?.set(PlayerStateKeyEnum.MUTED, false);
+      controlsApi.updateMute?.(false);
+    }
     stateMgr?.set(PlayerStateKeyEnum.VOLUME, clamped);
     controlsApi.updateVolumeDisplay?.(clamped);
   };
@@ -1583,9 +1625,12 @@ export const PlayerDocker = defineComponent<
   /**
    * 滚轮调节音量
    *
-   * 与既有实现 `handleVolumeChangeWithWheel`一致：
    * - 先显示音量提示（即使音量未变化也提示，既有实现 show() 无条件调用）；
-   * - 步长 0.02，向下滚动时若已静音则不减少音量。
+   * - 步长 0.02，**向上/向下都能调**。
+   *
+   * 修复：旧实现在静音时忽略向下滚动（`!readMuted()` 守卫），
+   * 而静音可能由「点击音量面板」的穿透 bug 意外触发，表现为「向下滚动没反应」。
+   * 现在两个方向都生效；音量大于 0 时由 setVolume 自动解除静音。
    */
   const handleVolumeWheel = (event: WheelEvent): void => {
     event.preventDefault();
@@ -1593,7 +1638,7 @@ export const PlayerDocker = defineComponent<
     let next = current;
     if (event.deltaY < 0) {
       next = Math.min(1, Math.max(0, current + 0.02));
-    } else if (event.deltaY > 0 && !readMuted()) {
+    } else if (event.deltaY > 0) {
       next = Math.min(1, Math.max(0, current - 0.02));
     }
     // 无论音量是否变化都显示提示（含 3 秒自动消失，既有实现 handleVolumeChangeWithWheel:735-736）
@@ -1750,25 +1795,28 @@ export const PlayerDocker = defineComponent<
       stateMgr?.set(PlayerStateKeyEnum.IS_FULLSCREEN, true);
       // 进入全屏：开始监听整页滚轮（既有实现 handleFullscreenChange:475；
       // 从网页全屏直接进入全屏时重复绑定，同函数引用幂等）
-      bindVolumeWheel();
+      syncVolumeWheelBinding();
       // 进入全屏：移动弹幕发送栏到底部中央 + 同步提示工具
       // （与既有实现 handleFullscreenChange:474-481 一致）
       moveSendBar("full");
       tooltipsApi.setScreen?.("full");
       tooltipsApi.updateTip?.("ctrl:fullscreen", "退出全屏 (f)");
     } else {
-      playerContainerRef.value.setAttribute("data-screen", "normal");
+      // 退出浏览器全屏：若仍处于网页全屏，data-screen 必须回到 "web" 而不是 "normal"，
+      // 否则网页全屏相关的样式与可见性规则（如「选集」按钮）会失效
+      const stillWebFullscreen =
+        stateMgr?.get(PlayerStateKeyEnum.IS_WEB_FULLSCREEN) ?? false;
+      playerContainerRef.value.setAttribute(
+        "data-screen",
+        stillWebFullscreen ? "web" : "normal",
+      );
       stateMgr?.set(PlayerStateKeyEnum.IS_FULLSCREEN, false);
-      // 退出全屏：停止监听整页滚轮（既有实现 handleFullscreenChange:486）
-      unbindVolumeWheel();
+      // 退出全屏：按当前是否仍在网页全屏决定是否继续监听整页滚轮
+      syncVolumeWheelBinding();
       // 退出全屏：弹幕发送栏移回发送区域 + 同步提示工具
       // （与既有实现 handleFullscreenChange:483-492 一致）
       moveSendBar("normal");
-      tooltipsApi.setScreen?.(
-        (stateMgr?.get(PlayerStateKeyEnum.IS_WEB_FULLSCREEN) ?? false)
-          ? "web"
-          : "normal",
-      );
+      tooltipsApi.setScreen?.(stillWebFullscreen ? "web" : "normal");
       tooltipsApi.updateTip?.("ctrl:fullscreen", "进入全屏 (f)");
     }
   };
@@ -2443,8 +2491,41 @@ export const PlayerDocker = defineComponent<
             onNext: () => {
               lifecycle.emit?.("next");
             },
-            onEplistChange: (id: string) => {
-              lifecycle.emit?.("eplistChange", id);
+            // 选集面板选择某一集：透传列表下标，由 VideoPlayer 调 switchTo() 切集
+            onEplistChange: (index: number) => {
+              lifecycle.emit?.("eplistChange", index);
+            },
+            // 字幕设置面板：即时应用到字幕层 + 向上转发（由 VideoPlayer 落地）
+            onSubtitleToggle: (visible: boolean) => {
+              lifecycle.emit?.("subtitleToggle", visible);
+            },
+            onSubtitleLangChange: (lang: string) => {
+              lifecycle.emit?.("subtitleLangChange", lang);
+            },
+            onSubtitleStyleChange: (patch: {
+              fontSize?: number;
+              color?: string;
+              position?: "top" | "bottom";
+              offset?: number;
+              strokeColor?: string;
+              strokeWidth?: number;
+              opacity?: number;
+              scale?: boolean;
+              fade?: boolean;
+            }) => {
+              // 立即反馈到字幕层（无需等待播放器状态回流）
+              if (patch.fontSize !== undefined) subtitleApi.setFontSize?.(patch.fontSize);
+              if (patch.color !== undefined && patch.strokeColor === undefined) {
+                subtitleApi.setColor?.(patch.color);
+              }
+              // 注意：字幕层 API 只接受位置一个参数（offset 由插件侧处理）
+              if (patch.position !== undefined) {
+                subtitleApi.setPosition?.(patch.position === "top" ? "top" : "bottom");
+              }
+              lifecycle.emit?.("subtitleStyleChange", patch);
+            },
+            onBilingualChange: (enabled: boolean) => {
+              lifecycle.emit?.("bilingualChange", enabled);
             },
             // 设置菜单：向上转发，由 VideoPlayer 统一应用
             onSettingChange: (payload: {

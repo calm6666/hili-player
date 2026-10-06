@@ -232,6 +232,8 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    * 滑块区域点击，直接跳转到点击位置对应的音量
    */
   const handleSliderClick = (event: MouseEvent): void => {
+    // 阻止冒泡到按钮根节点：面板上的点击不应影响按钮自身的点击语义
+    event.stopPropagation();
     /** 点击位置对应的音量值 */
     const vol = getVolumeFromY(event.clientY);
     currentVolume = vol;
@@ -244,6 +246,8 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    */
   const handleSliderMouseDown = (event: MouseEvent): void => {
     if (!isBrowser()) return;
+    // 阻止冒泡到按钮根节点（同上）
+    event.stopPropagation();
     event.preventDefault();
     isDragging = true;
 
@@ -337,12 +341,14 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     class: 'player-ctrl-btn player-ctrl-volume',
     role: 'button',
     'aria-label': '音量',
-    onClick: handleMuteToggle,
+    // 注意：静音切换**不能**挂在根节点上。音量面板 `.player-ctrl-volume-box` 是本按钮的
+    // 子元素，挂根节点时点击面板会冒泡到根节点 → 点音量面板会被误判为静音切换
+    // （旧版实现把切换只挂在图标上，这里保持一致）
     onMouseEnter: mouseVolumeEnter,
     onMouseLeave: mouseVolumeLeave,
   },
-    // 音量图标
-    h('div', { class: 'player-ctrl-btn-icon' },
+    // 音量图标（静音切换挂在这里）
+    h('div', { class: 'player-ctrl-btn-icon', onClick: handleMuteToggle },
       h(LottieIcon, {
         name: 'volume',
         initialSlotIndex: isMuted ? 3 : 1,
