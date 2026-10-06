@@ -2,8 +2,9 @@
  * ============================================
  * hili-player 插件系统
  * ============================================
- * *
- * 使用方式：
+ *
+ * 使用方式（插件列表走 config.plugins.list，也可构造后逐个 player.use()）：
+ *
  * import {
  *   DanmakuPlugin,
  *   SubtitlePlugin,
@@ -15,28 +16,46 @@
  *
  * const player = new VideoPlayer({
  *   src: 'video.mp4',
- *   plugins: [
- *     DanmakuPlugin({ renderMode: 'dom' }),
- *     SubtitlePlugin({
- *       sources: [
- *         { src: 'subtitles/cn.srt', lang: 'zh', label: '中文' }
- *       ]
- *     }),
- *     DashPlugin({ autoplay: true }),
- *     InteractionPlugin({ isEdit: false })
- *   ]
+ *   plugins: {
+ *     list: [
+ *       DanmakuPlugin({ options: { debug: false } }),
+ *       SubtitlePlugin({
+ *         sources: [
+ *           { src: 'subtitles/cn.srt', lang: 'zh', label: '中文' }
+ *         ]
+ *       }),
+ *       DashPlugin({ autoplay: true }),
+ *       InteractionPlugin({ isEdit: false })
+ *     ]
+ *   }
  * });
+ *
+ * // 等价写法：player.use(DanmakuPlugin())
  */
 
 // 导出流媒体相关
 export type { StreamPlugin, StreamConfig, BufferInfo, StreamStats, MediaManifestSource } from './stream/types';
-export {
-  StreamPluginTypeEnum,
-  StreamFormatEnum,
-  StreamingProtocolEnum,
-  BufferStatusEnum,
-  StreamPluginEventEnum,
-} from './stream/enums';
+// StreamPluginTypeEnum / StreamFormatEnum 以运行时真正使用的那份为准
+// （@/types/streamPlugin，取值为小写 'hls' / 'dash' / 'flv'）；
+// ./stream/enums 下的同名枚举是大写旧版（'HLS' …），与运行时值不相等，故不再从那里导出
+export { StreamPluginTypeEnum, StreamFormatEnum } from '@/types/streamPlugin';
+export { StreamingProtocolEnum, BufferStatusEnum } from './stream/enums';
+
+// 流媒体插件私有事件总线：StreamPluginEventEnum 的上报不再经播放器总线，
+// 消费方通过插件实例的 getStreamEventBus() 订阅
+export { createStreamPluginEventBus } from './stream/streamEventBus';
+export type {
+  StreamPluginEventBus,
+  StreamPluginEventMap,
+  EmptyStreamPayload,
+} from './stream/streamEventBus';
+
+// 导出流媒体插件事件枚举
+// 三个流媒体插件实际 emit 的值来自 @/types/streamPlugin（大写前缀形式，如 STREAM_STATS_UPDATE），
+// 与私有总线 StreamPluginEventMap 的键完全一致；
+// 此前这里导出的是 ./stream/enums 下的同名枚举（值不带 STREAM_ 前缀，如 STATS_UPDATE），
+// 拿它订阅私有总线永远匹配不上，故统一导出插件真正使用的那一份
+export { StreamPluginEventEnum } from '@/types/streamPlugin';
 
 // 导出 FLV 插件 - 使用工厂函数
 export { FlvPlugin, createFlvPlugin } from './flv';
@@ -46,6 +65,11 @@ export { HlsPlugin, createHlsPlugin } from './hls';
 
 // 导出 DASH 插件 - 使用工厂函数
 export { DashPlugin, createDashPlugin } from './dash';
+
+// 导出三个流媒体插件的配置类型（此前未导出，消费者无法为配置标注类型）
+export type { FlvPluginConfig } from './flv';
+export type { HlsPluginConfig } from './hls';
+export type { DashPluginConfig } from './dash';
 
 // 导出弹幕插件 - 使用工厂函数
 export { DanmakuPlugin, createDanmakuPlugin } from './danmaku';

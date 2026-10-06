@@ -12,7 +12,8 @@
  * - fork 版本通过 loadManifest() 支持对象注入模式
  * - useLocalHls 选项支持 Safari 原生 HLS 回退
  * - 提供缓冲、码率、帧率等实时统计信息
- * - 通过事件总线与播放器和其他插件通信
+ * - 通过事件总线与播放器和其他插件通信（契约事件走播放器总线，
+ *   StreamPluginEventEnum 私有事件走插件私有总线）
  * - 自动检测浏览器兼容性（含 iOS/macOS Safari 特殊处理）
  * - 致命错误自动恢复（recoverMediaError）
  * - 首帧时间追踪
@@ -32,7 +33,10 @@ import type { VideoPlayer } from '@hili-player/player';
 import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
+import { PlayerEventEnum } from '@/core/events';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
+import { createStreamPluginEventBus } from '../stream/streamEventBus';
+import type { StreamPluginEventBus } from '../stream/streamEventBus';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
@@ -77,7 +81,7 @@ function isManifestObject(source: string | MediaManifestSource): source is Manif
 /**
  * HLS 插件配置
  */
-interface HlsPluginConfig {
+export interface HlsPluginConfig {
   /** 是否自动播放，默认 true */
   autoplay?: boolean;
   /** 是否使用浏览器原生 HLS 支持（如 Safari），默认 false */
@@ -126,8 +130,11 @@ export class HlsPlugin implements StreamPlugin {
   /** 视频元素（从播放器获取） */
   videoElement: HTMLVideoElement | null = null;
 
-  /** 事件总线（从播放器获取） */
+  /** 播放器事件总线（player.events，只承载契约事件） */
   eventBus: PlayerEventBus | null = null;
+
+  /** 插件私有事件总线（StreamPluginEventEnum 上报的唯一去向，不经播放器总线） */
+  private readonly streamEventBus: StreamPluginEventBus = createStreamPluginEventBus();
 
   /** 播放器实例引用 */
   private player: VideoPlayer | null = null;
@@ -273,7 +280,7 @@ export class HlsPlugin implements StreamPlugin {
     if (!this.videoElement) {
       const msg = '视频元素未设置，请确保播放器已挂载到 DOM';
       logger.error(msg);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
       return;
     }
 
@@ -294,7 +301,7 @@ export class HlsPlugin implements StreamPlugin {
       this.videoElement.canPlayType('application/vnd.apple.mpegurl')
     ) {
       this.videoElement.src = source;
-      this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
+      this.streamEventBus.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
 
       if (this.pluginConfig.autoplay) {
         this.play();
@@ -311,14 +318,14 @@ export class HlsPlugin implements StreamPlugin {
     if (!Hls.isSupported()) {
       const msg = `hls.js 检测到当前浏览器不支持 HLS 播放（${this.browserCapability?.browserName || '未知'} ${this.browserCapability?.browserVersion || ''}）`;
       logger.error(msg);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
       return;
     }
 
     if (!this.videoElement) {
       const msg = '视频元素已被移除，无法加载';
       logger.error(msg);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
       return;
     }
 
@@ -437,7 +444,7 @@ export class HlsPlugin implements StreamPlugin {
         } else {
           const msg = '清单对象缺少 variants 字段';
           logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+          this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
           return;
         }
       };
@@ -449,11 +456,11 @@ export class HlsPlugin implements StreamPlugin {
     } else {
       const msg = '不支持的源类型';
       logger.error(msg);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
       return;
     }
 
-    this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
+    this.streamEventBus.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: source });
 
     if (this.pluginConfig.autoplay) {
       this.play();
@@ -505,11 +512,11 @@ export class HlsPlugin implements StreamPlugin {
       this.hlsPlayer.startLoad();
 
       logger.info('HLS 流加载成功 (JSON Manifest模式)');
-      this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url });
+      this.streamEventBus.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url });
     } catch (err) {
       const msg = `加载 JSON Manifest 失败: ${err instanceof Error ? err.message : String(err)}`;
       logger.error(msg);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
     }
   }
 
@@ -529,7 +536,7 @@ export class HlsPlugin implements StreamPlugin {
         this.firstFrameTime = Date.now() - this.loadStartTime;
         this.stats.firstFrameTime = this.firstFrameTime;
         logger.info(`首帧时间: ${this.firstFrameTime}ms`);
-        this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+        this.streamEventBus.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
       }
     };
 
@@ -572,7 +579,7 @@ export class HlsPlugin implements StreamPlugin {
     this.hlsPlayer.on(Events.MANIFEST_PARSED, (_event: string, data: ManifestParsedData) => {
       if (data && 'levels' in data && Array.isArray(data.levels)) {
         logger.info('清单解析完成，可用画质:', data.levels.length);
-        this.eventBus?.emit(StreamPluginEventEnum.METADATA_LOADED, data);
+        this.streamEventBus.emit(StreamPluginEventEnum.METADATA_LOADED, data);
         // 清单解析后清晰度列表就绪，推送给订阅者
         this.notifyQualitiesChange();
       }
@@ -583,19 +590,26 @@ export class HlsPlugin implements StreamPlugin {
       logger.error('播放器错误:', data);
 
       if (data.fatal) {
+        // 致命错误：向播放器总线广播契约事件 STREAM_ERROR
+        // message 取 hls.js 错误详情里的字符串，error 传原始错误对象
+        this.eventBus?.emit(PlayerEventEnum.STREAM_ERROR, {
+          message: data.error?.message || String(data.details),
+          error: data,
+        });
+
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            this.eventBus?.emit(StreamPluginEventEnum.NETWORK_ERROR, data);
+            this.streamEventBus.emit(StreamPluginEventEnum.NETWORK_ERROR, data);
             // 网络错误：尝试重新加载
             this.hlsPlayer?.startLoad();
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
-            this.eventBus?.emit(StreamPluginEventEnum.DECODE_ERROR, data);
+            this.streamEventBus.emit(StreamPluginEventEnum.DECODE_ERROR, data);
             // 媒体错误：尝试恢复
             this.hlsPlayer?.recoverMediaError();
             break;
           default:
-            this.eventBus?.emit(StreamPluginEventEnum.ERROR, data);
+            this.streamEventBus.emit(StreamPluginEventEnum.ERROR, data);
             break;
         }
       }
@@ -609,18 +623,19 @@ export class HlsPlugin implements StreamPlugin {
         this.stats.totalStallCount = (this.stats.totalStallCount || 0) + 1;
         this.lastStallTime = 0;
       }
-      this.eventBus?.emit(StreamPluginEventEnum.BUFFER_END, {});
+      this.streamEventBus.emit(StreamPluginEventEnum.BUFFER_END, {});
     });
 
-    // 片段加载完成 → 更新下载速度统计
+    // 片段加载完成 → 广播一次统计信息
+    // 下载速度本身由 fork 版 hls.js 内部采样（见 getStats 中的 getDownloadSpeed 调用）
     this.hlsPlayer.on(Events.FRAG_LOADED, () => {
-      this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      this.streamEventBus.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
     });
 
     // 画质级别切换
     this.hlsPlayer.on(Events.LEVEL_SWITCHED, (_event: string, data: LevelSwitchedData) => {
       logger.info('画质切换至级别:', data.level);
-      this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      this.streamEventBus.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
       // 级别切换时列表可能已变化，重新推送一次
       this.notifyQualitiesChange();
 
@@ -638,7 +653,8 @@ export class HlsPlugin implements StreamPlugin {
         qualityId: String(data.level),
         label: levelObj.height ? `${levelObj.height}p` : `Level ${data.level}`,
       };
-      this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, payload);
+      // 向播放器总线广播契约事件 STREAM_QUALITY_CHANGE（等价于旧名 QUALITY_CHANGE）
+      this.eventBus?.emit(PlayerEventEnum.STREAM_QUALITY_CHANGE, payload);
     });
   }
 
@@ -650,12 +666,12 @@ export class HlsPlugin implements StreamPlugin {
     if (this.videoElement) {
       this.videoElement.play()
         .then(() => {
-          this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
+          this.streamEventBus.emit(StreamPluginEventEnum.PLAY_START, {});
         })
         .catch((err: Error) => {
           const msg = `播放失败: ${err.message}`;
           logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+          this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
         });
     }
   }
@@ -667,7 +683,7 @@ export class HlsPlugin implements StreamPlugin {
   pause(): void {
     if (this.videoElement) {
       this.videoElement.pause();
-      this.eventBus?.emit(StreamPluginEventEnum.PLAY_PAUSE, {});
+      this.streamEventBus.emit(StreamPluginEventEnum.PLAY_PAUSE, {});
     }
   }
 
@@ -756,7 +772,8 @@ export class HlsPlugin implements StreamPlugin {
       totalStallCount: this.stats.totalStallCount || 0,
       totalStallTime: this.stats.totalStallTime || 0,
       videoBitrate: currentLevel?.bitrate,
-      downloadSpeed: this.stats.downloadSpeed || 0,
+      // 缓冲速度由 fork 版 hls.js 的 getDownloadSpeed() 提供（字节/秒；无采样返回 0）
+      downloadSpeed: this.hlsPlayer?.getDownloadSpeed() || 0,
       resolution: currentLevel?.width && currentLevel?.height
         ? { width: currentLevel.width, height: currentLevel.height }
         : undefined,
@@ -907,6 +924,16 @@ export class HlsPlugin implements StreamPlugin {
    */
   getConfig(): StreamConfig | null {
     return this.config;
+  }
+
+  /**
+   * 获取插件私有事件总线（只读入口）
+   * StreamPluginEventEnum 的上报都在这里；播放器总线只承载契约事件
+   *
+   * @returns 插件私有事件总线
+   */
+  getStreamEventBus(): StreamPluginEventBus {
+    return this.streamEventBus;
   }
 
   /**

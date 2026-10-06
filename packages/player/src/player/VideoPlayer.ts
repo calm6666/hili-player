@@ -104,6 +104,18 @@ export type QualityCapability = 'none' | 'static' | 'adaptive';
 /** 清晰度切换超时（毫秒）：超过则视为切换失败 */
 const QUALITY_SWITCH_TIMEOUT_MS = 10000;
 
+/**
+ * 内部事件总线的全部事件名（camelCase）
+ *
+ * 用于 `on / once / off` 的通道路由：
+ * - 已桥接到对外 emitter 的总线事件（bridgedBusKeys）→ 订阅 emitter，payload 已按对外签名适配
+ * - 总线独有的事件（未桥接）→ 直接订阅总线，payload 为总线定义的对象
+ * - 其余名称 → 订阅 emitter（对外小写键，如 'timeupdate'）
+ */
+const BUS_EVENT_NAMES: ReadonlySet<string> = new Set(
+  Object.values(PlayerEventEnum),
+);
+
 /** 换源等待 loadedmetadata 的超时（毫秒）：避免异常源永不 resolve */
 const LOAD_METADATA_TIMEOUT_MS = 10000;
 
@@ -239,6 +251,14 @@ export class VideoPlayer
 
   /** 事件桥接订阅的取消函数集合（bus → emitter 单向转发，destroy 时统一清理） */
   private bridgeUnsubscribes: Array<() => void> = [];
+
+  /**
+   * 已桥接到对外 emitter 的总线事件名（camelCase）
+   *
+   * `on / once / off` 依据它决定订阅通道：命中则走 emitter（避免同一事件被
+   * 双通道重复投递，并保留桥接时按对外签名适配过的 payload）。
+   */
+  private bridgedBusKeys = new Set<string>();
 
   /** 浏览器能力检测结果 */
   private browserCapability: BrowserCapabilityResult | null = null;
@@ -415,6 +435,9 @@ export class VideoPlayer
     /** 存储用户回调函数 */
     this.callbacks = this.props.callbacks ?? {};
 
+    /** 把 callbacks 中以契约键给出的项补挂到总线（小写门面键仍走既有直调，避免双发） */
+    this.registerBusCallbacks();
+
     /** 自动注册配置的插件 */
     this.registerPlugins();
 
@@ -436,14 +459,39 @@ export class VideoPlayer
    * - emitter 键：types/index.ts 的 PlayerEvents（全小写，如 'timeupdate'）
    *
    * 说明：
-   * - 仅桥接 PlayerEvents 中实际声明了的键；PlayerEvents 未声明的总线事件
-   *   （mounted / destroy / mutedChange / qualityListChange / seekStart / seekEnd /
-   *    danmaku* / subtitle* / playlist* / interaction* / stream* 等）不在此桥接，
-   *    外部可继续通过 `player.events.on(...)` 订阅。
-   * - payload 不满足 emitter 回调签名时按 PlayerEvents 定义做窄化透传。
+   * - 这里桥接的是「已成对外契约」的事件：payload 按 PlayerEvents 定义做窄化透传，
+   *   外部通过 player.on('<小写键>') 订阅。
+   * - 未桥接的总线事件（mounted / qualityListChange / seekStart / danmaku* /
+   *   subtitle* / playlist* / interaction* / stream* 等）不再要求外部改用
+   *   player.events.on()：player.on('<camelCase 键>') 会直连总线，
+   *   见 BUS_EVENT_NAMES 与 resolveEventChannel()。
    */
+  /**
+   * 把 callbacks 中以契约键给出的项补挂到内部事件总线
+   *
+   * `EventListeners` 是对 `PlayerEvents` 的映射类型，因此门面上新增的 camelCase 契约键
+   * 也会出现在 `callbacks` 里。小写门面键与已桥接键继续由既有直调负责（此处跳过，避免双发），
+   * 未桥接的契约键则在此挂到总线，使其首次真正生效。
+   */
+  private registerBusCallbacks(): void {
+    for (const [key, fn] of Object.entries(this.callbacks)) {
+      if (typeof fn !== 'function') continue;
+      if (this.resolveEventChannel(key) === 'bus') {
+        this.bridgeUnsubscribes.push(this.events.on(key as never, fn as never));
+      }
+    }
+  }
+
   private bridgeEvents(): void {
-    const subscribe = this.events.on.bind(this.events);
+    const busOn = this.events.on.bind(this.events);
+    /**
+     * 与总线订阅语义完全一致，额外记录「该总线事件已桥接」，
+     * 供 on / once / off 判定订阅通道（见 BUS_EVENT_NAMES 注释）。
+     */
+    const subscribe = ((key: string, handler: (payload: never) => void) => {
+      this.bridgedBusKeys.add(key);
+      return busOn(key as never, handler as never);
+    }) as unknown as typeof busOn;
 
     // ── 生命周期 ──
     this.bridgeUnsubscribes.push(
@@ -716,6 +764,24 @@ export class VideoPlayer
   }
 
   /**
+   * 读取流媒体插件上报的下载速度
+   *
+   * 走既有入口 StreamMiddleware.getStats()（流媒体模式转发插件 getStats()），
+   * 字段 `StreamStats.downloadSpeed` 的单位即「字节/秒」；
+   * 原生模式（无流媒体插件）返回 0，由 PlayerDocker 回退到原生 Resource Timing 采样。
+   *
+   * @returns 下载速度（字节/秒）；无数据返回 0
+   */
+  private getStreamDownloadSpeed(): number {
+    const stats = this.streamMiddleware?.getStats();
+    if (!stats || !('downloadSpeed' in stats)) return 0;
+    const speed = stats.downloadSpeed;
+    return typeof speed === 'number' && Number.isFinite(speed) && speed > 0
+      ? speed
+      : 0;
+  }
+
+  /**
    * 处理视频源配置
    * 支持字符串 URL、URL 数组（备用源）或渐进式多清晰度变体数组
    */
@@ -779,8 +845,17 @@ export class VideoPlayer
         mode: this.getQualityMode(),
       },
       events: this.events,
+      /** 缓冲速度数据源（字节/秒）：流媒体插件统计优先，原生由 PlayerDocker 回退采样 */
+      getStreamDownloadSpeed: () => this.getStreamDownloadSpeed(),
       onQualityChange: (quality: string) => {
         void this.setQuality(quality);
+      },
+      /** 容器点击 / 双击转发为对外事件（PlayerEvents.click / dblclick） */
+      onPerchClick: (event: MouseEvent) => {
+        this.emitter.emit('click', event);
+      },
+      onPerchDblclick: (event: MouseEvent) => {
+        this.emitter.emit('dblclick', event);
       },
       onPrev: () => {
         void this.prev();
@@ -2634,40 +2709,79 @@ export class VideoPlayer
    * @param callback - 回调函数
    */
   /**
+   * 解析事件名对应的订阅通道
+   *
+   * - `'bus'`：总线独有事件（未桥接，如 qualityListChange / seekStart）→ 直连内部总线
+   * - `'emitter'`：已桥接事件或对外小写键（如 timeupdate）→ 走对外 emitter
+   *
+   * 已桥接的事件必须走 emitter：既避免同一事件经两条通道重复投递，
+   * 也保留桥接时按对外签名做过的 payload 适配（如 progress 的 TimeRanges）。
+   *
+   * @param name - 事件名（对外小写键或总线 camelCase 键）
+   */
+  private resolveEventChannel(name: string): 'bus' | 'emitter' {
+    return !this.bridgedBusKeys.has(name) && BUS_EVENT_NAMES.has(name)
+      ? 'bus'
+      : 'emitter';
+  }
+
+  /**
    * 监听播放器事件
+   *
+   * 支持两类事件名，按名称自动选择通道：
+   * - 对外事件（小写键，如 `'timeupdate'`）：由 emitter 投递，回调为多参数形态
+   * - 总线事件（camelCase 键，如 `'qualityListChange'`）：直连内部总线，回调收到单个 payload
    *
    * @param event - 事件名
    * @param callback - 回调函数
    * @returns 取消该监听的函数（与 `events.on` 语义一致）
    */
   on<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): () => void {
-    this.emitter.on(event, callback);
+    const name = event as string;
+    if (this.resolveEventChannel(name) === 'bus') {
+      const offBus = this.events.on(name as never, callback as never);
+      return () => offBus();
+    }
+    this.emitter.on(name, callback);
     return () => {
-      this.emitter.off(event, callback);
+      this.emitter.off(name, callback);
     };
   }
 
   /**
    * 监听播放器事件（只触发一次，触发后自动解除）
    *
-   * 说明：没有直接复用 `EventEmitter.once`，因为它不暴露内部包装函数，
-   * 无法通过 `off(event, callback)` 取消。这里手动包装以便返回可用的取消函数。
+   * 说明：没有直接复用 `EventEmitter.once` / 总线的一次性监听，因为它们不暴露
+   * 内部包装函数，无法通过 `off(event, callback)` 取消。这里手动包装以便返回可用的取消函数。
    *
    * @param event - 事件名
    * @param callback - 回调函数
    * @returns 取消该监听的函数
    */
   once<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): () => void {
+    const name = event as string;
     let fired = false;
+
+    if (this.resolveEventChannel(name) === 'bus') {
+      const busHandler = ((payload: unknown) => {
+        if (fired) return;
+        fired = true;
+        this.events.off(name as never, busHandler as never);
+        (callback as (p: unknown) => void)(payload);
+      }) as never;
+      this.events.on(name as never, busHandler);
+      return () => this.events.off(name as never, busHandler);
+    }
+
     const handler = ((...args: Parameters<PlayerEvents[K]>) => {
       if (fired) return;
       fired = true;
-      this.emitter.off(event, handler);
+      this.emitter.off(name, handler);
       callback(...args);
     }) as PlayerEvents[K];
-    this.emitter.on(event, handler);
+    this.emitter.on(name, handler);
     return () => {
-      this.emitter.off(event, handler);
+      this.emitter.off(name, handler);
     };
   }
 
@@ -2678,7 +2792,12 @@ export class VideoPlayer
    * @param callback - 回调函数
    */
   off<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): void {
-    this.emitter.off(event, callback);
+    const name = event as string;
+    if (this.resolveEventChannel(name) === 'bus') {
+      this.events.off(name as never, callback as never);
+      return;
+    }
+    this.emitter.off(name, callback);
   }
 
   // ============================================

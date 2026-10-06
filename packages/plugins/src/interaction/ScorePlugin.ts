@@ -41,6 +41,8 @@ const CLASS_NAMES = {
 
 interface ScorePluginOptions {
   onScoreSelect?: (scoreIndex: number, value: number) => void;
+  /** 卡片关闭回调（关闭按钮点击后触发） */
+  onClose?: () => void;
   isEdit?: boolean;
   index?: number;
 }
@@ -207,6 +209,8 @@ export class ScorePlugin implements InteractionSubPlugin {
     this.item.isClose = true;
     this.item.closeTime = this.lastCurrentTime;
     this.element?.classList.add(CLASS_NAMES.HL_CARD_HIDE);
+    // 通知外部卡片已关闭
+    this.options.onClose?.();
   }
 
   /**

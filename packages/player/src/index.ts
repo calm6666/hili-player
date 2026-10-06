@@ -15,6 +15,10 @@
 // 导出播放器
 export { VideoPlayer } from './player';
 
+// 导出便捷入口（createPlayer / mountPlayer / 实例查询）
+// 此前只定义在 src/player/index.ts，未从包入口导出，消费者无法使用
+export { createPlayer, mountPlayer, getPlayerInstance } from './player';
+
 // 导出类型
 export type { PlayerConfig } from '@/types';
 export type {

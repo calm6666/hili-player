@@ -56,6 +56,9 @@ import type { DisplayMode, PlayerConfig, ProgressSegment, VNode } from "@/types"
 import type { QualityLevel } from "@/types/streamPlugin";
 import { Toast } from "@/hili-player/components/Toast";
 import { Loading } from "@/hili-player/components/Loading";
+import { State } from "@/hili-player/components/State";
+import { createBufferSpeedSampler } from "@/hili-player/utils/media/bufferSpeed";
+import type { BufferSpeedSampler } from "@/hili-player/utils/media/bufferSpeed";
 import { SendBar } from "@/hili-player/components/SendBar";
 import { Top } from "@/hili-player/components/Top";
 import {
@@ -122,6 +125,20 @@ interface LoadingAPI {
   hide: () => void;
   /** 设置加载提示文本 */
   setText: (text: string) => void;
+}
+
+/** State 组件挂载后回传的控制 API */
+interface StateAPI {
+  /** 更新缓冲速度文本（字节/秒；无效值会隐藏速度文本） */
+  updateBufferSpeed: (speed: number) => void;
+  /** 显示缓冲图标与文本（「正在缓冲...」） */
+  showBuffering: () => void;
+  /** 隐藏缓冲图标与文本 */
+  hideBuffering: () => void;
+  /** 显示中央播放图标（暂停态） */
+  showPlayIcon: () => void;
+  /** 隐藏中央播放图标 */
+  hidePlayIcon: () => void;
 }
 
 /** 顶部栏组件挂载后回传的控制 API */
@@ -191,6 +208,11 @@ export type PlayerDockerEvents = {
   videoCreated: { video: HTMLVideoElement };
   /** 用户选择了新的清晰度档位，值为档位 id（'auto' 表示自动） */
   qualityChange: string;
+
+  /** 视频区域被单击（由 VideoPlayer 转发为对外的 click 事件） */
+  perchClick: MouseEvent;
+  /** 视频区域被双击（由 VideoPlayer 转发为对外的 dblclick 事件） */
+  perchDblclick: MouseEvent;
 
   // ===== 控件条交互事件（阶段 J：控件交互接线）=====
   /** 控制栏组件挂载完成，回传其操作 API */
@@ -323,6 +345,14 @@ export interface PlayerDockerProps {
   config?: PlayerConfig;
   /** 清晰度运行时快照 */
   quality?: QualitySnapshot;
+  /**
+   * 流媒体模式下载速度提供者（字节/秒）
+   *
+   * 由 VideoPlayer 注入（其持有 StreamMiddleware，可转发流媒体插件的
+   * `getStats().downloadSpeed`）；返回 0 / 负数 / NaN 表示无数据，
+   * 此时 PlayerDocker 会回退到原生 Resource Timing 采样。
+   */
+  getStreamDownloadSpeed?: () => number;
 }
 
 // ============================================
@@ -688,6 +718,8 @@ export const PlayerDocker = defineComponent<
   /** seeking：跳转开始 */
   const handleSeeking = (): void => {
     playerContainerRef.value?.classList.add("state-buff");
+    // 跳转等待数据期间同步显示缓冲图标（与既有 .state-buff 样式意图一致）
+    stateApi.showBuffering?.();
     lifecycle.emit?.("seeking", {
       currentTime: videoRef.value?.currentTime ?? 0,
     });
@@ -696,6 +728,10 @@ export const PlayerDocker = defineComponent<
   /** seeked：跳转完成 */
   const handleSeeked = (): void => {
     playerContainerRef.value?.classList.remove("state-buff");
+    // 仍在缓冲（waiting 已置 isLoading）时保持显示，由 canplay / playing 统一收起
+    if (!(stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false)) {
+      stateApi.hideBuffering?.();
+    }
     const currentTime = videoRef.value?.currentTime ?? 0;
     stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
     controlsApi.updateCurrent?.(currentTime);
@@ -862,6 +898,9 @@ export const PlayerDocker = defineComponent<
 
   /** Loading 组件 API，由 Loading 组件挂载后填充 */
   const loadingApi: Partial<LoadingAPI> = {};
+
+  /** State 组件 API，由 State 组件挂载后填充（缓冲图标 / 播放图标 / 缓冲速度文本） */
+  const stateApi: Partial<StateAPI> = {};
 
   /** 顶部栏组件 API，由 Top 组件挂载后填充（§3.2 ui.title → Top 组件文本） */
   const topApi: Partial<TopAPI> = {};
@@ -1206,10 +1245,100 @@ export const PlayerDocker = defineComponent<
   };
 
   // ============================================
+  // 缓冲速度采样（State 组件「正在缓冲... <速度>」文本的数据源）
+  // ============================================
+  // 两条路径：流媒体插件统计（字节/秒）优先，原生渐进式播放回退
+  // PerformanceObserver + Resource Timing 滑动窗口；都取不到时不显示速度文本。
+
+  /** 缓冲速度采样间隔（毫秒） */
+  const BUFFER_SPEED_INTERVAL = 500;
+
+  /** 缓冲速度采样器（懒创建，销毁时释放观察器） */
+  let bufferSpeedSampler: BufferSpeedSampler | null = null;
+
+  /** 缓冲速度采样定时器（仅缓冲期间运行） */
+  let bufferSpeedTimer: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * 懒创建缓冲速度采样器
+   * @returns 采样器实例
+   */
+  const getBufferSpeedSampler = (): BufferSpeedSampler => {
+    if (!bufferSpeedSampler) {
+      bufferSpeedSampler = createBufferSpeedSampler({
+        // 流媒体模式：VideoPlayer → StreamMiddleware → 插件 getStats().downloadSpeed（字节/秒）
+        getStreamSpeed: () => props.getStreamDownloadSpeed?.() ?? 0,
+        // 原生模式：按当前媒体资源地址过滤 Resource Timing 条目
+        getMediaUrl: () =>
+          videoRef.value?.currentSrc || videoRef.value?.src || props.src,
+      });
+    }
+    return bufferSpeedSampler;
+  };
+
+  /** 采样一次缓冲速度并写入 State（无有效数据时传 0，速度文本会被隐藏） */
+  const sampleBufferSpeed = (): void => {
+    stateApi.updateBufferSpeed?.(getBufferSpeedSampler().sample());
+  };
+
+  /**
+   * 启停缓冲期间的缓冲速度采样
+   * @param enabled - true 开始采样（缓冲中）；false 停止采样并清空速度文本
+   */
+  const setBufferSpeedSampling = (enabled: boolean): void => {
+    // SSR 阶段不创建定时器
+    if (!isBrowser()) return;
+    if (enabled) {
+      if (bufferSpeedTimer !== null) return;
+      // 立即采样一次，避免首个间隔内速度文本为空
+      sampleBufferSpeed();
+      bufferSpeedTimer = setInterval(sampleBufferSpeed, BUFFER_SPEED_INTERVAL);
+      return;
+    }
+    if (bufferSpeedTimer !== null) {
+      clearInterval(bufferSpeedTimer);
+      bufferSpeedTimer = null;
+    }
+    // 停止采样时清空速度文本，下次缓冲重新采样
+    stateApi.updateBufferSpeed?.(0);
+  };
+
+  // ============================================
   // 运行时状态订阅（单一来源 stateMgr → 命令式更新 DOM）
   // ============================================
 
   if (stateMgr) {
+    // 缓冲开始 / 结束（player.isLoading）→ State 的缓冲图标与文本 + 缓冲速度采样
+    // （waiting / loadstart 置 true，canplay / playing / abort 置 false）
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.IS_LOADING,
+      (loading) => {
+        if (loading) {
+          stateApi.showBuffering?.();
+          setBufferSpeedSampling(true);
+        } else {
+          stateApi.hideBuffering?.();
+          setBufferSpeedSampling(false);
+        }
+      },
+      lifecycle,
+    );
+
+    // 播放状态（player.state）→ 暂停时显示中央播放图标，播放 / 结束 / 出错时隐藏
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.STATE,
+      (playerState) => {
+        if (playerState === PlayerState.PAUSED) {
+          stateApi.showPlayIcon?.();
+        } else {
+          stateApi.hidePlayIcon?.();
+        }
+      },
+      lifecycle,
+    );
+
     // 清晰度切换：switching / switched / failed 三段反馈
     useState(
       stateMgr,
@@ -1802,6 +1931,8 @@ export const PlayerDocker = defineComponent<
     // --- dblclick on perch → 切换全屏 ---
     const onDblClickPerch = (event: MouseEvent): void => {
       event.preventDefault();
+      // 先对外广播，再执行全屏切换（订阅方可在切换前读到事件）
+      lifecycle.emit?.("perchDblclick", event);
       toggleFullscreen();
     };
     perch.addEventListener("dblclick", onDblClickPerch);
@@ -1846,7 +1977,9 @@ export const PlayerDocker = defineComponent<
     // --- click on perch → 切换播放/暂停（400ms 延迟区分双击） ---
     /** 点击延迟定时器，用于区分单击和双击 */
     let clickTimer: ReturnType<typeof setTimeout> | null = null;
-    const onClickPerch = (): void => {
+    const onClickPerch = (event: MouseEvent): void => {
+      // 单击即对外广播（双击同样会先产生 click，与原生 DOM 语义一致）
+      lifecycle.emit?.("perchClick", event);
       if (clickTimer !== null) {
         clearTimeout(clickTimer);
         clickTimer = null;
@@ -2000,6 +2133,11 @@ export const PlayerDocker = defineComponent<
     cleanupFns.forEach((fn) => fn());
     cleanupFns.length = 0;
 
+    // 停止缓冲速度采样（定时器）并释放 Resource Timing 观察器
+    setBufferSpeedSampling(false);
+    bufferSpeedSampler?.destroy();
+    bufferSpeedSampler = null;
+
     // 销毁懒挂载的面板（ColorPanel / VideoInfo / HotkeyPanel）
     Object.values(lazyPanelVNodes).forEach((panelVNode) => {
       if (panelVNode) destroy(panelVNode);
@@ -2137,6 +2275,23 @@ export const PlayerDocker = defineComponent<
               subtitleApi.setPosition = data.setPosition;
               lifecycle.emit?.("subtitleLayerMounted", data);
               // 字幕层挂载完成，通知插件系统（不使用 SUBTITLE_TOGGLE，那是切换字幕可见性的事件）
+            },
+          }),
+          // 播放状态层（缓冲图标 / 「正在缓冲... <速度>」/ 暂停时的中央播放图标）
+          // 由 stateMounted 回传 API，经 state 订阅（player.isLoading / player.state）
+          // 命令式更新；缓冲速度为 0（无有效数据）时速度文本自动隐藏
+          h(State, {
+            buffering: stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false,
+            onStateMounted: (api: StateAPI) => {
+              Object.assign(stateApi, api);
+              // 订阅回调早于 State 挂载时补一次同步（缓冲中 / 暂停中直接进入对应显示态）
+              if (stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false) {
+                stateApi.showBuffering?.();
+                setBufferSpeedSampling(true);
+              }
+              if (stateMgr?.get(PlayerStateKeyEnum.STATE) === PlayerState.PAUSED) {
+                stateApi.showPlayIcon?.();
+              }
             },
           }),
           // 互动容器
@@ -2351,10 +2506,11 @@ export const PlayerDocker = defineComponent<
               });
               lifecycle.emit?.("danmakuToggle");
             },
-            // 发送弹幕：向上转发文本，同时广播到事件总线（§4.2 danmakuSend）
+            // 发送弹幕：向上转发文本，同时广播「提交请求」事件（DANMAKU_SEND）
+            // 注意：DANMAKU_SENT 的语义是「发送成功」，由 DanmakuPlugin 在服务器确认后发出；
+            // 此处只是提交请求，若在此发 DANMAKU_SENT 会把「提交」误当成「成功」。
             onSendDanmaku: (text: string) => {
               props.events?.emit(PlayerEventEnum.DANMAKU_SEND, { text });
-              props.events?.emit(PlayerEventEnum.DANMAKU_SENT, { text });
               lifecycle.emit?.("sendDanmaku", text);
             },
             // 弹幕开关提示气泡：与控制栏 tooltip 走同一通道（接通 Tooltips 组件）

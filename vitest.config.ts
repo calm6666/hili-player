@@ -35,7 +35,7 @@ export default defineConfig({
       { find: /^@\/(.*)/, replacement: path.resolve(__dirname, 'packages/player/src/$1') },
 
       // ===== 外部库别名 =====
-      { find: 'hls.js', replacement: path.resolve(__dirname, 'packages/plugins/src/hls/vendor/hls.mjs') },
+      { find: 'hls.js', replacement: path.resolve(__dirname, 'hls-fork/dist/hls.mjs') },
       { find: 'dashjs', replacement: path.resolve(__dirname, 'tests/__stubs__/dashjs.ts') },
       { find: 'flv.js', replacement: path.resolve(__dirname, 'tests/__stubs__/flvjs.ts') },
     ],

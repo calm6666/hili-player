@@ -342,7 +342,7 @@ export enum PlayMode {
 
 import type { Plugin } from "@/hili-player/core/plugin";
 import type { LogLevel } from "@/utils";
-import type { MediaManifestSource } from "@/types/streamPlugin";
+import type { MediaManifestSource, QualityLevel } from "@/types/streamPlugin";
 
 // ============================================
 // 播放器配置接口（命名空间化）
@@ -833,6 +833,13 @@ export interface PlayerEvents extends Record<string, (...args: any[]) => void> {
   waiting: () => void;
   /** 缓冲完成，可以继续播放 */
   canplay: () => void;
+  /**
+   * 已可播放至结尾（契约事件 `canPlayThrough`，直连内部总线）
+   *
+   * 注意与上面的 `canplay` 不是同一事件：`canplay` 由契约 `canPlay` 桥接而来，
+   * 本条对应契约的 `canPlayThrough`，语义为「整个媒体可以播完而不中断」。
+   */
+  canPlayThrough: () => void;
   /** 加载进度更新 */
   progress: (buffered: TimeRanges) => void;
   /** 发生错误 */
@@ -867,6 +874,145 @@ export interface PlayerEvents extends Record<string, (...args: any[]) => void> {
   stalled: () => void;
   /** 浏览器主动暂停加载（非错误） */
   suspend: () => void;
+
+  // ===== 以下为「总线直连」事件 =====
+  // 这些事件在内部 TypedEventBus 上以 camelCase 键发射，未经桥接适配，
+  // player.on('qualityListChange', cb) 会直接订阅总线，payload 即下列对象。
+  // 命名与 core/events.ts 的 PlayerEventMap 保持一致，改动时需同步两处。
+
+  /** 播放器被销毁 */
+  destroy: () => void;
+  /** 播放器尺寸变化 */
+  resize: (width: number, height: number) => void;
+  /** 用户提交了弹幕（发送栏触发；弹幕内容经 danmakuSend 传递） */
+  sendDanmaku: () => void;
+
+  // 生命周期
+  /** 播放器挂载完成 */
+  mounted: (payload: {
+    container?: HTMLElement;
+    video?: HTMLVideoElement;
+    sendingArea?: HTMLElement;
+  }) => void;
+  /** 已从持久化存储恢复上次观看位置 */
+  restoreProgress: (payload: { time: number }) => void;
+
+  // 媒体属性
+  /** 静音状态变化 */
+  mutedChange: (muted: boolean) => void;
+  /** 跳转开始 */
+  seekStart: (payload: { time: number; previousTime: number }) => void;
+  /** 跳转结束 */
+  seekEnd: (payload: { time: number; previousTime: number }) => void;
+
+  // 清晰度
+  /** 清晰度列表就绪 / 变化 */
+  qualityListChange: (payload: {
+    qualities: QualityLevel[];
+    mode: 'none' | 'static' | 'adaptive';
+  }) => void;
+  /** 清晰度切换已请求（切换中） */
+  qualityChangeRequested: (payload: { from: string; to: string; label?: string }) => void;
+  /** 清晰度切换成功 */
+  qualityChangeRendered: (payload: {
+    from: string;
+    to: string;
+    quality?: QualityLevel;
+    elapsed: number;
+  }) => void;
+  /** 清晰度切换失败 */
+  qualityChangeFailed: (payload: { from: string; to: string; reason: string }) => void;
+  /** 清晰度模式变化 */
+  qualityModeChange: (payload: { mode: 'auto' | 'manual' }) => void;
+
+  // 画面模式
+  /** 网页全屏状态变化 */
+  webFullscreenChange: (payload: { isWebFullscreen: boolean }) => void;
+  /** 宽屏状态变化 */
+  wideScreenChange: (payload: { isWideScreen: boolean }) => void;
+
+  // 错误
+  /** 错误恢复 */
+  errorRecovery: () => void;
+
+  // 弹幕
+  /** 弹幕显隐变化 */
+  danmakuToggle: (payload: { visible: boolean }) => void;
+  /** 弹幕数据加载完成 */
+  danmakuLoaded: (payload: { count: number; url?: string }) => void;
+  /** 弹幕透明度变化 */
+  danmakuOpacityChange: (opacity: number) => void;
+  /** 弹幕速度变化 */
+  danmakuSpeedChange: (speed: number) => void;
+  /** 请求发送弹幕 */
+  danmakuSend: (payload: { text: string; options?: Record<string, unknown> }) => void;
+  /** 弹幕发送成功 */
+  danmakuSent: (payload: Record<string, unknown>) => void;
+  /** 弹幕清空 */
+  danmakuClear: () => void;
+
+  // 字幕
+  /** 字幕显隐变化 */
+  subtitleToggle: (payload: { visible: boolean }) => void;
+  /** 字幕语言变化 */
+  subtitleLangChange: (lang: string) => void;
+  /** 字幕切换 */
+  subtitleSwitch: (payload: { lang: string }) => void;
+  /** 字幕列表变化 */
+  subtitleListChange: (payload: { count: number }) => void;
+
+  // 播放列表 / 多 P
+  /** 当前播放条目变化 */
+  episodeChange: (payload: {
+    index: number;
+    total: number;
+    id?: string;
+    title?: string;
+  }) => void;
+  /** 播放列表本身变化 */
+  playlistChange: (payload: { index: number; total: number }) => void;
+  /** 请求播放上一个 */
+  prevRequest: () => void;
+  /** 请求播放下一个 */
+  nextRequest: () => void;
+
+  // 互动
+  /** 互动：点赞 */
+  interactionLike: () => void;
+  /** 互动：投币 */
+  interactionCoin: () => void;
+  /** 互动：收藏 */
+  interactionCollect: () => void;
+  /** 互动：关注 */
+  interactionFollow: () => void;
+  /** 互动：外链点击 */
+  interactionLinkClick: () => void;
+  /** 互动：投票选择 */
+  interactionVoteSelect: (payload: { voteIndex: number; optionIndex: number }) => void;
+  /** 互动：评分选择 */
+  interactionScoreSelect: (payload: { scoreIndex: number; value: number }) => void;
+  /** 互动：卡片关闭 */
+  interactionCardClose: (payload: { type: string; index: number }) => void;
+  /** 互动：卡片位置变化 */
+  interactionPositionChange: (payload: {
+    type: string;
+    index: number;
+    top: number;
+    left: number;
+  }) => void;
+
+  // 流媒体
+  /** 流媒体错误 */
+  streamError: (payload: { message?: string; error?: unknown }) => void;
+  /** 流媒体清晰度变化（自动或手动切换） */
+  streamQualityChange: (payload: {
+    width: number;
+    height: number;
+    bitrate?: number;
+    isAuto?: boolean;
+    qualityId?: string;
+    label?: string;
+  }) => void;
 }
 
 /**
@@ -1102,6 +1248,7 @@ export type EventListeners = {
  * 播放器实例暴露的所有方法
  */
 export interface PlayerMethods {
+  // ===== 播放控制 =====
   /** 播放视频 */
   play(): Promise<void>;
   /** 暂停视频 */
@@ -1110,24 +1257,161 @@ export interface PlayerMethods {
   toggle(): void;
   /** 跳转到指定时间 */
   seek(time: number): void;
+  /** 相对当前位置跳转 */
+  seekBy(delta: number): void;
+  /** 重新加载当前源 */
+  reload(): void;
+
+  // ===== 音量 / 倍速 / 播放模式 =====
   /** 设置音量 */
   setVolume(volume: number): void;
+  /** 获取音量 */
+  getVolume(): number;
   /** 切换静音 */
   toggleMute(): void;
+  /** 设置静音 */
+  setMuted(muted: boolean): void;
+  /** 是否静音 */
+  isMuted(): boolean;
   /** 设置播放速度 */
   setPlaybackRate(rate: number): void;
+  /** 获取播放速度 */
+  getPlaybackRate(): number;
+  /** 设置单曲循环 */
+  setLoop(loop: boolean): void;
+  /** 设置播放模式 */
+  setPlayMode(mode: PlayMode): void;
+
+  // ===== 显示模式 =====
   /** 切换全屏 */
-  toggleFullscreen(): void;
+  toggleFullscreen(): Promise<void>;
+  /** 进入全屏 */
+  enterFullscreen(): Promise<void>;
+  /** 退出全屏 */
+  exitFullscreen(): Promise<void>;
+  /** 是否全屏 */
+  isFullscreen(): boolean;
   /** 切换画中画 */
-  togglePip(): void;
-  /** 切换画质 */
+  togglePip(): Promise<void>;
+  /** 进入画中画 */
+  enterPip(): Promise<void>;
+  /** 退出画中画 */
+  exitPip(): Promise<void>;
+  /** 切换网页全屏 */
+  toggleWebFullscreen(): void;
+  /** 是否网页全屏 */
+  isWebFullscreen(): boolean;
+  /** 切换宽屏 */
+  toggleWideScreen(): void;
+  /** 设置显示模式 */
+  setDisplayMode(mode: DisplayMode): void;
+  /** 重新计算尺寸 */
+  resize(): void;
+
+  // ===== 清晰度 =====
+  /** 切换画质（档位 id，'auto' 表示自动档） */
   setQuality(quality: string): void;
+  /** 获取当前档位 id */
+  getCurrentQuality(): string;
+  /** 获取可用档位列表 */
+  getQualities(): QualityLevel[];
+  /** 获取清晰度能力类型 */
+  getQualityMode(): 'none' | 'static' | 'adaptive';
+  /** 设置清晰度模式（自动 / 手动） */
+  setQualityMode(mode: QualityMode): void;
+  /** 应用清晰度上下限 */
+  applyQualityLimits(limits: { max?: number; min?: number }): void;
+
+  // ===== 媒体加载与播放列表 =====
+  /** 换源加载（复用同一 video 元素与 DOM） */
+  load(
+    source: PlayerSource,
+    options?: { startTime?: number; autoplay?: boolean },
+  ): Promise<void>;
+  /** 播放列表内跳转到指定索引 */
+  switchTo(index: number): Promise<void>;
+  /** 播放下一个 */
+  next(): Promise<void>;
+  /** 播放上一个 */
+  prev(): Promise<void>;
+  /** 获取播放列表 */
+  getPlaylist(): readonly MediaItem[];
+  /** 获取当前条目索引 */
+  getCurrentIndex(): number;
+  /** 设置封面 */
+  setPoster(url: string): void;
+
+  // ===== 弹幕 =====
+  /** 设置弹幕可见性 */
+  setDanmakuVisible(visible: boolean): void;
+  /** 切换弹幕可见性，返回切换后的状态 */
+  toggleDanmaku(): boolean;
+  /** 弹幕是否可见 */
+  isDanmakuVisible(): boolean;
+  /** 设置弹幕不透明度 */
+  setDanmakuOpacity(opacity: number): void;
+  /** 设置弹幕速度倍率 */
+  setDanmakuSpeed(speed: number): void;
+  /** 设置弹幕数据源 */
+  setDanmakuSource(url: string): void;
+  /** 清空弹幕 */
+  clearDanmaku(): void;
+  /** 发送弹幕 */
+  sendDanmaku(text: string, options?: Record<string, unknown>): void;
+
+  // ===== 字幕 =====
+  /** 设置字幕可见性 */
+  setSubtitleVisible(visible: boolean): void;
+  /** 切换字幕可见性，返回切换后的状态 */
+  toggleSubtitle(): boolean;
+  /** 设置字幕语言 */
+  setSubtitleLang(lang: string): void;
+  /** 设置字幕轨道列表 */
+  setSubtitleList(list: SubtitleConfig[]): void;
+
+  // ===== 状态查询 =====
+  /** 获取播放器状态快照 */
+  getState(): PlayerStateData;
+  /** 获取当前时间（秒） */
+  getCurrentTime(): number;
+  /** 获取总时长（秒） */
+  getDuration(): number;
+  /** 获取缓冲进度（秒） */
+  getBuffered(): number;
+  /** 是否暂停中 */
+  isPaused(): boolean;
+  /** 是否正在播放 */
+  isPlaying(): boolean;
+
+  // ===== 配置 =====
+  /** 读取当前生效配置 */
+  getConfig(): Readonly<PlayerConfig>;
+  /** 动态更新配置（深合并并立即生效） */
+  setConfig(partial: DeepPartial<PlayerConfig>): void;
+
+  // ===== 生命周期与插件 =====
+  /** 挂载到容器 */
+  mount(container: HTMLElement): void;
+  /** 取渲染用 VNode（SSR / 内嵌） */
+  render(): VNode;
+  /** 客户端激活（复用服务端结构） */
+  hydrate(container: HTMLElement): void;
+  /** 安装插件（可链式） */
+  use(plugin: Plugin): PlayerMethods;
+  /** 卸载插件 */
+  uninstallPlugin(name: string): void;
+  /** 按名字取插件实例 */
+  getPlugin<T extends Plugin>(name: string): T | undefined;
+  /** 按名字取插件向播放器暴露的 API */
+  getPluginAPI<T extends Plugin>(name: string): T | undefined;
   /** 销毁播放器 */
   destroy(): void;
-  /** 获取当前状态 */
-  getState(): PlayerStateData;
-  /** 注册事件监听 */
-  on<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): void;
+
+  // ===== 事件订阅 =====
+  /** 注册事件监听，返回取消订阅函数 */
+  on<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): () => void;
+  /** 注册只触发一次的监听，返回取消订阅函数 */
+  once<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): () => void;
   /** 移除事件监听 */
   off<K extends keyof PlayerEvents>(event: K, callback: PlayerEvents[K]): void;
 }

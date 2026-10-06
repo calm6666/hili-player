@@ -40,6 +40,8 @@ const CLASS_NAMES = {
 interface LinkPluginOptions {
   onLinkClick?: (link: InteractionLink) => void;
   onWatchLater?: () => void;
+  /** 卡片关闭回调（关闭按钮点击后触发） */
+  onClose?: () => void;
   isEdit?: boolean;
 }
 
@@ -143,6 +145,8 @@ export class LinkPlugin implements InteractionSubPlugin {
     this.item.isClose = true;
     this.item.closeTime = this.lastCurrentTime;
     this.element?.classList.add(CLASS_NAMES.HL_CARD_HIDE);
+    // 通知外部卡片已关闭
+    this.options.onClose?.();
   }
 
   /**

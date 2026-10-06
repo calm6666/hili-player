@@ -30,6 +30,14 @@ export type {
 // 监控器导出
 export { MediaPlayerMonitor } from './monitor';
 
+// 缓冲速度采样导出（State 组件「正在缓冲」速度文本的数据源）
+export { createBufferSpeedSampler } from './bufferSpeed';
+
+export type {
+  BufferSpeedSampler,
+  BufferSpeedSamplerOptions,
+} from './bufferSpeed';
+
 // 全向监控集成导出（统一管理 native + 三个流媒体插件 + 浏览器检测）
 export {
   MediaIntegration,

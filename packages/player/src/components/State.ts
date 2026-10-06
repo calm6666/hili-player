@@ -41,23 +41,50 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
   // DOM 更新函数
   // ============================================
 
+  /** 最近一次有效的缓冲速度（字节/秒），0 表示当前无有效数据 */
+  let lastValidSpeed = 0;
+
   /**
-   * 将缓冲速度格式化为可读的 MB/S 字符串
+   * 将缓冲速度格式化为可读字符串（按量级自适应 KB/S 与 MB/S）
+   *
+   * 单位说明：入参为「字节/秒」（与 StreamStats.downloadSpeed 的单位一致），
+   * 1024 进制下除以 1024 得到的是 KB/S，除以 1024² 才是 MB/S。
    * @param speed - 缓冲速度（字节/秒）
-   * @returns 格式化后的速度字符串
+   * @returns 格式化后的速度字符串；无有效数据（非正数 / NaN）时返回空串
    */
   const formatBufferSpeed = (speed: number): string => {
-    return `${(speed / 1024).toFixed(1)}MB/S`;
+    if (!Number.isFinite(speed) || speed <= 0) return '';
+    const kb = speed / 1024;
+    // 1MB/S（1024KB/S）以下按 KB/S 显示，避免出现「0.0MB/S」这类无信息量的文本
+    return kb < 1024 ? `${kb.toFixed(1)}KB/S` : `${(kb / 1024).toFixed(1)}MB/S`;
+  };
+
+  /**
+   * 应用缓冲速度到速度文本
+   *
+   * 无有效数据时隐藏速度文本（`.player-state-buff-speed` 本身没有隐藏样式，
+   * 必须由这里控制显隐），避免出现假的「0.0MB/S」。
+   * @param speed - 缓冲速度（字节/秒）
+   */
+  const applyBufferSpeed = (speed: number): void => {
+    const text = formatBufferSpeed(speed);
+    lastValidSpeed = text ? speed : 0;
+    if (!bufferSpeedRef.value) return;
+    if (!text) {
+      bufferSpeedRef.value.textContent = '';
+      bufferSpeedRef.value.style.display = 'none';
+      return;
+    }
+    bufferSpeedRef.value.textContent = text;
+    bufferSpeedRef.value.style.display = '';
   };
 
   /**
    * 更新缓冲速度显示文本
-   * @param speed - 缓冲速度（字节/秒）
+   * @param speed - 缓冲速度（字节/秒）；无效（0 / NaN / 负数）时隐藏速度文本
    */
   const updateBufferSpeed = (speed: number): void => {
-    if (bufferSpeedRef.value) {
-      bufferSpeedRef.value.innerHTML = formatBufferSpeed(speed);
-    }
+    applyBufferSpeed(speed);
   };
 
   /**
@@ -70,6 +97,8 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
     if (bufferTextRef.value) {
       bufferTextRef.value.style.display = '';
     }
+    // 文本容器重新显示时，按最近一次有效速度重新决定速度文本的显隐
+    applyBufferSpeed(lastValidSpeed);
   };
 
   /**
@@ -107,8 +136,15 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
   // ============================================
 
   lifecycle.onMounted = (): void => {
-    // 初始状态：隐藏缓冲和播放图标
-    hideBuffering();
+    // 初始状态：先按 props 速度决定速度文本显隐（无有效数据即隐藏）
+    applyBufferSpeed(props.bufferSpeed ?? 0);
+    // 缓冲状态：props.buffering 为真时显示缓冲图标与文本
+    if (props.buffering) {
+      showBuffering();
+    } else {
+      hideBuffering();
+    }
+    // 初始隐藏播放图标（由父组件的暂停状态驱动显示）
     hidePlayIcon();
 
     lifecycle.emit?.('stateMounted', {
@@ -142,6 +178,8 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
         {
           class: 'player-state-buff-speed',
           ref: 'bufferSpeedRef',
+          // 初值无有效数据时先隐藏，onMounted 会按 props.bufferSpeed 重新判定
+          style: { display: 'none' },
         },
         formatBufferSpeed(props.bufferSpeed ?? 0)
       )

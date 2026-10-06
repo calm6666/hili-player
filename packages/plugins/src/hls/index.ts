@@ -5,3 +5,4 @@
  */
 
 export { HlsPlugin, createHlsPlugin } from './HlsPlugin';
+export type { HlsPluginConfig } from './HlsPlugin';

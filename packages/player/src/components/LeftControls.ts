@@ -19,6 +19,7 @@ import { ConfigStoreContext } from '@/store/configStore';
 import { PlayerState } from '@/types';
 import { formatTime } from '@/utils/formatTime';
 import { LottieIcon, type LottieIconApi } from './LottieIcon';
+import { ViewpointMenu, type ViewpointItem } from './ViewpointMenu';
 import pauseToPlayAnimationData from '../assets/lottie-icon/pause-to-play-animation.json';
 import playToPauseAnimationData from '../assets/lottie-icon/play-to-pause-animation.json';
 
@@ -366,17 +367,30 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
         h('span', { class: 'player-ctrl-time-duration', ref: 'playerCtrlTimeDurationRef' }, formatTime(duration))
       )
     ),
-    /** 渲染看点菜单，仅在看点数量大于 1 时显示 */
-    // viewpoint: () => {
-    //   if (!config.viewpoint || !config.progressViewPoints || config.progressViewPoints.length <= 1) {
-    //     return null;
-    //   }
-    //   const points: ViewpointItem[] = config.progressViewPoints.map((vp: ProgressViewPoint) => ({
-    //     title: vp.pointText,
-    //     time: vp.startTime,
-    //   }));
-    //   return h(ViewpointMenu, { points, currentTime, onSeek, onMenuAnimation });
-    // },
+    /**
+     * 渲染看点（章节）菜单
+     *
+     * 数据源为 `progress.segments`（对应参考实现的 progressViewPoints：
+     * ProgressSegment 与 ProgressViewPoint 字段一一对应，label 即 pointText）。
+     * 仅在开启看点且分段数大于 1 时渲染。
+     */
+    viewpoint: (): VNode | null => {
+      const segments = config.progressSegments;
+      if (!config.viewpoint || !segments || segments.length <= 1) {
+        return null;
+      }
+      const points: ViewpointItem[] = segments.map((segment) => ({
+        title: segment.label,
+        time: segment.startTime,
+      }));
+      return h(ViewpointMenu, {
+        points,
+        currentTime,
+        onSeek: (time: number) => lifecycle.emit?.('seek', time),
+        onMenuAnimation: (type: string, action: 'show' | 'hide') =>
+          lifecycle.emit?.('menuAnimation', { type, action }),
+      });
+    },
   };
 
   /** 底部左侧按钮的渲染顺序配置 */

@@ -109,11 +109,6 @@ export { RowDm } from './RowDm';
 /** 弹幕行组件 Props、弹幕项、弹幕模式、弹幕信息及弹幕提示类型 */
 export type { RowDmProps, DanmakuItem, DanmakuMode, DanmakuInfo, DmTip } from './RowDm';
 
-/** 命令行组件 */
-export { RowCmd } from './RowCmd';
-/** 命令行组件 Props 类型 */
-export type { RowCmdProps } from './RowCmd';
-
 /** 控制栏组件 */
 export { Controls } from './Controls';
 /** 控制栏组件 Props 类型 */

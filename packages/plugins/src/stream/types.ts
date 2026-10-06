@@ -6,7 +6,9 @@
 
 import type { Plugin } from '@hili-player/player';
 import type { EventBus } from '@/core/eventBus';
-import { StreamPluginTypeEnum, StreamFormatEnum } from './enums';
+// 枚举以运行时真正使用的那份为准（@/types/streamPlugin）；
+// ./enums 下曾有一份同名但取值不同的旧版（大写 'HLS' …），已删除
+import { StreamPluginTypeEnum, StreamFormatEnum } from '@/types/streamPlugin';
 
 /**
  * 缓冲信息接口

@@ -11,7 +11,8 @@
  * - 错误重试机制（最多 3 次重试）
  * - 直播延迟控制（目标延迟、最大延迟）
  * - 提供缓冲、码率等实时统计信息
- * - 通过事件总线与播放器和其他插件通信
+ * - 通过事件总线与播放器和其他插件通信（契约事件走播放器总线，
+ *   StreamPluginEventEnum 私有事件走插件私有总线）
  * - 自动检测浏览器兼容性（依赖 MSE）
  * - 首帧时间追踪
  * - 编码信息收集
@@ -28,7 +29,10 @@ import type { VideoPlayer } from '@hili-player/player';
 import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
+import { PlayerEventEnum } from '@/core/events';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
+import { createStreamPluginEventBus } from '../stream/streamEventBus';
+import type { StreamPluginEventBus } from '../stream/streamEventBus';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
@@ -43,7 +47,7 @@ const RETRY_INTERVAL = 1000;
 /**
  * FLV 插件配置
  */
-interface FlvPluginConfig {
+export interface FlvPluginConfig {
   /** 是否自动播放，默认 true */
   autoplay?: boolean;
   /** 是否直播模式，默认 false */
@@ -92,8 +96,11 @@ export class FlvPlugin implements StreamPlugin {
   /** 视频元素（从播放器获取） */
   videoElement: HTMLVideoElement | null = null;
 
-  /** 事件总线（从播放器获取） */
+  /** 播放器事件总线（player.events，只承载契约事件） */
   eventBus: PlayerEventBus | null = null;
+
+  /** 插件私有事件总线（StreamPluginEventEnum 上报的唯一去向，不经播放器总线） */
+  private readonly streamEventBus: StreamPluginEventBus = createStreamPluginEventBus();
 
   /** 播放器实例引用 */
   private player: VideoPlayer | null = null;
@@ -239,7 +246,7 @@ export class FlvPlugin implements StreamPlugin {
     if (!this.videoElement) {
       const msg = '视频元素未设置，请确保播放器已挂载到 DOM';
       logger.error(msg);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
       return;
     }
 
@@ -300,7 +307,7 @@ export class FlvPlugin implements StreamPlugin {
     player.load();
 
     // 步骤 4：通知外部：加载完成
-    this.eventBus?.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: config.url });
+    this.streamEventBus.emit(StreamPluginEventEnum.LOAD_COMPLETE, { url: config.url });
 
     // 步骤 5：自动播放
     if (this.pluginConfig.autoplay) {
@@ -331,7 +338,7 @@ export class FlvPlugin implements StreamPlugin {
         this.firstFrameTime = Date.now() - this.loadStartTime;
         this.stats.firstFrameTime = this.firstFrameTime;
         logger.info(`首帧时间: ${this.firstFrameTime}ms`);
-        this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+        this.streamEventBus.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
       }
     };
 
@@ -362,7 +369,7 @@ export class FlvPlugin implements StreamPlugin {
     // 步骤 1：检查是否已达到最大重试次数
     if (this.retryCount >= maxRetry) {
       logger.error(`已达到最大重试次数 (${maxRetry})，停止重试`);
-      this.eventBus?.emit(StreamPluginEventEnum.ERROR, {
+      this.streamEventBus.emit(StreamPluginEventEnum.ERROR, {
         message: `播放失败，已重试 ${maxRetry} 次`,
         retryCount: this.retryCount,
       });
@@ -425,10 +432,17 @@ export class FlvPlugin implements StreamPlugin {
       const retried = this.retryOnError();
       if (!retried) {
         // 重试次数已用完，发出错误事件
-        this.eventBus?.emit(StreamPluginEventEnum.ERROR, {
+        this.streamEventBus.emit(StreamPluginEventEnum.ERROR, {
           type: errorType,
           detail: errorDetail,
           retryCount: this.retryCount,
+        });
+        // 重试已用尽属终态失败：向播放器总线广播契约事件 STREAM_ERROR
+        // flv.js 的 ERROR 只给出两个字符串（无原始错误对象），
+        // 故 message 取错误详情字符串，error 传错误类型与详情
+        this.eventBus?.emit(PlayerEventEnum.STREAM_ERROR, {
+          message: errorDetail || errorType,
+          error: { type: errorType, detail: errorDetail },
         });
       }
     });
@@ -437,9 +451,11 @@ export class FlvPlugin implements StreamPlugin {
     this.flvPlayer.on(Events.MEDIA_INFO, () => {
       const mediaInfo = this.flvPlayer?.mediaInfo;
       logger.info('媒体信息:', mediaInfo);
-      this.eventBus?.emit(StreamPluginEventEnum.METADATA_LOADED, mediaInfo);
+      this.streamEventBus.emit(StreamPluginEventEnum.METADATA_LOADED, mediaInfo);
       if (mediaInfo && mediaInfo.width && mediaInfo.height) {
-        this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, {
+        // StreamPluginEventEnum.QUALITY_CHANGE 的值与契约键 streamQualityChange 同名，
+        // 按契约事件走播放器总线
+        this.eventBus?.emit(PlayerEventEnum.STREAM_QUALITY_CHANGE, {
           width: mediaInfo.width,
           height: mediaInfo.height,
           bitrate: undefined,
@@ -456,7 +472,7 @@ export class FlvPlugin implements StreamPlugin {
     // 加载完成 → 记录缓冲开始
     this.flvPlayer.on(Events.LOADING_COMPLETE, () => {
       this.lastStallTime = Date.now();
-      this.eventBus?.emit(StreamPluginEventEnum.BUFFER_START, {});
+      this.streamEventBus.emit(StreamPluginEventEnum.BUFFER_START, {});
     });
 
     // 统计信息定期更新 → 更新下载速度等指标，同时检测缓冲结束
@@ -465,7 +481,11 @@ export class FlvPlugin implements StreamPlugin {
       // 从 flv.js 的 statisticsInfo 中提取下载速度
       const statsInfo = this.flvPlayer?.statisticsInfo;
       if (statsInfo && typeof statsInfo === 'object' && 'speed' in statsInfo && typeof statsInfo.speed === 'number') {
-        this.stats.downloadSpeed = statsInfo.speed;
+        // 单位换算：flv.js 的 statisticsInfo.speed 是 **KiB/s**
+        // （flv.js dist：IOController.currentSpeed 注释 `// in KB/s`，
+        //   SpeedSampler.lastSecondKBps = _lastSecondBytes / 1024），
+        // 而 StreamStats.downloadSpeed 约定为「字节/秒」→ ×1024
+        this.stats.downloadSpeed = statsInfo.speed * 1024;
       }
 
       // 如果之前处于缓冲状态，检测是否已恢复
@@ -474,10 +494,10 @@ export class FlvPlugin implements StreamPlugin {
         this.stats.totalStallTime = (this.stats.totalStallTime || 0) + stallDuration;
         this.stats.totalStallCount = (this.stats.totalStallCount || 0) + 1;
         this.lastStallTime = 0;
-        this.eventBus?.emit(StreamPluginEventEnum.BUFFER_END, {});
+        this.streamEventBus.emit(StreamPluginEventEnum.BUFFER_END, {});
       }
 
-      this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
+      this.streamEventBus.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
     });
 
     // 提前结束恢复
@@ -495,14 +515,14 @@ export class FlvPlugin implements StreamPlugin {
       const result = this.flvPlayer.play();
       if (result instanceof Promise) {
         result.then(() => {
-          this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
+          this.streamEventBus.emit(StreamPluginEventEnum.PLAY_START, {});
         }).catch((err: Error) => {
           const msg = `播放失败: ${err.message}`;
           logger.error(msg);
-          this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
+          this.streamEventBus.emit(StreamPluginEventEnum.ERROR, { message: msg });
         });
       } else {
-        this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
+        this.streamEventBus.emit(StreamPluginEventEnum.PLAY_START, {});
       }
     }
   }
@@ -514,7 +534,7 @@ export class FlvPlugin implements StreamPlugin {
   pause(): void {
     if (this.flvPlayer) {
       this.flvPlayer.pause();
-      this.eventBus?.emit(StreamPluginEventEnum.PLAY_PAUSE, {});
+      this.streamEventBus.emit(StreamPluginEventEnum.PLAY_PAUSE, {});
     }
   }
 
@@ -598,7 +618,12 @@ export class FlvPlugin implements StreamPlugin {
     const statsInfo = this.flvPlayer?.statisticsInfo;
 
     // 从 FlvPlayerStatisticsInfo 中提取下载速度（NativePlayerStatisticsInfo 没有 speed 字段）
-    const downloadSpeed = statsInfo && 'speed' in statsInfo ? statsInfo.speed : (this.stats.downloadSpeed ?? 0);
+    // 单位换算：statisticsInfo.speed 原始单位为 KiB/s → ×1024 得到字节/秒
+    // （this.stats.downloadSpeed 在 STATISTICS_INFO 回调里已按同一口径换算过，两条路径单位一致）
+    const speedKib = statsInfo && 'speed' in statsInfo ? statsInfo.speed : undefined;
+    const downloadSpeed = typeof speedKib === 'number'
+      ? speedKib * 1024
+      : (this.stats.downloadSpeed ?? 0);
     // 从 FlvPlayerMediaInfo 中提取编码信息（NativePlayerMediaInfo 没有 videoCodec/audioCodec 字段）
     const videoCodec = mediaInfo && 'videoCodec' in mediaInfo ? mediaInfo.videoCodec : undefined;
     const audioCodec = mediaInfo && 'audioCodec' in mediaInfo ? mediaInfo.audioCodec : undefined;
@@ -685,6 +710,16 @@ export class FlvPlugin implements StreamPlugin {
    */
   getPlayer(): VideoPlayer | null {
     return this.player;
+  }
+
+  /**
+   * 获取插件私有事件总线（只读入口）
+   * StreamPluginEventEnum 的上报都在这里；播放器总线只承载契约事件
+   *
+   * @returns 插件私有事件总线
+   */
+  getStreamEventBus(): StreamPluginEventBus {
+    return this.streamEventBus;
   }
 
   /**

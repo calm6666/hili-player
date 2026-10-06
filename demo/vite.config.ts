@@ -25,7 +25,7 @@ export default defineConfig({
 
       { find: /^@\/(.*)/, replacement: path.resolve(__dirname, '../packages/player/src/$1') },
 
-      { find: 'hls.js', replacement: path.resolve(__dirname, '../packages/plugins/src/hls/vendor/hls.mjs') },
+      { find: 'hls.js', replacement: path.resolve(__dirname, '../hls-fork/dist/hls.mjs') },
     ],
   },
   server: {

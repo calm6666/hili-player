@@ -48,3 +48,8 @@ desktop.ini
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# ============================================
+
+# 仓库根的 fork 版 hls.js：插件直接从它导入，其 dist 入口产物必须入库
+!hls-fork/dist/

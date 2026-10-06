@@ -139,6 +139,12 @@ getConfig(): Readonly<PlayerConfig>;
 
 ## 四、事件体系
 
+> ⚠️ **本节「统一为一条通道」的主张已被 `docs/player-event-contract-design.md` 取代。**
+> 现行决策：**对外门面保持小写多参数不变**（`PlayerEvents` 冻结，不新增/不删除/不改签名），
+> 内部契约统一为 `core/events.ts` 的 `PlayerEventEnum` + `PlayerEventMap`；
+> 两层之间由 `VideoPlayer.bridgeEvents()` 单向桥接，内部事件经 `player.events` 暴露。
+> 因此下面 §4.1 的门面签名**不再实施**，§4.2 的事件全表也以那份文档 §4 的实测审计为准。
+
 ### 4.1 统一为一条通道
 
 - **删除** `packages/player/src/core/events.ts`（死代码）。

@@ -115,6 +115,8 @@ class DanmakuPluginClass implements DanmakuPluginAPI {
   private container: HTMLElement | null = null;
   private isVisible = true;
   private unsubscribers: Array<() => void> = [];
+  /** 播放器事件总线（即 player.events，用于向外部广播弹幕事件） */
+  private eventBus: PlayerEventBus | null = null;
 
   constructor(config?: DanmakuPluginConfig) {
     this.callbacks = config?.callbacks ?? {};
@@ -123,6 +125,8 @@ class DanmakuPluginClass implements DanmakuPluginAPI {
 
   install(player: VideoPlayer): void {
     const events: PlayerEventBus = player.events;
+    // 持有播放器总线引用，供发送成功等场景向上广播事件
+    this.eventBus = events;
 
     // 订阅 MOUNTED 事件：获取 video 元素和弹幕渲染容器
     const unsubMounted = events.on(PlayerEventEnum.MOUNTED, (data): void => {
@@ -218,6 +222,7 @@ class DanmakuPluginClass implements DanmakuPluginAPI {
 
     this.video = null;
     this.container = null;
+    this.eventBus = null;
   }
 
   // ==================== 私有方法 ====================
@@ -256,6 +261,11 @@ class DanmakuPluginClass implements DanmakuPluginAPI {
         const confirmed = await this.callbacks.onSend(danmaku);
         this.manager?.sendDanmaku(confirmed.text, confirmed);
         this.callbacks.onSendSuccess?.(confirmed);
+        // 服务器确认发送成功：向播放器总线广播 DANMAKU_SENT
+        this.eventBus?.emit(PlayerEventEnum.DANMAKU_SENT, {
+          text: confirmed.text,
+          id: confirmed.id,
+        });
       } catch (error) {
         this.callbacks.onSendError?.(
           error instanceof Error ? error : new Error(String(error)),

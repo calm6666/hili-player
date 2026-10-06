@@ -33,7 +33,7 @@
       "@/hili-player/*": ["packages/player/src/*"],
       "@/hili-player/plugins/*": ["packages/plugins/src/*"],
       "@hili-player/player": ["packages/player/src/index.ts"],
-      "hls.js": ["packages/plugins/src/hls/vendor/hls"]
+      "hls.js": ["hls-fork/dist/hls"]
     }
   },
   "include": [
@@ -47,7 +47,7 @@
     "plugins/**/*",
     "packages/player/src/**/*",
     "packages/plugins/src/**/*",
-    "packages/plugins/src/hls/vendor/hls/*",
+    "hls-fork/dist/hls.d.ts",
     "demo/**/*",
     "demo-prod/**/*"
   ],

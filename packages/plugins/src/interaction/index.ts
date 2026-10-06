@@ -126,6 +126,9 @@ class InteractionPluginClass implements InteractionPluginAPI {
   // 事件取消订阅
   private unsubscribers: Array<() => void> = [];
 
+  // 事件总线引用（install 时从播放器获取，用于向总线发布互动事件）
+  private eventBus: PlayerEventBus | null = null;
+
   constructor(config?: InteractionPluginConfig) {
     this.config = {
       isEdit: config?.isEdit ?? false,
@@ -158,6 +161,8 @@ class InteractionPluginClass implements InteractionPluginAPI {
     if (!isBrowser()) return;
 
     const events: PlayerEventBus = player.events;
+    // 保存事件总线引用，供互动子插件在交互发生时发布事件
+    this.eventBus = player.events;
 
     const unsubMounted = events.on(PlayerEventEnum.MOUNTED, (data): void => {
       if (data.container) {
@@ -261,6 +266,7 @@ class InteractionPluginClass implements InteractionPluginAPI {
 
     this.dmInsideElement = null;
     this.container = null;
+    this.eventBus = null;
   }
 
   // ==================== 渲染方法 ====================
@@ -303,7 +309,8 @@ class InteractionPluginClass implements InteractionPluginAPI {
         const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
           item.top = top;
           item.left = left;
-          this.config.onPositionChange?.({
+          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
+          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
             type: 'guideThree',
             index,
             top,
@@ -321,7 +328,19 @@ class InteractionPluginClass implements InteractionPluginAPI {
   addLink(item: InteractionLink): void {
     if (!this.dmInsideElement) return;
 
-    const plugin = new LinkPlugin(item);
+    // 当前卡片在链接列表中的下标（用于事件 payload）
+    const index = this.linkPlugins.length;
+
+    const plugin = new LinkPlugin(item, {
+      onLinkClick: (): void => {
+        // 外链卡片被点击时向播放器总线发布事件
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_LINK_CLICK);
+      },
+      onClose: (): void => {
+        // 子插件关闭按钮点击后回调，向播放器总线发布卡片关闭事件
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type: 'link', index });
+      },
+    });
     plugin.render(this.dmInsideElement);
     this.linkPlugins.push(plugin);
 
@@ -329,11 +348,11 @@ class InteractionPluginClass implements InteractionPluginAPI {
     if (this.config.isEdit) {
       const element = this.getLastLinkElement();
       if (element) {
-        const index = this.linkPlugins.length - 1;
         const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
           item.top = top;
           item.left = left;
-          this.config.onPositionChange?.({
+          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
+          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
             type: 'link',
             index,
             top,
@@ -351,7 +370,20 @@ class InteractionPluginClass implements InteractionPluginAPI {
   addVote(item: InteractionVote): void {
     if (!this.dmInsideElement) return;
 
-    const plugin = new VotePlugin(item);
+    // 当前卡片在投票列表中的下标（用于事件 payload）
+    const index = this.votePlugins.length;
+
+    const plugin = new VotePlugin(item, {
+      index,
+      onVoteSelect: (voteIndex: number, optionIndex: number): void => {
+        // 投票选项被选中时向播放器总线发布事件
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_VOTE_SELECT, { voteIndex, optionIndex });
+      },
+      onClose: (): void => {
+        // 子插件关闭按钮点击后回调，向播放器总线发布卡片关闭事件
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type: 'vote', index });
+      },
+    });
     plugin.render(this.dmInsideElement);
     this.votePlugins.push(plugin);
 
@@ -359,11 +391,11 @@ class InteractionPluginClass implements InteractionPluginAPI {
     if (this.config.isEdit) {
       const element = this.getLastVoteElement();
       if (element) {
-        const index = this.votePlugins.length - 1;
         const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
           item.top = top;
           item.left = left;
-          this.config.onPositionChange?.({
+          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
+          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
             type: 'vote',
             index,
             top,
@@ -381,7 +413,20 @@ class InteractionPluginClass implements InteractionPluginAPI {
   addScore(item: InteractionScore): void {
     if (!this.dmInsideElement) return;
 
-    const plugin = new ScorePlugin(item);
+    // 当前卡片在评分列表中的下标（用于事件 payload）
+    const index = this.scorePlugins.length;
+
+    const plugin = new ScorePlugin(item, {
+      index,
+      onScoreSelect: (scoreIndex: number, value: number): void => {
+        // 评分被选择时向播放器总线发布事件
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_SCORE_SELECT, { scoreIndex, value });
+      },
+      onClose: (): void => {
+        // 子插件关闭按钮点击后回调，向播放器总线发布卡片关闭事件
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type: 'score', index });
+      },
+    });
     plugin.render(this.dmInsideElement);
     this.scorePlugins.push(plugin);
 
@@ -389,11 +434,11 @@ class InteractionPluginClass implements InteractionPluginAPI {
     if (this.config.isEdit) {
       const element = this.getLastScoreElement();
       if (element) {
-        const index = this.scorePlugins.length - 1;
         const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
           item.top = top;
           item.left = left;
-          this.config.onPositionChange?.({
+          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
+          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
             type: 'score',
             index,
             top,
@@ -562,7 +607,8 @@ class InteractionPluginClass implements InteractionPluginAPI {
     if (item) {
       item.isClose = true;
       item.closeTime = this.currentTime;
-      this.config.onCardClose?.(type, index);
+      // 卡片被关闭时向播放器总线发布关闭事件（config.onCardClose 由 install 中的监听器回调）
+      this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type, index });
     }
   }
 
