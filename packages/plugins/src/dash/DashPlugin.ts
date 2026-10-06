@@ -22,12 +22,12 @@
  */
 
 import { MediaPlayer } from 'dashjs';
-import type { MediaPlayerClass, ErrorEvent } from 'dashjs';
+import type { MediaPlayerClass, ErrorEvent, Representation } from 'dashjs';
 import type { MediaManifest } from '../vendor/types';
 import { manifestToDash } from '../vendor/manifest-to-dash';
 import type { VideoPlayer } from '@hili-player/player';
 import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
-import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource } from '@/types/streamPlugin';
+import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
@@ -126,6 +126,9 @@ export class DashPlugin implements StreamPlugin {
 
   /** 首帧事件处理器引用（用于移除监听） */
   private firstFrameHandler: (() => void) | null = null;
+
+  /** 清晰度列表变化订阅者集合 */
+  private qualityListeners = new Set<(list: QualityLevel[]) => void>();
 
   /**
    * 构造函数
@@ -440,6 +443,8 @@ export class DashPlugin implements StreamPlugin {
     this.dashPlayer.on('streamInitialized', () => {
       logger.info('流初始化完成');
       this.eventBus?.emit(StreamPluginEventEnum.METADATA_LOADED, {});
+      // 流初始化后清晰度列表就绪，推送给订阅者
+      this.notifyQualitiesChange();
     });
 
     // 缓冲停滞开始 → 记录卡顿开始时间
@@ -471,18 +476,25 @@ export class DashPlugin implements StreamPlugin {
       }
     });
 
-    // 画质切换完成 → 更新统计信息
+    // 画质切换完成（手动选档后触发；ABR 每次切档也会触发）
     this.dashPlayer.on('qualityChangeRendered', () => {
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
-      const stats = this.getStats();
-      if (stats.resolution) {
-        this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, {
-          width: stats.resolution.width,
-          height: stats.resolution.height,
-          bitrate: stats.videoBitrate,
-          isAuto: !this.dashPlayer?.getSettings()?.streaming?.abr?.autoSwitchBitrate?.video === false,
-        });
-      }
+      // 切换完成后档位信息可能变化，通知订阅者重新获取列表
+      this.notifyQualitiesChange();
+
+      // 取当前生效的视频 representation，附带档位 id / 名称 / 是否自动档
+      const rep = this.dashPlayer?.getCurrentRepresentationForType('video');
+      if (!rep) return;
+
+      const payload: StreamQualityChangePayload = {
+        width: rep.width,
+        height: rep.height,
+        bitrate: rep.bandwidth,
+        isAuto: this.getCurrentQuality() === 'auto',
+        qualityId: String(rep.index),
+        label: `${rep.width}x${rep.height}`,
+      };
+      this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, payload);
     });
 
     // 片段加载完成 → 更新统计信息
@@ -549,6 +561,7 @@ export class DashPlugin implements StreamPlugin {
     this.loadStartTime = 0;
     this.firstFrameRecorded = false;
     this.firstFrameTime = 0;
+    this.qualityListeners.clear();
   }
 
   /**
@@ -631,17 +644,132 @@ export class DashPlugin implements StreamPlugin {
 
   /**
    * 设置播放画质
-   * 切换到指定标识的码率层级
+   * - 'auto'：开启视频轨 ABR 自动切档（不走手动选档）
+   * - 具体档位：先关闭 ABR，避免自动切档覆盖手动选择，再手动选中对应 representation
    *
-   * @param quality - 画质标识（QualityLevel.id）
+   * @param quality - 画质标识（QualityLevel.id，或 'auto'）
    */
   setQuality(quality: string): void {
-    if (this.dashPlayer) {
-      const index = Number(quality);
-      if (!isNaN(index)) {
-        this.dashPlayer.setRepresentationForTypeByIndex('video', index);
+    if (!this.dashPlayer) return;
+
+    if (quality === 'auto') {
+      // 切回自动档：dash.js 无 setAutoSwitchQuality API，需通过 updateSettings 修改 ABR 配置
+      this.dashPlayer.updateSettings({
+        streaming: { abr: { autoSwitchBitrate: { video: true } } },
+      });
+      return;
+    }
+
+    const index = Number(quality);
+    if (!isNaN(index)) {
+      // 手动档位：先关闭 ABR，防止自动切档覆盖手动选择
+      this.dashPlayer.updateSettings({
+        streaming: { abr: { autoSwitchBitrate: { video: false } } },
+      });
+      this.dashPlayer.setRepresentationForTypeByIndex('video', index);
+    }
+  }
+
+  /**
+   * 获取当前生效的档位 id
+   * - ABR 自动切档开启时视为自动档，返回 'auto'
+   * - 否则返回当前视频 representation 的索引字符串
+   *
+   * @returns 'auto' | 档位索引字符串 | ''（实例未就绪或无法获取）
+   */
+  getCurrentQuality(): string {
+    const dash = this.dashPlayer;
+    if (!dash) return '';
+
+    const autoSwitch = dash.getSettings()?.streaming?.abr?.autoSwitchBitrate?.video;
+    if (autoSwitch === true) return 'auto';
+
+    const rep = dash.getCurrentRepresentationForType('video');
+    return rep ? String(rep.index) : '';
+  }
+
+  /**
+   * 应用清晰度上限/下限限制（映射到 dash.js 的 ABR 码率上下限）
+   * 说明：dash.js 只有 maxBitrate / minBitrate（单位比特/秒），没有像素高度上限 API，
+   * 因此这里按像素高度取对应档位的码率作为阈值：
+   * - 上限：取 height <= max 的最高档码率
+   * - 下限：取 height >= min 的最低档码率
+   *
+   * @param limits - 上限/下限（像素高度）
+   */
+  applyLimits(limits: { max?: number; min?: number }): void {
+    const dash = this.dashPlayer;
+    if (!dash) return;
+    if (limits.max === undefined && limits.min === undefined) return;
+
+    const reps = dash.getRepresentationsByType('video') ?? [];
+    const abr: {
+      maxBitrate?: { video: number };
+      minBitrate?: { video: number };
+    } = {};
+
+    if (limits.max !== undefined) {
+      const maxBitrate = this.pickBitrateByHeight(reps, limits.max, true);
+      if (maxBitrate !== undefined) abr.maxBitrate = { video: maxBitrate };
+    }
+    if (limits.min !== undefined) {
+      const minBitrate = this.pickBitrateByHeight(reps, limits.min, false);
+      if (minBitrate !== undefined) abr.minBitrate = { video: minBitrate };
+    }
+    if (abr.maxBitrate === undefined && abr.minBitrate === undefined) return;
+
+    dash.updateSettings({ streaming: { abr } });
+  }
+
+  /**
+   * 在视频 representation 列表中按像素高度匹配对应的码率阈值
+   * @param reps - 视频 representation 列表
+   * @param height - 目标高度（像素）
+   * @param isMax - true 取 height <= 目标的最高档；false 取 height >= 目标的最低档
+   * @returns 匹配到的码率，未匹配返回 undefined
+   */
+  private pickBitrateByHeight(
+    reps: Representation[],
+    height: number,
+    isMax: boolean,
+  ): number | undefined {
+    let picked: Representation | undefined;
+    for (const rep of reps) {
+      if (isMax) {
+        if (rep.height <= height && (!picked || rep.height > picked.height)) picked = rep;
+      } else {
+        if (rep.height >= height && (!picked || rep.height < picked.height)) picked = rep;
       }
     }
+    return picked?.bandwidth;
+  }
+
+  /**
+   * 订阅清晰度列表变化
+   * @param cb - 列表变化回调
+   * @returns 取消订阅函数
+   */
+  onQualitiesChange(cb: (list: QualityLevel[]) => void): () => void {
+    this.qualityListeners.add(cb);
+    return () => {
+      this.qualityListeners.delete(cb);
+    };
+  }
+
+  /**
+   * 是否支持自动档（ABR 自适应码率）
+   * dash.js 支持 ABR 自动切档
+   * @returns 恒为 true
+   */
+  supportsAutoQuality(): boolean {
+    return true;
+  }
+
+  /** 通知所有清晰度订阅者（流初始化时调用） */
+  private notifyQualitiesChange(): void {
+    if (this.qualityListeners.size === 0) return;
+    const list = this.getQualities();
+    this.qualityListeners.forEach((cb) => cb(list));
   }
 
   /**

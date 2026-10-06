@@ -1,4 +1,5 @@
-import type { PlayerState } from "@/types";
+import type { DisplayMode, PlayerState } from "@/types";
+import type { QualityLevel } from "@/types/streamPlugin";
 
 /**
  * ============================================
@@ -10,7 +11,7 @@ import type { PlayerState } from "@/types";
 import { createTypedStateManager } from "@/core/state";
 import type { TypedStateManager } from "@/core/state";
 import { createContext } from "@/core/context";
-import type { ControlConfig } from "@/hili-player/types";
+import type { ControlsConfig } from "@/hili-player/types";
 
 export type { TypedStateManager };
 
@@ -44,12 +45,32 @@ export enum PlayerStateKeyEnum {
   // 播放属性
   PLAYBACK_RATE = "player.playbackRate",
   QUALITY = "player.quality",
+  /** 运行时可用清晰度列表（MP4 多变体同步就绪；HLS/DASH 在清单解析后异步就绪） */
+  AVAILABLE_QUALITIES = "player.availableQualities",
 
   // 显示状态
   IS_FULLSCREEN = "player.isFullscreen",
   IS_PIP = "player.isPip",
   IS_WEB_FULLSCREEN = "player.isWebFullscreen",
   IS_WIDE_SCREEN = "player.isWideScreen",
+  /** 画面显示模式：normal | web | wide | mini（原局部变量 dataScreen） */
+  DISPLAY_MODE = "player.displayMode",
+  /** 是否为迷你播放器（原局部变量） */
+  IS_MIN_PLAYER = "player.isMinPlayer",
+
+  // 清晰度（运行时模型）
+  /** 当前生效档位 id（'auto' 或档位 id） */
+  QUALITY_CURRENT = "player.qualityCurrent",
+  /** 清晰度能力：none | static | adaptive */
+  QUALITY_MODE = "player.qualityMode",
+  /** 清晰度切换生命周期：idle | switching | switched | failed */
+  QUALITY_SWITCH_STATE = "player.qualitySwitchState",
+
+  // 播放列表
+  /** 当前播放项索引 */
+  PLAYLIST_INDEX = "player.playlistIndex",
+  /** 播放列表长度 */
+  PLAYLIST_LENGTH = "player.playlistLength",
 
   // 视频属性
   VIDEO_WIDTH = "video.width",
@@ -73,6 +94,16 @@ export enum PlayerStateKeyEnum {
   DANMAKU_OPACITY = "player.danmakuOpacity",
   DANMAKU_SPEED = "player.danmakuSpeed",
   DANMAKU_DENSITY = "player.danmakuDensity",
+  /** 弹幕显示区域（0-100，对应弹幕设置面板「显示区域」滑杆） */
+  DANMAKU_AREA = "player.danmakuArea",
+  /** 弹幕字号档位（0-100，对应弹幕设置面板「弹幕字号」滑杆） */
+  DANMAKU_FONT_SIZE = "player.danmakuFontSize",
+  /** 弹幕颜色（发送栏弹幕类型选择面板写入，如 '#FFFFFF'） */
+  DANMAKU_COLOR = "player.danmakuColor",
+  /** 弹幕模式（1 滚动 / 4 底部 / 5 顶部，发送栏弹幕类型选择面板写入） */
+  DANMAKU_MODE = "player.danmakuMode",
+  /** 弹幕随屏幕缩放（弹幕设置面板复选框） */
+  DANMAKU_SCALE_WITH_SCREEN = "player.danmakuScaleWithScreen",
 
   // 字幕状态
   SUBTITLE_VISIBLE = "player.subtitleVisible",
@@ -100,10 +131,26 @@ export type PlayerStateMap = {
   "player.muted": boolean;
   "player.playbackRate": number;
   "player.quality": string;
+  /** 运行时可用清晰度列表（与 "player.quality" 的当前档位字符串区分） */
+  "player.availableQualities": QualityLevel[];
   "player.isFullscreen": boolean;
   "player.isPip": boolean;
   "player.isWebFullscreen": boolean;
   "player.isWideScreen": boolean;
+  /** 画面显示模式 */
+  "player.displayMode": DisplayMode;
+  /** 是否为迷你播放器 */
+  "player.isMinPlayer": boolean;
+  /** 当前生效档位 id（'auto' 或档位 id） */
+  "player.qualityCurrent": string;
+  /** 清晰度能力：none | static | adaptive */
+  "player.qualityMode": "none" | "static" | "adaptive";
+  /** 清晰度切换生命周期 */
+  "player.qualitySwitchState": "idle" | "switching" | "switched" | "failed";
+  /** 当前播放项索引 */
+  "player.playlistIndex": number;
+  /** 播放列表长度 */
+  "player.playlistLength": number;
   "video.width": number;
   "video.height": number;
   "video.aspectRatio": number;
@@ -117,6 +164,16 @@ export type PlayerStateMap = {
   "player.danmakuOpacity": number;
   "player.danmakuSpeed": number;
   "player.danmakuDensity": number;
+  /** 弹幕显示区域（0-100） */
+  "player.danmakuArea": number;
+  /** 弹幕字号档位（0-100） */
+  "player.danmakuFontSize": number;
+  /** 弹幕颜色 */
+  "player.danmakuColor": string;
+  /** 弹幕模式（1 滚动 / 4 底部 / 5 顶部） */
+  "player.danmakuMode": number;
+  /** 弹幕随屏幕缩放 */
+  "player.danmakuScaleWithScreen": boolean;
   "player.subtitleVisible": boolean;
   "player.subtitleLang": string;
   browser: object;
@@ -139,12 +196,32 @@ export interface RuntimeState {
   // 播放属性
   playbackRate: number;
   quality: number;
+  /** 运行时可用清晰度列表 */
+  availableQualities: QualityLevel[];
 
   // 显示状态
   isFullscreen: boolean;
   isPip: boolean;
   isWebFullscreen: boolean;
   isWideScreen: boolean;
+  /** 画面显示模式：normal | web | wide | mini */
+  displayMode: DisplayMode;
+  /** 是否为迷你播放器 */
+  isMinPlayer: boolean;
+
+  // 清晰度（运行时模型）
+  /** 当前生效档位 id（'auto' 或档位 id） */
+  qualityCurrent: string;
+  /** 清晰度能力：none | static | adaptive */
+  qualityMode: "none" | "static" | "adaptive";
+  /** 清晰度切换生命周期 */
+  qualitySwitchState: "idle" | "switching" | "switched" | "failed";
+
+  // 播放列表
+  /** 当前播放项索引 */
+  playlistIndex: number;
+  /** 播放列表长度 */
+  playlistLength: number;
 
   // 视频属性
   videoWidth: number;
@@ -167,6 +244,16 @@ export interface RuntimeState {
   danmakuOpacity: number;
   danmakuSpeed: number;
   danmakuDensity: number;
+  /** 弹幕显示区域（0-100） */
+  danmakuArea: number;
+  /** 弹幕字号档位（0-100） */
+  danmakuFontSize: number;
+  /** 弹幕颜色 */
+  danmakuColor: string;
+  /** 弹幕模式（1 滚动 / 4 底部 / 5 顶部） */
+  danmakuMode: number;
+  /** 弹幕随屏幕缩放 */
+  danmakuScaleWithScreen: boolean;
 
   // 字幕状态
   subtitleVisible: boolean;
@@ -185,10 +272,18 @@ export const defaultRuntimeState: RuntimeState = {
   muted: false,
   playbackRate: 1,
   quality: 0,
+  availableQualities: [],
   isFullscreen: false,
   isPip: false,
   isWebFullscreen: false,
   isWideScreen: false,
+  displayMode: "normal",
+  isMinPlayer: false,
+  qualityCurrent: "auto",
+  qualityMode: "none",
+  qualitySwitchState: "idle",
+  playlistIndex: 0,
+  playlistLength: 0,
   videoWidth: 0,
   videoHeight: 0,
   errorCode: 0,
@@ -201,6 +296,11 @@ export const defaultRuntimeState: RuntimeState = {
   danmakuOpacity: 1,
   danmakuSpeed: 1,
   danmakuDensity: 0.5,
+  danmakuArea: 50,
+  danmakuFontSize: 50,
+  danmakuColor: "#FFFFFF",
+  danmakuMode: 1,
+  danmakuScaleWithScreen: true,
   subtitleVisible: true,
   subtitleLang: "zh-CN",
 };
@@ -233,6 +333,8 @@ export function createRuntimeStateManager(
       initialState.playbackRate ?? defaultRuntimeState.playbackRate,
     [PlayerStateKeyEnum.QUALITY]:
       initialState.quality ?? defaultRuntimeState.quality,
+    [PlayerStateKeyEnum.AVAILABLE_QUALITIES]:
+      initialState.availableQualities ?? defaultRuntimeState.availableQualities,
 
     // 显示状态
     [PlayerStateKeyEnum.IS_FULLSCREEN]:
@@ -243,6 +345,24 @@ export function createRuntimeStateManager(
       initialState.isWebFullscreen ?? defaultRuntimeState.isWebFullscreen,
     [PlayerStateKeyEnum.IS_WIDE_SCREEN]:
       initialState.isWideScreen ?? defaultRuntimeState.isWideScreen,
+    [PlayerStateKeyEnum.DISPLAY_MODE]:
+      initialState.displayMode ?? defaultRuntimeState.displayMode,
+    [PlayerStateKeyEnum.IS_MIN_PLAYER]:
+      initialState.isMinPlayer ?? defaultRuntimeState.isMinPlayer,
+
+    // 清晰度（运行时模型）
+    [PlayerStateKeyEnum.QUALITY_CURRENT]:
+      initialState.qualityCurrent ?? defaultRuntimeState.qualityCurrent,
+    [PlayerStateKeyEnum.QUALITY_MODE]:
+      initialState.qualityMode ?? defaultRuntimeState.qualityMode,
+    [PlayerStateKeyEnum.QUALITY_SWITCH_STATE]:
+      initialState.qualitySwitchState ?? defaultRuntimeState.qualitySwitchState,
+
+    // 播放列表
+    [PlayerStateKeyEnum.PLAYLIST_INDEX]:
+      initialState.playlistIndex ?? defaultRuntimeState.playlistIndex,
+    [PlayerStateKeyEnum.PLAYLIST_LENGTH]:
+      initialState.playlistLength ?? defaultRuntimeState.playlistLength,
 
     // 视频属性
     [PlayerStateKeyEnum.VIDEO_WIDTH]:
@@ -277,6 +397,17 @@ export function createRuntimeStateManager(
       initialState.danmakuSpeed ?? defaultRuntimeState.danmakuSpeed,
     [PlayerStateKeyEnum.DANMAKU_DENSITY]:
       initialState.danmakuDensity ?? defaultRuntimeState.danmakuDensity,
+    [PlayerStateKeyEnum.DANMAKU_AREA]:
+      initialState.danmakuArea ?? defaultRuntimeState.danmakuArea,
+    [PlayerStateKeyEnum.DANMAKU_FONT_SIZE]:
+      initialState.danmakuFontSize ?? defaultRuntimeState.danmakuFontSize,
+    [PlayerStateKeyEnum.DANMAKU_COLOR]:
+      initialState.danmakuColor ?? defaultRuntimeState.danmakuColor,
+    [PlayerStateKeyEnum.DANMAKU_MODE]:
+      initialState.danmakuMode ?? defaultRuntimeState.danmakuMode,
+    [PlayerStateKeyEnum.DANMAKU_SCALE_WITH_SCREEN]:
+      initialState.danmakuScaleWithScreen ??
+      defaultRuntimeState.danmakuScaleWithScreen,
 
     // 字幕状态
     [PlayerStateKeyEnum.SUBTITLE_VISIBLE]:
@@ -313,16 +444,10 @@ export type RuntimeStateManager = TypedStateManager<PlayerStateMap>;
 export const StateContext =
   createContext<TypedStateManager<PlayerStateMap> | null>(null);
 
-export const defaultControlConfig: ControlConfig = {
-  prev: true,
-  next: true,
-  viewpoint: false,
-  quality: true,
-  eplist: false,
-  setting: true,
-  pip: true,
-  wide: true,
-  web: true,
-};
+// 控件开关默认值的唯一来源在 config/defaultConfig.ts，
+// 这里只做转发，避免与配置文件各写一份导致默认值漂移。
+import { defaultControlConfig } from "@/hili-player/config/defaultConfig";
 
-export const ConfigContext = createContext<ControlConfig>(defaultControlConfig);
+export { defaultControlConfig };
+
+export const ConfigContext = createContext<ControlsConfig>(defaultControlConfig);

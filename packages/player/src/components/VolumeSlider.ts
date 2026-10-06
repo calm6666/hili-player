@@ -24,6 +24,7 @@ import muteToVolumeAnimationData from '../assets/lottie-icon/mute-to-volume-anim
 export type VolumeSliderEvents = {
   volumeChange: number;
   muteToggle: undefined;
+  menuAnimation: { type: 'volume'; action: 'show' | 'hide' };
   volumeSliderMounted: { setVolume: (vol: number) => void; setMuted: (mutedState: boolean) => void };
 };
 
@@ -80,17 +81,20 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
 
   /**
    * 音量按钮鼠标进入事件处理
+   * 通知父级展开音量滑杆（与既有实现 ctrlVolumeBtn mouseenter → menuAnimation("volume","show") 一致）
    */
   const mouseVolumeEnter = (): void => {
     volumeIconRef.value?.play();
+    lifecycle.emit?.('menuAnimation', { type: 'volume', action: 'show' });
   };
 
 
   /**
    * 音量按钮鼠标离开事件处理
+   * 通知父级收起音量滑杆（与既有实现 ctrlVolumeBtn mouseleave → menuAnimation("volume","hide") 一致）
    */
   const mouseVolumeLeave = (): void => {
-
+    lifecycle.emit?.('menuAnimation', { type: 'volume', action: 'hide' });
   };
 
   /**
@@ -102,10 +106,16 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     const percent = Math.max(0, Math.min(100, vol * 100));
 
     if (sliderBarRef.value) {
-      sliderBarRef.value.style.height = `${percent}%`;
+      // 填充方向：scss 中 .slider-bar 的 transform-origin 为 0 100%（底部），
+      // 用 scaleY 缩放实现「从下往上」的填充（与既有实现一致）。
+      // 不能用 height 百分比：.slider-bar 同时被 top/bottom 钉死，设置 height 会
+      // 使其从顶部向下增长，导致填充方向反向。
+      sliderBarRef.value.style.transform = ` scaleY(${Math.max(0, Math.min(1, vol))})`;
     }
     if (sliderThumbRef.value) {
-      sliderThumbRef.value.style.bottom = `${percent}%`;
+      // 圆点位置：滑块轨道高 60px，圆点直径 12px，按既有实现公式计算纵向位移
+      // （vol=0 时圆点在底部，vol=1 时圆点中心到达顶部）
+      sliderThumbRef.value.style.transform = `translateY(${-(60 * vol - 6)}px)`;
     }
     if (volumeNumberRef.value) {
       volumeNumberRef.value.innerText = `${Math.round(percent)}`;
@@ -174,7 +184,6 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
       state,
       PlayerStateKeyEnum.MUTED,
       (newMuted) => {
-        console.log(newMuted);
         isMuted = newMuted;
         if (volumeIconRef.value) {
           if (newMuted) {

@@ -1,8 +1,16 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "../.."
+    "rootDir": "../..",
+    // 显式引入 node 类型：core/warning.ts 的 isDev() 需要探测 process.env，
+    // 而本包 include 只覆盖 src/**，靠自动 typeRoots 解析不到 @types/node。
+    "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    // 根 vite-env.d.ts 声明了 *.scss / 图片等模块，
+    // 本包 include 覆盖不到它，会导致 side-effect import 报 TS2882。
+    "../../vite-env.d.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

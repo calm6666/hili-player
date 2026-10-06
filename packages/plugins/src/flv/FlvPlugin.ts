@@ -498,7 +498,7 @@ export class FlvPlugin implements StreamPlugin {
           this.eventBus?.emit(StreamPluginEventEnum.PLAY_START, {});
         }).catch((err: Error) => {
           const msg = `播放失败: ${err.message}`;
-          console.error(`[FlvPlugin] ${msg}`);
+          logger.error(msg);
           this.eventBus?.emit(StreamPluginEventEnum.ERROR, { message: msg });
         });
       } else {
@@ -633,12 +633,32 @@ export class FlvPlugin implements StreamPlugin {
 
   /**
    * 设置播放画质
-   * FLV 通常不支持多码率切换
+   * FLV 为单码率流，不支持多码率切换，保持安全空实现
    *
    * @param quality - 画质标识
    */
   setQuality(quality: string): void {
     logger.warn(`FLV 格式不支持多码率切换，忽略画质切换请求: ${quality}`);
+  }
+
+  /**
+   * 获取当前生效的档位 id
+   * FLV 为单码率流，无档位概念，恒返回 ''
+   *
+   * @returns 恒为 ''
+   */
+  getCurrentQuality(): string {
+    return '';
+  }
+
+  /**
+   * 是否支持自动档（ABR）
+   * FLV 为单码率流，不支持 ABR 自适应码率
+   *
+   * @returns 恒为 false
+   */
+  supportsAutoQuality(): boolean {
+    return false;
   }
 
   /**

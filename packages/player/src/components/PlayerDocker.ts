@@ -4,11 +4,19 @@
  * ============================================
  */
 
-import { defineComponent, h, useTemplateRef, useContext } from "@/core";
+import {
+  defineComponent,
+  h,
+  mount,
+  destroy,
+  useTemplateRef,
+  useContext,
+  useState,
+} from "@/core";
 import type { TypedStateManager } from "@/core";
 import type { PlayerEventBus } from "@/core/events";
 import {
-  createHotkeyHandler,
+  createHotkeyHandlers,
   type HotkeyContext,
 } from "@/hili-player/core/hotkeys";
 import {
@@ -17,19 +25,52 @@ import {
   safeIntersectionObserver,
 } from "@/utils";
 import { Controls } from "@/hili-player/components/Controls";
+import type { ControlsAPI } from "@/hili-player/components/Controls";
+import type { Tooltip } from "@/hili-player/types";
+import type { ProgressBarApi } from "@/hili-player/components/ProgressBar";
+import { VolumeHint } from "@/hili-player/components/VolumeHint";
+import {
+  Tooltips,
+} from "@/hili-player/components/Tooltips";
 import { RowDm } from "@/hili-player/components/RowDm";
 import { SubtitleLayer } from "@/hili-player/components/SubtitleLayer";
 import { InteractionLayer } from "@/hili-player/components/InteractionLayer";
 import { Dialog } from "@/hili-player/components/Dialog";
+import { Context as ContextMenu } from "@/hili-player/components/Context";
+import {
+  HotkeyPanel,
+  type HotkeyPanelApi,
+} from "@/hili-player/components/HotkeyPanel";
 import { PlayerEventEnum } from "@/core/events";
 import {
   PlayerStateKeyEnum,
-  ConfigContext,
   StateContext,
   type PlayerStateMap,
 } from "@/store/runtimeState";
+import {
+  ConfigStoreContext,
+  type ConfigStore,
+} from "@/store/configStore";
 import { PlayerState } from "@/types";
-import type { ControlConfig } from "@/hili-player/types";
+import type { DisplayMode, PlayerConfig, ProgressSegment, VNode } from "@/types";
+import type { QualityLevel } from "@/types/streamPlugin";
+import { Toast } from "@/hili-player/components/Toast";
+import { Loading } from "@/hili-player/components/Loading";
+import { SendBar } from "@/hili-player/components/SendBar";
+import { Top } from "@/hili-player/components/Top";
+import {
+  ColorPanel,
+  type ColorPanelApi,
+} from "@/hili-player/components/ColorPanel";
+import {
+  VideoInfo,
+  type VideoInfoApi,
+} from "@/hili-player/components/VideoInfo";
+import {
+  Ending,
+  type EndingApi,
+} from "@/hili-player/components/Ending";
+import { Mini, type MiniApi } from "@/hili-player/components/Mini";
 
 // ============================================
 // 组件 API 接口定义
@@ -45,6 +86,54 @@ interface DanmakuLayerAPI {
   showDmTip: (event: MouseEvent, element: HTMLElement) => void;
   /** 隐藏弹幕提示信息 */
   hideDmTip: (element: HTMLElement) => void;
+  /** 弹幕外层容器（供可见性 / 透明度 / 速度的命令式操作） */
+  playerRowDmWrap?: HTMLElement | null;
+}
+
+/** SendBar 组件挂载后回传的控制 API */
+interface SendBarAPI {
+  /** 设置输入框的值 */
+  setInputValue: (value: string) => void;
+  /** 设置弹幕开关状态 */
+  setDanmakuSwitch: (enabled: boolean) => void;
+  /** 聚焦弹幕输入框 */
+  focusInput: () => void;
+  /** 让弹幕输入框失去焦点 */
+  blurInput: () => void;
+}
+
+/** Toast 组件挂载后回传的控制 API */
+interface ToastAPI {
+  /** 显示自动消失的短暂提示 */
+  showAutoToast: (text: string, duration?: number) => void;
+  /** 隐藏自动消失的短暂提示 */
+  hideAutoToast: () => void;
+  /** 显示固定提示 */
+  showFixedToast: (text: string, jumpTime: string) => void;
+  /** 隐藏固定提示 */
+  hideFixedToast: () => void;
+}
+
+/** Loading 组件挂载后回传的控制 API */
+interface LoadingAPI {
+  /** 显示加载面板 */
+  show: () => void;
+  /** 隐藏加载面板 */
+  hide: () => void;
+  /** 设置加载提示文本 */
+  setText: (text: string) => void;
+}
+
+/** 顶部栏组件挂载后回传的控制 API */
+interface TopAPI {
+  /** 设置视频标题文本 */
+  setTitle: (title: string) => void;
+  /** 设置 UP 主头像图片地址 */
+  setAvatar: (avatar: string) => void;
+  /** 显示顶部栏 */
+  show: () => void;
+  /** 隐藏顶部栏 */
+  hide: () => void;
 }
 
 /** 字幕层 API */
@@ -100,6 +189,42 @@ export type PlayerDockerEvents = {
     sendingArea: HTMLElement;
   };
   videoCreated: { video: HTMLVideoElement };
+  /** 用户选择了新的清晰度档位，值为档位 id（'auto' 表示自动） */
+  qualityChange: string;
+
+  // ===== 控件条交互事件（阶段 J：控件交互接线）=====
+  /** 控制栏组件挂载完成，回传其操作 API */
+  controlsMounted: ControlsAPI;
+  /** 播放 / 暂停按钮 */
+  playPause: undefined;
+  /** 进度条跳转到指定时间（秒） */
+  seek: number;
+  /** 进度条开始拖拽 */
+  seekStart: undefined;
+  /** 进度条结束拖拽 */
+  seekEnd: undefined;
+  /** 静音切换 */
+  muteToggle: undefined;
+  /** 播放速率变化 */
+  backrateChange: number;
+  /** 全屏切换 */
+  fullscreenToggle: undefined;
+  /** 选集菜单选择，值为条目 id */
+  eplistChange: string;
+  /** 设置菜单项变化 */
+  settingChange: { key: string; value: boolean | string | number };
+  /** 点击「更多设置」 */
+  moreSettingClick: undefined;
+  /** 请求显示 tooltip */
+  showTooltip: Tooltip;
+  /** 请求隐藏 tooltip */
+  hideTooltip: Tooltip;
+  /** 菜单展开 / 收起动画 */
+  menuAnimation: { type: string; action: 'show' | 'hide' };
+  /** 播放状态变化 */
+  stateChange: unknown;
+  /** 画面显示模式变化（普通 / 网页全屏 / 宽屏 / 迷你） */
+  displayModeChange: DisplayMode;
   loadedMetadata: { duration: number };
   timeUpdate: { currentTime: number };
   progress: { buffer: number };
@@ -108,6 +233,8 @@ export type PlayerDockerEvents = {
   ended: undefined;
   waiting: undefined;
   canplay: undefined;
+  /** 缓冲足够、可流畅播放到结尾 */
+  canPlayThrough: undefined;
 
   // ===== HTML5 媒体元素标准事件（完整 21 个）=====
   /** 开始加载媒体 */
@@ -154,15 +281,48 @@ export type PlayerDockerEvents = {
   tripleLike: undefined;
   follow: undefined;
   danmakuToggle: undefined;
-  sendDanmaku: undefined;
+  /** 发送弹幕，值为弹幕文本 */
+  sendDanmaku: string;
 };
 
 // ============================================
 // 组件属性接口
 // ============================================
 
+/**
+ * 清晰度运行时快照
+ *
+ * 由 `VideoPlayer.render()` 传入的初始值；因框架无虚拟 DOM diff，
+ * 后续变化统一由组件内订阅 `stateMgr` 的 `player.*` 状态驱动。
+ */
+export interface QualitySnapshot {
+  /** 运行时可用档位列表 */
+  qualities: QualityLevel[];
+  /** 当前生效档位 id（'auto' 或档位 id） */
+  current: string;
+  /** 清晰度切换生命周期：idle | switching | switched | failed */
+  switchState: 'idle' | 'switching' | 'switched' | 'failed';
+  /** 清晰度能力：none | static | adaptive */
+  mode: 'none' | 'static' | 'adaptive';
+}
+
 export interface PlayerDockerProps {
+  /** 事件总线（供插件层订阅播放器事件） */
   events?: PlayerEventBus;
+  /** 视频源地址 */
+  src?: string;
+  /** 播放器名称（用于容器 aria-label） */
+  playerName?: string;
+  /** 是否自动播放 */
+  autoplay?: boolean;
+  /** 初始音量（0-1） */
+  volume?: number;
+  /** 初始是否静音 */
+  muted?: boolean;
+  /** 整包配置（供读取 ui.controls / danmaku / progress.segments 等） */
+  config?: PlayerConfig;
+  /** 清晰度运行时快照 */
+  quality?: QualitySnapshot;
 }
 
 // ============================================
@@ -205,51 +365,96 @@ export const PlayerDocker = defineComponent<
   // 状态管理器（通过 Context 获取，无需 props 传递）
   // ============================================
 
-  const configCtx = useContext<ControlConfig>(ConfigContext);
-
   const stateMgr = useContext<TypedStateManager<PlayerStateMap> | null>(
     StateContext,
   );
 
   // ============================================
-  // 状态数据
+  // 配置中心（可订阅，设置即生效）
   // ============================================
 
-  /** 播放器状态信息 */
-  const playerInfo = {
-    /** 当前屏幕模式：normal/web/full/mini */
-    dataScreen: "normal",
-    /** 是否处于画中画模式 */
-    isPip: false,
-    /** 是否处于宽屏模式 */
-    isWide: false,
-    /** 当前音量，范围 0-1 */
-    volume: props.volume ?? 0.3,
-    /** 是否静音 */
-    isMuted: props.muted ?? false,
-    /** 视频画面比例 */
-    videoRatio: "auto",
-    /** 是否处于迷你播放器模式 */
-    isMinPlayer: false,
-    /** 是否正在播放 */
-    isPlaying: false,
-    /** 当前播放倍速 */
-    backrate: 1,
-    /** 当前画质索引 */
-    qualityIndex: 0,
+  /** 可订阅配置中心（由 VideoPlayer 通过 __providers 注入；未注入时为 null） */
+  const configStore = useContext<ConfigStore | null>(ConfigStoreContext);
+
+  // ============================================
+  // 状态读取辅助（单一来源：stateMgr；为 null 时安全降级到 props）
+  // ============================================
+
+  /** 读取当前音量（state 优先，降级到 props） */
+  const readVolume = (): number =>
+    stateMgr?.get(PlayerStateKeyEnum.VOLUME) ?? props.volume ?? 0.3;
+
+  /** 读取当前是否静音（state 优先，降级到 props） */
+  const readMuted = (): boolean =>
+    stateMgr?.get(PlayerStateKeyEnum.MUTED) ?? props.muted ?? false;
+
+  /** 读取当前播放倍速 */
+  const readBackrate = (): number =>
+    stateMgr?.get(PlayerStateKeyEnum.PLAYBACK_RATE) ?? 1;
+
+  /** 读取视频总时长（秒） */
+  const readDuration = (): number =>
+    stateMgr?.get(PlayerStateKeyEnum.DURATION) ?? 0;
+
+  /** 读取当前播放时间（秒） */
+  const readCurrentTime = (): number =>
+    stateMgr?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
+
+  /** 是否正在播放（依据单一状态源 `player.state`） */
+  const readIsPlaying = (): boolean =>
+    stateMgr?.get(PlayerStateKeyEnum.STATE) === PlayerState.PLAYING;
+
+  /**
+   * 应用画面显示模式：写状态 + 同步容器 `data-screen` + 向上广播 `displayModeChange`。
+   *
+   * 说明：全屏（full）不属于 `DisplayMode`（无 'full'），由 `player.isFullscreen` 承载，
+   * 故此处只处理 normal / web / wide / mini 四种。
+   *
+   * @param mode - 目标显示模式
+   */
+  const applyDisplayMode = (mode: DisplayMode): void => {
+    stateMgr?.set(PlayerStateKeyEnum.DISPLAY_MODE, mode);
+    stateMgr?.set(PlayerStateKeyEnum.IS_MIN_PLAYER, mode === 'mini');
+    stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, mode === 'web');
+    stateMgr?.set(PlayerStateKeyEnum.IS_WIDE_SCREEN, mode === 'wide');
+    playerContainerRef.value?.setAttribute('data-screen', mode);
+    moveSendBar(mode);
+    // 同步提示工具的屏幕模式（既有实现的 tooltips.screen 赋值；
+    // 全屏 'full' 由 onFullscreenChange 单独维护）
+    tooltipsApi.setScreen?.(mode === 'web' ? 'web' : 'normal');
+    lifecycle.emit?.('displayModeChange', mode);
   };
 
-  /** 是否处于网页全屏模式 */
-  let isWebFullscreen = false;
-
-  /** 视频播放信息 */
-  const videoInfo = {
-    /** 视频总时长（秒） */
-    duration: 0,
-    /** 缓冲进度时间（秒） */
-    buffer: 0,
-    /** 当前播放时间（秒） */
-    currentTime: 0,
+  /**
+   * 按显示模式移动弹幕发送栏（与既有实现的 sendBar.moveDom 一致）：
+   * - wide / web / full：移动到 `.player-control-bottom-center`（底部控制栏中央）
+   * - normal / mini：移回 `.player-sending-area`
+   * 仅搬移已有的 `.player-sending-bar` 节点，不改变任何类名与内部结构
+   * @param mode - 目标显示模式（full 为浏览器全屏，不属于 DisplayMode，仅内部使用）
+   */
+  const moveSendBar = (
+    mode: DisplayMode | 'full',
+  ): void => {
+    const bar = playerSendingAreaRef.value?.querySelector<HTMLElement>(
+      '.player-sending-bar',
+    );
+    if (!bar) return;
+    const center = playerContainerRef.value?.querySelector<HTMLElement>(
+      '.player-control-bottom-center',
+    );
+    if (mode === 'wide' || mode === 'web' || mode === 'full') {
+      // 与既有实现 handleFullscreenChange:477 一致：进入全屏时仅在
+      // 底部中央为空的情况下搬移，避免重复插入
+      if (mode === 'full' && center && center.children.length > 0) return;
+      if (center && bar.parentElement !== center) {
+        center.appendChild(bar);
+      }
+    } else if (
+      playerSendingAreaRef.value &&
+      bar.parentElement !== playerSendingAreaRef.value
+    ) {
+      playerSendingAreaRef.value.appendChild(bar);
+    }
   };
 
   // ============================================
@@ -284,8 +489,8 @@ export const PlayerDocker = defineComponent<
       video.src = props.src;
     }
 
-    video.volume = playerInfo.volume;
-    video.muted = playerInfo.isMuted;
+    video.volume = readVolume();
+    video.muted = readMuted();
 
     if (props.autoplay) {
       video.autoplay = true;
@@ -297,6 +502,7 @@ export const PlayerDocker = defineComponent<
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
     video.addEventListener("loadeddata", handleLoadedData);
     video.addEventListener("canplay", handleCanPlay);
+    video.addEventListener("canplaythrough", handleCanPlayThrough);
     video.addEventListener("durationchange", handleDurationChange);
     video.addEventListener("progress", handleProgress);
     video.addEventListener("suspend", handleSuspend);
@@ -331,16 +537,27 @@ export const PlayerDocker = defineComponent<
    */
   const handleLoadedMetadata = (): void => {
     if (!videoRef.value) return;
-    videoInfo.duration = videoRef.value.duration;
-    stateMgr?.set(PlayerStateKeyEnum.DURATION, videoInfo.duration);
-    lifecycle.emit?.("loadedMetadata", { duration: videoInfo.duration });
+    const duration = videoRef.value.duration;
+    stateMgr?.set(PlayerStateKeyEnum.DURATION, duration);
+    // 分辨率写入运行时状态（供「视频统计信息」面板等消费）
+    stateMgr?.set(PlayerStateKeyEnum.VIDEO_WIDTH, videoRef.value.videoWidth);
+    stateMgr?.set(PlayerStateKeyEnum.VIDEO_HEIGHT, videoRef.value.videoHeight);
+    // 迷你播放器进度条的总时长基准
+    miniApi.setDuration?.(duration);
+    lifecycle.emit?.("loadedMetadata", { duration });
 
     // 延迟初始化控制栏（确保 Controls 组件已挂载）
     controlsApi.initDuration?.();
-    controlsApi.updateVolumeDisplay?.(playerInfo.volume);
-    if (playerInfo.isMuted) {
+    // 将总时长回传给进度条（进度条挂载时 props.duration 仍为 0）
+    progressBarApi.setDuration?.(duration);
+    controlsApi.updateVolumeDisplay?.(readVolume());
+    if (readMuted()) {
       controlsApi.updateMute?.(true);
     }
+    // 视频加载完成即显示控制栏（与既有实现 loadedMetadata → initControls 末尾的
+    // showControls("control") 行为一致；初始加载与 load() 换源后的
+    // loadedmetadata 都会经过此处）
+    showControls("video");
   };
 
   /**
@@ -348,13 +565,17 @@ export const PlayerDocker = defineComponent<
    */
   const handleTimeUpdate = (): void => {
     if (!videoRef.value) return;
-    videoInfo.currentTime = videoRef.value.currentTime;
-    stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, videoInfo.currentTime);
-    controlsApi.updateCurrent?.(videoInfo.currentTime);
-    rowDmApi.createDanmaku?.(videoInfo.currentTime);
-    lifecycle.emit?.("timeUpdate", { currentTime: videoInfo.currentTime });
+    const currentTime = videoRef.value.currentTime;
+    stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
+    controlsApi.updateCurrent?.(currentTime);
+    // 将播放进度转发给顶部进度条（更新已播放条与滑块）
+    progressBarApi.updateProgress?.(currentTime);
+    rowDmApi.createDanmaku?.(currentTime);
+    // 迷你播放器模式时同步其播放进度条
+    miniApi.changeTempo?.(currentTime);
+    lifecycle.emit?.("timeUpdate", { currentTime });
     props.events?.emit(PlayerEventEnum.TIME_UPDATE, {
-      time: videoInfo.currentTime,
+      time: currentTime,
     });
   };
 
@@ -365,10 +586,14 @@ export const PlayerDocker = defineComponent<
     if (!videoRef.value) return;
     const buffered = videoRef.value.buffered;
     if (buffered.length > 0) {
-      videoInfo.buffer = buffered.end(buffered.length - 1);
-      stateMgr?.set(PlayerStateKeyEnum.BUFFERED, videoInfo.buffer);
-      controlsApi.updateBuffer?.(videoInfo.buffer);
-      lifecycle.emit?.("progress", { buffer: videoInfo.buffer });
+      const buffer = buffered.end(buffered.length - 1);
+      stateMgr?.set(PlayerStateKeyEnum.BUFFERED, buffer);
+      controlsApi.updateBuffer?.(buffer);
+      // 将缓冲进度转发给顶部进度条（更新缓冲条）
+      progressBarApi.updateBuffer?.(buffer);
+      // 迷你播放器模式时同步其缓冲进度条
+      miniApi.changeBuffer?.(buffer);
+      lifecycle.emit?.("progress", { buffer });
     }
   };
 
@@ -376,9 +601,10 @@ export const PlayerDocker = defineComponent<
    * 视频开始播放时，更新播放状态和弹幕
    */
   const handlePlay = (): void => {
-    playerInfo.isPlaying = true;
     playerContainerRef.value?.classList.remove("state-paused");
     rowDmApi.playPause?.("playing");
+    // 重新播放时隐藏片尾推荐面板（与既有实现行为一致）
+    endingApi.closeEndWrap?.();
     stateMgr?.set(PlayerStateKeyEnum.STATE, PlayerState.PLAYING);
     lifecycle.emit?.("play");
   };
@@ -387,7 +613,6 @@ export const PlayerDocker = defineComponent<
    * 视频暂停时，更新暂停状态和弹幕
    */
   const handlePause = (): void => {
-    playerInfo.isPlaying = false;
     playerContainerRef.value?.classList.add("state-paused");
     rowDmApi.playPause?.("paused");
     stateMgr?.set(PlayerStateKeyEnum.STATE, PlayerState.PAUSED);
@@ -398,8 +623,9 @@ export const PlayerDocker = defineComponent<
    * 视频播放结束时，更新播放状态
    */
   const handleEnded = (): void => {
-    playerInfo.isPlaying = false;
     stateMgr?.set(PlayerStateKeyEnum.STATE, PlayerState.ENDED);
+    // 播放结束时显示片尾推荐面板（与既有实现行为一致）
+    endingApi.showEndWrap?.();
     lifecycle.emit?.("ended");
   };
 
@@ -421,6 +647,12 @@ export const PlayerDocker = defineComponent<
     lifecycle.emit?.("canplay");
   };
 
+  /** canplaythrough：缓冲足够、可流畅播放到结尾（§4.2 canPlayThrough） */
+  const handleCanPlayThrough = (): void => {
+    lifecycle.emit?.("canPlayThrough");
+    props.events?.emit(PlayerEventEnum.CAN_PLAY_THROUGH);
+  };
+
   // ============================================
   // HTML5 媒体元素标准事件处理器（补全）
   // ============================================
@@ -439,16 +671,16 @@ export const PlayerDocker = defineComponent<
   /** durationchange：时长变化，同步时长显示 */
   const handleDurationChange = (): void => {
     if (!videoRef.value) return;
-    videoInfo.duration = videoRef.value.duration;
-    stateMgr?.set(PlayerStateKeyEnum.DURATION, videoInfo.duration);
+    const duration = videoRef.value.duration;
+    stateMgr?.set(PlayerStateKeyEnum.DURATION, duration);
     controlsApi.initDuration?.();
-    lifecycle.emit?.("durationChange", { duration: videoInfo.duration });
+    progressBarApi.setDuration?.(duration);
+    lifecycle.emit?.("durationChange", { duration });
   };
 
   /** playing：实际开始播放（缓冲结束后） */
   const handlePlaying = (): void => {
     playerContainerRef.value?.classList.remove("state-buff");
-    playerInfo.isPlaying = true;
     stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
     lifecycle.emit?.("playing");
   };
@@ -467,14 +699,14 @@ export const PlayerDocker = defineComponent<
     const currentTime = videoRef.value?.currentTime ?? 0;
     stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
     controlsApi.updateCurrent?.(currentTime);
+    // 跳转完成后同步刷新进度条
+    progressBarApi.updateProgress?.(currentTime);
     lifecycle.emit?.("seeked", { currentTime });
   };
 
   /** volumechange：音量 / 静音变化 */
   const handleVolumeChange = (): void => {
     if (!videoRef.value) return;
-    playerInfo.volume = videoRef.value.volume;
-    playerInfo.isMuted = videoRef.value.muted;
     stateMgr?.set(PlayerStateKeyEnum.VOLUME, videoRef.value.volume);
     stateMgr?.set(PlayerStateKeyEnum.MUTED, videoRef.value.muted);
     controlsApi.updateVolumeDisplay?.(videoRef.value.volume);
@@ -540,6 +772,18 @@ export const PlayerDocker = defineComponent<
     initDuration?: () => void;
   } = {};
 
+  /** 顶部进度条 API，由 ProgressBar（经 TopControls / Controls）挂载后填充 */
+  const progressBarApi: {
+    /** 更新已播放进度 */
+    updateProgress?: (time: number) => void;
+    /** 更新缓冲进度 */
+    updateBuffer?: (buffer: number) => void;
+    /** 更新视频总时长 */
+    setDuration?: (duration: number) => void;
+    /** 重建进度条分段（progress.segments 变化时调用） */
+    rebuildSegments?: (segments?: ProgressSegment[]) => void;
+  } = {};
+
   /** 弹幕组件 API，由 RowDm 组件挂载后填充 */
   const rowDmApi: {
     /** 根据当前时间创建弹幕 */
@@ -572,6 +816,17 @@ export const PlayerDocker = defineComponent<
     container?: HTMLElement | null;
   } = {};
 
+  /** 快捷键面板 API，由 HotkeyPanel 组件挂载后填充 */
+  const hotkeyPanelApi: Partial<HotkeyPanelApi> = {};
+
+  /** 右键菜单组件 API，由 Context 组件挂载后填充 */
+  const contextApi: {
+    /** 在指定坐标显示右键菜单 */
+    showMenu?: (x: number, y: number) => void;
+    /** 隐藏右键菜单 */
+    hideMenu?: () => void;
+  } = {};
+
   /** 对话框组件 API，由 Dialog 组件挂载后填充 */
   const dialogApi: {
     /** 对话框容器元素 */
@@ -591,6 +846,461 @@ export const PlayerDocker = defineComponent<
     /** 隐藏弹幕提示详情 */
     hideDmTip?: (element?: HTMLElement) => void;
   } = {};
+
+  /** Toast 组件 API，由 Toast 组件挂载后填充 */
+  const toastApi: Partial<ToastAPI> = {};
+
+  /** 弹幕发送栏 API，由 SendBar 组件挂载后填充 */
+  const sendBarApi: Partial<SendBarAPI> = {};
+
+  /**
+   * 弹幕输入框是否处于聚焦状态
+   * 用于 videoArea mouseleave 时的豁免：网页全屏 / 全屏下正在输入弹幕时
+   * 不隐藏控制栏（与既有实现的 isSendFocus 豁免一致）
+   */
+  let isSendFocus = false;
+
+  /** Loading 组件 API，由 Loading 组件挂载后填充 */
+  const loadingApi: Partial<LoadingAPI> = {};
+
+  /** 顶部栏组件 API，由 Top 组件挂载后填充（§3.2 ui.title → Top 组件文本） */
+  const topApi: Partial<TopAPI> = {};
+
+  /** 音量提示组件 API，由 VolumeHint 组件挂载后填充（对应既有实现的 volumehint） */
+  const volumeHintApi: {
+    /** 显示音量提示 */
+    show?: (volume: number) => void;
+    /** 隐藏音量提示 */
+    hide?: () => void;
+  } = {};
+
+  /**
+   * 提示工具组件 API，由 Tooltips 组件挂载后填充
+   * （对应既有实现的 new Tooltips(this.playerContainer!)，
+   * openTip / closeTip / updateTip / setScreen 与既有实现 Tooltips 类一一对应）
+   */
+  const tooltipsApi: {
+    /** 打开提示（依据按钮元素实时计算位置） */
+    openTip?: (btnElement: HTMLElement | null, name: string) => void;
+    /** 关闭提示 */
+    closeTip?: (name: string) => void;
+    /** 更新提示文本 */
+    updateTip?: (name: string, text: string) => void;
+    /** 同步屏幕模式（normal / full / web，影响提示的上下偏移） */
+    setScreen?: (screen: "normal" | "full" | "web") => void;
+    /** 隐藏全部提示 */
+    hideAll?: () => void;
+  } = {};
+
+  /**
+   * 显示控制栏按钮的 hover 提示（与既有实现的
+   * showTooltip → tooltips.openTip 一致），同时继续向上层转发事件
+   * @param tip - 提示信息（按钮元素 + dataName）
+   */
+  const handleShowTooltip = (tip: Tooltip): void => {
+    tooltipsApi.openTip?.(tip.element, tip.dataName);
+    lifecycle.emit?.("showTooltip", tip);
+  };
+
+  /**
+   * 隐藏控制栏按钮的 hover 提示（与既有实现的
+   * hideTooltip → tooltips.closeTip 一致），同时继续向上层转发事件
+   * @param tip - 提示信息（仅需 dataName）
+   */
+  const handleHideTooltip = (tip: Tooltip): void => {
+    tooltipsApi.closeTip?.(tip.dataName);
+    lifecycle.emit?.("hideTooltip", tip);
+  };
+
+  /** 色彩调整面板 API，由 ColorPanel 组件挂载后填充（对应既有实现的 colorpanel） */
+  const colorPanelApi: Partial<ColorPanelApi> = {};
+
+  /** 视频统计信息面板 API，由 VideoInfo 组件挂载后填充（对应既有实现的 info） */
+  const videoInfoApi: Partial<VideoInfoApi> = {};
+
+  /** 片尾面板 API，由 Ending 组件挂载后填充（对应既有实现的 ending） */
+  const endingApi: Partial<EndingApi> = {};
+
+  /** 迷你播放器面板 API，由 Mini 组件挂载后填充（对应既有实现的 mini） */
+  const miniApi: Partial<MiniApi> = {};
+
+  // ============================================
+  // 面板懒挂载（既有实现的懒创建模式）
+  // ============================================
+  // 既有实现 controls/index.ts 打开面板时：
+  //   if (!this.querySelector('.player-video-area .player-color-panel'))
+  //     new Colorpanel(this.playerVideoArea!);
+  // 面板第一次用到才创建，之后复用已有实例。
+  // 这里用框架的动态挂载 API（@/core 的 mount / destroy，core/mount.ts 导出）
+  // 实现同样的按需创建：ensurePanel(name) 首次调用时把面板挂进
+  // .player-video-area，之后复用已创建的实例。
+
+  /** 懒挂载面板的 VNode 缓存（首次使用创建，之后复用；销毁时统一 destroy） */
+  const lazyPanelVNodes: {
+    color?: VNode;
+    info?: VNode;
+    keyboard?: VNode;
+  } = {};
+
+  /**
+   * 按需挂载面板（已挂载则直接复用）
+   * @param name - 面板名：color 色彩调整 / info 视频统计信息 / keyboard 快捷键说明
+   */
+  const ensurePanel = (name: "color" | "info" | "keyboard"): void => {
+    const videoArea = playerVideoAreaRef.value;
+    if (!videoArea) return;
+
+    if (name === "color" && !lazyPanelVNodes.color) {
+      lazyPanelVNodes.color = h(ColorPanel, {
+        onClose: () => {
+          colorPanelApi.close?.();
+        },
+        onSaturateChange: (value: number) => {
+          filterSaturate = value;
+          applyVideoFilter();
+        },
+        onBrightnessChange: (value: number) => {
+          filterBrightness = value;
+          applyVideoFilter();
+        },
+        onContrastChange: (value: number) => {
+          filterContrast = value;
+          applyVideoFilter();
+        },
+        onReset: () => {
+          filterSaturate = 100;
+          filterBrightness = 100;
+          filterContrast = 100;
+          applyVideoFilter();
+        },
+        onColorPanelMounted: (api: ColorPanelApi) => {
+          Object.assign(colorPanelApi, api);
+        },
+      });
+      mount(lazyPanelVNodes.color, videoArea);
+    }
+
+    if (name === "info" && !lazyPanelVNodes.info) {
+      lazyPanelVNodes.info = h(VideoInfo, {
+        src: props.src,
+        onClose: () => {
+          videoInfoApi.close?.();
+        },
+        onVideoInfoMounted: (api: VideoInfoApi) => {
+          Object.assign(videoInfoApi, api);
+        },
+        // 动态挂载发生在渲染栈之外（右键菜单回调），组件拿不到 __parent 链
+        // 上的 Provider，这里显式注入 StateContext（与 VideoPlayer.render()
+        // 向 PlayerDocker 注入的方式一致）
+        __providers: stateMgr
+          ? [{ contextId: StateContext.id, value: stateMgr }]
+          : undefined,
+      });
+      mount(lazyPanelVNodes.info, videoArea);
+    }
+
+    if (name === "keyboard" && !lazyPanelVNodes.keyboard) {
+      lazyPanelVNodes.keyboard = h(HotkeyPanel, {
+        onHotkeyPanelMounted: (api: HotkeyPanelApi) => {
+          hotkeyPanelApi.open = api.open;
+          hotkeyPanelApi.close = api.close;
+        },
+      });
+      mount(lazyPanelVNodes.keyboard, videoArea);
+    }
+  };
+
+  // ============================================
+  // 视频色彩滤镜（右键「视频色彩调整」面板 → .player-video 的 style.filter）
+  // ============================================
+
+  /** 当前饱和度（0-200，100 为默认） */
+  let filterSaturate = 100;
+
+  /** 当前亮度（0-200，100 为默认） */
+  let filterBrightness = 100;
+
+  /** 当前对比度（0-200，100 为默认） */
+  let filterContrast = 100;
+
+  /**
+   * 将当前色彩参数写入 .player-video 元素的 CSS filter
+   * 默认值（100）的项不参与拼接，全部默认时清空 filter
+   */
+  const applyVideoFilter = (): void => {
+    const video = videoRef.value;
+    if (!video) return;
+    /** 滤镜函数片段 */
+    const parts: string[] = [];
+    if (filterSaturate !== 100) parts.push(`saturate(${filterSaturate}%)`);
+    if (filterBrightness !== 100) parts.push(`brightness(${filterBrightness}%)`);
+    if (filterContrast !== 100) parts.push(`contrast(${filterContrast}%)`);
+    video.style.filter = parts.join(' ');
+  };
+
+  // ============================================
+  // 弹幕层 / 清晰度切换的局部运行变量
+  // ============================================
+
+  /** 弹幕外层容器元素（由 RowDm 挂载后回传，用于命令式控制可见性 / 透明度 / 速度） */
+  let danmakuWrapEl: HTMLElement | null = null;
+
+  /** 最近一次清晰度切换请求的目标展示名（用于切换中 / 成功文案） */
+  let requestedQualityLabel = '';
+
+  /** 最近一次清晰度切换请求的目标档位 id */
+  let requestedQualityTo = '';
+
+  /**
+   * 应用弹幕可见性到弹幕层 DOM
+   * @param visible - 是否可见
+   */
+  const applyDanmakuVisible = (visible: boolean): void => {
+    if (danmakuWrapEl) {
+      danmakuWrapEl.style.display = visible ? '' : 'none';
+    }
+  };
+
+  /**
+   * 应用弹幕透明度到弹幕层 DOM
+   * @param opacity - 0-1 之间的透明度
+   */
+  const applyDanmakuOpacity = (opacity: number): void => {
+    if (danmakuWrapEl) {
+      danmakuWrapEl.style.opacity = String(opacity);
+    }
+  };
+
+  /**
+   * 应用弹幕速度到弹幕层 DOM
+   *
+   * 说明：RowDm 在创建每条弹幕时按档位计算动画时长（`--duration`），
+   * 当前 scss / RowDm 未消费全局速度变量，故这里写入层上的 CSS 自定义属性，
+   * 供后续（或外部样式）消费；已存在的弹幕不会重算时长。
+   * @param speed - 速度倍率
+   */
+  const applyDanmakuSpeed = (speed: number): void => {
+    if (danmakuWrapEl) {
+      danmakuWrapEl.style.setProperty('--danmaku-speed', String(speed));
+    }
+  };
+
+  /**
+   * 应用弹幕显示区域到弹幕层 DOM
+   * @param area - 显示区域百分比（0-100）
+   */
+  const applyDanmakuArea = (area: number): void => {
+    if (danmakuWrapEl) {
+      danmakuWrapEl.style.height = `${area}%`;
+    }
+  };
+
+  /**
+   * 应用弹幕字号档位到弹幕层 DOM
+   *
+   * 说明：写入层上的 CSS 自定义属性 `--danmaku-font-size`（0-100 档位），
+   * 供弹幕元素样式消费；已有弹幕不回溯重算。
+   * @param fontSize - 字号档位（0-100）
+   */
+  const applyDanmakuFontSize = (fontSize: number): void => {
+    if (danmakuWrapEl) {
+      danmakuWrapEl.style.setProperty('--danmaku-font-size', String(fontSize));
+    }
+  };
+
+  /** 将当前 state 中的弹幕配置一次性同步到弹幕层（弹幕层刚挂载时调用） */
+  const syncDanmakuToLayer = (): void => {
+    applyDanmakuVisible(
+      stateMgr?.get(PlayerStateKeyEnum.DANMAKU_VISIBLE) ?? true,
+    );
+    applyDanmakuOpacity(
+      stateMgr?.get(PlayerStateKeyEnum.DANMAKU_OPACITY) ?? 1,
+    );
+    applyDanmakuSpeed(stateMgr?.get(PlayerStateKeyEnum.DANMAKU_SPEED) ?? 1);
+    applyDanmakuArea(stateMgr?.get(PlayerStateKeyEnum.DANMAKU_AREA) ?? 50);
+    applyDanmakuFontSize(
+      stateMgr?.get(PlayerStateKeyEnum.DANMAKU_FONT_SIZE) ?? 50,
+    );
+  };
+
+  // ============================================
+  // 清晰度切换 UI 反馈（B 站风格短文案）
+  // ============================================
+
+  /**
+   * 依据清晰度切换生命周期状态驱动 Loading / Toast
+   * - switching：显示 Loading「正在切换至 1080P」
+   * - switched：隐藏 Loading + Toast「已切换至 1080P」
+   * - failed：隐藏 Loading + Toast「清晰度切换失败」
+   * @param phase - 切换生命周期状态
+   */
+  const driveQualitySwitchUI = (
+    phase: 'idle' | 'switching' | 'switched' | 'failed',
+  ): void => {
+    if (phase === 'switching') {
+      loadingApi.show?.();
+      loadingApi.setText?.(
+        requestedQualityLabel
+          ? `正在切换至 ${requestedQualityLabel}`
+          : '正在切换清晰度',
+      );
+      return;
+    }
+    if (phase === 'switched') {
+      loadingApi.hide?.();
+      toastApi.showAutoToast?.(
+        `已切换至 ${requestedQualityLabel || requestedQualityTo || '目标清晰度'}`,
+      );
+      requestedQualityLabel = '';
+      requestedQualityTo = '';
+      return;
+    }
+    if (phase === 'failed') {
+      loadingApi.hide?.();
+      toastApi.showAutoToast?.('清晰度切换失败');
+      requestedQualityLabel = '';
+      requestedQualityTo = '';
+    }
+  };
+
+  /**
+   * 订阅清晰度切换事件总线，记录目标档位的展示名 / id（供文案使用）
+   * 事件晚于对应 state 变更到达，故这里只补充细节，不重复驱动 show/hide。
+   */
+  const setupQualityEvents = (): void => {
+    const bus = props.events;
+    if (!bus) return;
+
+    const offRequested = bus.on(
+      PlayerEventEnum.QUALITY_CHANGE_REQUESTED,
+      (payload) => {
+        requestedQualityTo = payload.to;
+        requestedQualityLabel = payload.label ?? payload.to;
+        // 用精确档位名刷新「切换中」提示（state 变更先于本事件到达）
+        loadingApi.setText?.(
+          requestedQualityLabel
+            ? `正在切换至 ${requestedQualityLabel}`
+            : '正在切换清晰度',
+        );
+      },
+    );
+    const offRendered = bus.on(
+      PlayerEventEnum.QUALITY_CHANGE_RENDERED,
+      (payload) => {
+        requestedQualityTo = payload.to;
+        if (payload.quality?.label) requestedQualityLabel = payload.quality.label;
+      },
+    );
+    const offFailed = bus.on(
+      PlayerEventEnum.QUALITY_CHANGE_FAILED,
+      (payload) => {
+        requestedQualityTo = payload.to;
+      },
+    );
+    // 持久化进度恢复提示：VideoPlayer 在 loadedmetadata 后恢复上次观看位置时
+    // 广播 restoreProgress，这里显示自动消失的 Toast（文案与既有实现一致）
+    const offRestore = bus.on(PlayerEventEnum.RESTORE_PROGRESS, () => {
+      toastApi.showAutoToast?.('已为你恢复到上次观看位置');
+    });
+    cleanupFns.push(offRequested, offRendered, offFailed, offRestore);
+  };
+
+  // ============================================
+  // 运行时状态订阅（单一来源 stateMgr → 命令式更新 DOM）
+  // ============================================
+
+  if (stateMgr) {
+    // 清晰度切换：switching / switched / failed 三段反馈
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.QUALITY_SWITCH_STATE,
+      (phase) => {
+        driveQualitySwitchUI(phase);
+      },
+      lifecycle,
+    );
+
+    // 弹幕可见性 → 弹幕层 display
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.DANMAKU_VISIBLE,
+      (visible) => {
+        applyDanmakuVisible(visible);
+      },
+      lifecycle,
+    );
+
+    // 弹幕透明度 → 弹幕层 opacity
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.DANMAKU_OPACITY,
+      (opacity) => {
+        applyDanmakuOpacity(opacity);
+      },
+      lifecycle,
+    );
+
+    // 弹幕速度 → 弹幕层 CSS 变量
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.DANMAKU_SPEED,
+      (speed) => {
+        applyDanmakuSpeed(speed);
+      },
+      lifecycle,
+    );
+
+    // 弹幕显示区域 → 弹幕层高度
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.DANMAKU_AREA,
+      (area) => {
+        applyDanmakuArea(area);
+      },
+      lifecycle,
+    );
+
+    // 弹幕字号档位 → 弹幕层 CSS 变量
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.DANMAKU_FONT_SIZE,
+      (fontSize) => {
+        applyDanmakuFontSize(fontSize);
+      },
+      lifecycle,
+    );
+  }
+
+  // ============================================
+  // 配置中心订阅（progress.segments / interaction.keyboard 设置即生效）
+  // ============================================
+
+  /** 订阅配置中心中需要在 PlayerDocker 层生效的路径 */
+  const setupConfigSubscriptions = (): void => {
+    if (!configStore) return;
+
+    // progress.segments 变化 → 重建进度条分段
+    const offSegments = configStore.subscribePath('progress.segments', (value) => {
+      progressBarApi.rebuildSegments?.(
+        (value as ProgressSegment[] | undefined) ?? [],
+      );
+    });
+
+    // interaction.keyboard 变化 → 启停键盘监听
+    const offKeyboard = configStore.subscribePath(
+      'interaction.keyboard',
+      (value) => {
+        setKeyboardEnabled(value !== false);
+      },
+    );
+
+    // ui.title 变化 → 同步顶部栏标题文本（§3.2 ui.title 应用矩阵）
+    const offTitle = configStore.subscribePath('ui.title', (value) => {
+      topApi.setTitle?.(String(value ?? ''));
+    });
+
+    cleanupFns.push(offSegments, offKeyboard, offTitle);
+  };
 
   // ============================================
   // 控制栏自动隐藏定时器
@@ -614,12 +1324,16 @@ export const PlayerDocker = defineComponent<
 
   /** 切换播放/暂停 */
   const togglePlayPause = (): void => {
-    if (!videoRef.value) return;
-    if (playerInfo.isPlaying) {
-      videoRef.value.pause();
+    const video = videoRef.value;
+    if (!video) return;
+    // 以 video 元素自身的暂停态为准，避免依赖任何本地状态副本
+    if (video.paused) {
+      void video.play();
     } else {
-      videoRef.value.play();
+      video.pause();
     }
+    // 切换播放状态后显示控制栏（与既有实现 togglePlayPause 末尾的 showControls 一致）
+    showControls("video");
   };
 
   /** 切换全屏模式 */
@@ -632,50 +1346,152 @@ export const PlayerDocker = defineComponent<
     }
   };
 
+  /**
+   * 绑定 document 级滚轮调节音量（同函数引用重复绑定幂等）
+   * 与既有实现的 addEventListener 一致
+   */
+  const bindVolumeWheel = (): void => {
+    document.addEventListener("wheel", handleVolumeWheel, { passive: false });
+  };
+
+  /**
+   * 解绑 document 级滚轮调节音量
+   * 与既有实现的 removeEventListener 一致
+   */
+  const unbindVolumeWheel = (): void => {
+    document.removeEventListener("wheel", handleVolumeWheel);
+  };
+
   /** 切换网页全屏模式 */
   const toggleWebFullscreen = (): void => {
     if (!playerDockerRef.value || !playerContainerRef.value) return;
-    if (isWebFullscreen) {
+    const isWeb = stateMgr?.get(PlayerStateKeyEnum.IS_WEB_FULLSCREEN) ?? false;
+    if (isWeb) {
       playerDockerRef.value.classList.remove("mode-webscreen");
       document.body.classList.remove("webscreen-fix");
-      playerContainerRef.value.setAttribute("data-screen", "normal");
-      isWebFullscreen = false;
-      stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, false);
+      applyDisplayMode("normal");
+      // 退出网页全屏：停止监听整页滚轮（既有实现 toggleWebFullscreen:519）
+      unbindVolumeWheel();
+      // 同步提示工具（与既有实现 toggleWebFullscreen:524-525 一致）
+      tooltipsApi.updateTip?.("ctrl:webscreen", "网页全屏");
     } else {
       playerDockerRef.value.classList.add("mode-webscreen");
       document.body.classList.add("webscreen-fix");
-      playerContainerRef.value.setAttribute("data-screen", "web");
-      isWebFullscreen = true;
-      stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, true);
+      applyDisplayMode("web");
+      // 进入网页全屏：开始监听整页滚轮（既有实现 toggleWebFullscreen:506）
+      bindVolumeWheel();
+      // 同步提示工具（与既有实现 toggleWebFullscreen:511-512 一致）
+      tooltipsApi.updateTip?.("ctrl:webscreen", "退出网页全屏");
     }
   };
 
   /** 切换静音状态 */
   const toggleMute = (): void => {
-    playerInfo.isMuted = !playerInfo.isMuted;
+    const next = !readMuted();
     if (videoRef.value) {
-      videoRef.value.muted = playerInfo.isMuted;
+      videoRef.value.muted = next;
     }
-    stateMgr?.set(PlayerStateKeyEnum.MUTED, playerInfo.isMuted);
-    controlsApi.updateMute?.(playerInfo.isMuted);
+    stateMgr?.set(PlayerStateKeyEnum.MUTED, next);
+    controlsApi.updateMute?.(next);
   };
 
   /** 设置音量，限制在 0-1 范围内 */
   const setVolume = (vol: number): void => {
     const clamped = Math.min(1, Math.max(0, vol));
-    playerInfo.volume = clamped;
     if (videoRef.value) videoRef.value.volume = clamped;
     stateMgr?.set(PlayerStateKeyEnum.VOLUME, clamped);
     controlsApi.updateVolumeDisplay?.(clamped);
   };
 
-  /** 显示控制栏并重置自动隐藏定时器 */
-  const showControls = (): void => {
+  /**
+   * 跳转到指定时间（秒）
+   *
+   * 同步三处：video 元素的 currentTime、运行时状态 CURRENT_TIME，
+   * 以及依赖进度更新的 UI（时间文本 / 进度条 / 弹幕重建）。
+   */
+  const seekTo = (time: number): void => {
+    const video = videoRef.value;
+    if (!video) return;
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const target =
+      duration > 0 ? Math.min(Math.max(0, time), duration) : Math.max(0, time);
+    video.currentTime = target;
+    stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, target);
+    controlsApi.updateCurrent?.(target);
+    progressBarApi.updateProgress?.(target);
+    rowDmApi.createDanmaku?.(target);
+  };
+
+  /** 应用播放速率（同步 video、状态与事件总线） */
+  const applyPlaybackRate = (rate: number): void => {
+    if (videoRef.value) videoRef.value.playbackRate = rate;
+    stateMgr?.set(PlayerStateKeyEnum.PLAYBACK_RATE, rate);
+    props.events?.emit(PlayerEventEnum.RATE_CHANGE, rate);
+  };
+
+  /** 切换画中画（浏览器不支持时静默返回） */
+  const togglePip = (): void => {
+    if (!isBrowser()) return;
+    const video = videoRef.value;
+    if (!video) return;
+    if (document.pictureInPictureElement) {
+      void document.exitPictureInPicture();
+      return;
+    }
+    if (
+      document.pictureInPictureEnabled &&
+      typeof video.requestPictureInPicture === "function"
+    ) {
+      void video.requestPictureInPicture();
+    }
+  };
+
+  /** 显示音量提示层（滚轮 / 快捷键调节音量时，与既有实现一致） */
+  const showVolumeHint = (volume: number): void => {
+    volumeHintApi.show?.(volume);
+  };
+
+  /**
+   * 滚轮调节音量
+   *
+   * 与既有实现 `handleVolumeChangeWithWheel`一致：
+   * - 先显示音量提示（即使音量未变化也提示，既有实现 show() 无条件调用）；
+   * - 步长 0.02，向下滚动时若已静音则不减少音量。
+   */
+  const handleVolumeWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    const current = readVolume();
+    let next = current;
+    if (event.deltaY < 0) {
+      next = Math.min(1, Math.max(0, current + 0.02));
+    } else if (event.deltaY > 0 && !readMuted()) {
+      next = Math.min(1, Math.max(0, current - 0.02));
+    }
+    // 无论音量是否变化都显示提示（含 3 秒自动消失，既有实现 handleVolumeChangeWithWheel:735-736）
+    showVolumeHint(next);
+    if (next !== current) {
+      setVolume(next);
+    }
+  };
+
+  /**
+   * 显示控制栏（与既有实现 showControls(position) 一致）：
+   * - video：视频区移动触发，显示并启动 3 秒自动隐藏
+   * - control / top：悬停在控制栏 / 顶栏上触发，仅显示、不自动隐藏，
+   *   避免用户停留在菜单上时控制栏被定时器隐藏
+   */
+  const showControls = (position: "video" | "control" | "top" = "video"): void => {
     if (!playerContainerRef.value) return;
     playerContainerRef.value.setAttribute("data-ctrl-hidden", "false");
     playerContainerRef.value.classList.remove("state-no-cursor");
     controlsApi.showControl?.();
-    resetAutoHideTimer();
+    if (position === "video") {
+      resetAutoHideTimer();
+    } else if (autoHideTimer !== null) {
+      // 停留控制栏 / 顶栏期间取消待执行的自动隐藏
+      clearTimeout(autoHideTimer);
+      autoHideTimer = null;
+    }
   };
 
   /** 隐藏控制栏 */
@@ -692,7 +1508,7 @@ export const PlayerDocker = defineComponent<
       clearTimeout(autoHideTimer);
     }
     autoHideTimer = setTimeout(() => {
-      if (playerInfo.isPlaying) {
+      if (readIsPlaying()) {
         hideControls();
       }
       autoHideTimer = null;
@@ -704,11 +1520,40 @@ export const PlayerDocker = defineComponent<
   // ============================================
 
   const hotkeyCtx: HotkeyContext = {
-    videoRef,
+    getVideo: (): HTMLVideoElement | null => videoRef.value ?? null,
     togglePlayPause,
     toggleFullscreen,
+    exitFullscreen: (): void => {
+      // SSR 阶段不触碰 document
+      if (!isBrowser()) return;
+      if (document.fullscreenElement) {
+        void document.exitFullscreen();
+      }
+    },
     toggleMute,
-    setVolume,
+    setVolume: (volume: number): void => {
+      // 快捷键调节音量时同步显示音量提示（与既有实现的 ↑/↓ 行为一致）
+      setVolume(volume);
+      showVolumeHint(volume);
+    },
+    getVolume: (): number => readVolume(),
+    seekBy: (seconds: number): void => {
+      const video = videoRef.value;
+      if (!video) return;
+      const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+      video.currentTime = Math.min(
+        Math.max(0, video.currentTime + seconds),
+        duration,
+      );
+    },
+    setPlaybackRate: (rate: number): void => {
+      if (videoRef.value) {
+        videoRef.value.playbackRate = rate;
+      }
+      stateMgr?.set(PlayerStateKeyEnum.PLAYBACK_RATE, rate);
+    },
+    getPlaybackRate: (): number =>
+      videoRef.value?.playbackRate ?? readBackrate(),
     like: () => {
       lifecycle.emit?.("like");
     },
@@ -728,7 +1573,8 @@ export const PlayerDocker = defineComponent<
       lifecycle.emit?.("danmakuToggle");
     },
     sendDanmaku: () => {
-      lifecycle.emit?.("sendDanmaku");
+      // 快捷键触发发送弹幕：聚焦弹幕输入框（SendBar 挂载后可用）
+      sendBarApi.focusInput?.();
     },
     prevEpisode: () => {
       lifecycle.emit?.("prev");
@@ -736,30 +1582,65 @@ export const PlayerDocker = defineComponent<
     nextEpisode: () => {
       lifecycle.emit?.("next");
     },
-    setPlaybackRate: (rate: number): void => {
-      playerInfo.backrate = rate;
-      if (videoRef.value) {
-        videoRef.value.playbackRate = rate;
-      }
-      stateMgr?.set(PlayerStateKeyEnum.PLAYBACK_RATE, rate);
-    },
   };
 
-  const onKeyboard = createHotkeyHandler(hotkeyCtx);
+  /** keydown / keyup 需成对注册：→ 键的「长按倍速」依赖 keyup 还原速率 */
+  const hotkeyHandlers = createHotkeyHandlers(hotkeyCtx);
+  const onKeyboard = hotkeyHandlers.onKeydown;
+  const onKeyboardUp = hotkeyHandlers.onKeyup;
+
+  /** 键盘监听是否处于启用状态（供 `interaction.keyboard` 运行时启停） */
+  let keyboardEnabled = false;
 
   /**
-   * 全屏状态变化时，更新屏幕模式属性
+   * 启停键盘快捷键监听（keydown / keyup 成对处理）
+   * @param enabled - 是否启用
+   */
+  const setKeyboardEnabled = (enabled: boolean): void => {
+    if (enabled === keyboardEnabled) return;
+    keyboardEnabled = enabled;
+    if (enabled) {
+      document.addEventListener("keydown", onKeyboard);
+      document.addEventListener("keyup", onKeyboardUp);
+    } else {
+      document.removeEventListener("keydown", onKeyboard);
+      document.removeEventListener("keyup", onKeyboardUp);
+    }
+  };
+
+  /**
+   * 全屏状态变化时，更新全屏标志与 `data-screen`
+   *
+   * 全屏不属于 `DisplayMode`（无 'full'），因此不写 `player.displayMode`，
+   * 由 `player.isFullscreen` 单独承载。
    */
   const onFullscreenChange = (): void => {
     if (!playerContainerRef.value) return;
     if (document.fullscreenElement) {
       playerContainerRef.value.setAttribute("data-screen", "full");
-      playerInfo.dataScreen = "full";
       stateMgr?.set(PlayerStateKeyEnum.IS_FULLSCREEN, true);
+      // 进入全屏：开始监听整页滚轮（既有实现 handleFullscreenChange:475；
+      // 从网页全屏直接进入全屏时重复绑定，同函数引用幂等）
+      bindVolumeWheel();
+      // 进入全屏：移动弹幕发送栏到底部中央 + 同步提示工具
+      // （与既有实现 handleFullscreenChange:474-481 一致）
+      moveSendBar("full");
+      tooltipsApi.setScreen?.("full");
+      tooltipsApi.updateTip?.("ctrl:fullscreen", "退出全屏 (f)");
     } else {
       playerContainerRef.value.setAttribute("data-screen", "normal");
-      playerInfo.dataScreen = "normal";
       stateMgr?.set(PlayerStateKeyEnum.IS_FULLSCREEN, false);
+      // 退出全屏：停止监听整页滚轮（既有实现 handleFullscreenChange:486）
+      unbindVolumeWheel();
+      // 退出全屏：弹幕发送栏移回发送区域 + 同步提示工具
+      // （与既有实现 handleFullscreenChange:483-492 一致）
+      moveSendBar("normal");
+      tooltipsApi.setScreen?.(
+        (stateMgr?.get(PlayerStateKeyEnum.IS_WEB_FULLSCREEN) ?? false)
+          ? "web"
+          : "normal",
+      );
+      tooltipsApi.updateTip?.("ctrl:fullscreen", "进入全屏 (f)");
     }
   };
 
@@ -767,8 +1648,16 @@ export const PlayerDocker = defineComponent<
    * 画中画状态变化时，更新画中画标志
    */
   const onPipChange = (): void => {
-    playerInfo.isPip = document.pictureInPictureElement !== null;
-    stateMgr?.set(PlayerStateKeyEnum.IS_PIP, playerInfo.isPip);
+    stateMgr?.set(
+      PlayerStateKeyEnum.IS_PIP,
+      document.pictureInPictureElement !== null,
+    );
+    // 同步画中画按钮的提示文本（与既有实现 handlePiPChange:649-656 一致）
+    if (document.pictureInPictureElement !== null) {
+      tooltipsApi.updateTip?.("ctrl:pip", "退出画中画");
+    } else {
+      tooltipsApi.updateTip?.("ctrl:pip", "开启画中画");
+    }
   };
 
   /**
@@ -777,6 +1666,11 @@ export const PlayerDocker = defineComponent<
    */
   const onContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
+    // 菜单坐标相对播放器容器计算（与既有实现的 +2 偏移一致）
+    const rect = playerContainerRef.value?.getBoundingClientRect();
+    const x = rect ? Math.floor(event.clientX - rect.left + 2) : event.clientX;
+    const y = rect ? Math.floor(event.clientY - rect.top + 2) : event.clientY;
+    contextApi.showMenu?.(x, y);
     lifecycle.emit?.("contextMenu", { x: event.clientX, y: event.clientY });
   };
 
@@ -796,6 +1690,78 @@ export const PlayerDocker = defineComponent<
 
   /** 迷你播放器可见性观察器 */
   let miniPlayerObserver: IntersectionObserver | null = null;
+
+  /** 迷你窗口默认右下角偏移（像素，与既有实现 miniPlayer 默认值一致） */
+  const MINI_OFFSET = 84;
+
+  /** 当前迷你窗口右偏移（像素，可拖拽改变） */
+  let miniOffsetRight = MINI_OFFSET;
+
+  /** 当前迷你窗口下偏移（像素，可拖拽改变） */
+  let miniOffsetBottom = MINI_OFFSET;
+
+  /** 迷你窗口拖拽元素（.player-mini-warp），由 Mini 组件挂载后赋值 */
+  let miniWarpEl: HTMLElement | null = null;
+
+  /** 拖拽期间绑定在 document 上的 mousemove 处理器（销毁时清理用） */
+  let miniDragMouseMove: ((e: MouseEvent) => void) | null = null;
+
+  /** 拖拽期间绑定在 document 上的 mouseup 处理器（销毁时清理用） */
+  let miniDragMouseUp: (() => void) | null = null;
+
+  /** 进入迷你播放器模式：加 mode-mini 类 + 写 data-screen + 设置右下角偏移 */
+  const enterMiniPlayer = (): void => {
+    // 画中画状态下不进入迷你模式（与既有实现一致）
+    if (stateMgr?.get(PlayerStateKeyEnum.IS_PIP)) return;
+    playerDockerRef.value?.classList.add("mode-mini");
+    applyDisplayMode("mini");
+    const container = playerContainerRef.value;
+    if (container) {
+      container.style.right = `${miniOffsetRight}px`;
+      container.style.bottom = `${miniOffsetBottom}px`;
+    }
+  };
+
+  /** 退出迷你播放器模式：移除 mode-mini 类 + 还原 data-screen + 清除内联偏移样式 */
+  const exitMiniPlayer = (): void => {
+    playerDockerRef.value?.classList.remove("mode-mini");
+    applyDisplayMode("normal");
+    playerContainerRef.value?.removeAttribute("style");
+  };
+
+  /**
+   * 迷你窗口拖拽（与既有实现 fnDown 行为一致：
+   * 按下后通过 document 级 mousemove 更新 right/bottom 偏移）
+   * @param event - 鼠标按下事件
+   */
+  const handleMiniDragDown = (event: MouseEvent): void => {
+    event.preventDefault();
+    /** 按下时的鼠标 X 坐标 */
+    let startX = event.clientX;
+    /** 按下时的鼠标 Y 坐标 */
+    let startY = event.clientY;
+    const onMouseMove = (e: MouseEvent): void => {
+      miniOffsetRight += startX - e.clientX;
+      miniOffsetBottom += startY - e.clientY;
+      startX = e.clientX;
+      startY = e.clientY;
+      const container = playerContainerRef.value;
+      if (container) {
+        container.style.right = `${miniOffsetRight}px`;
+        container.style.bottom = `${miniOffsetBottom}px`;
+      }
+    };
+    const onMouseUp = (): void => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      miniDragMouseMove = null;
+      miniDragMouseUp = null;
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    miniDragMouseMove = onMouseMove;
+    miniDragMouseUp = onMouseUp;
+  };
 
   // ============================================
   // 事件绑定与解绑
@@ -818,6 +1784,14 @@ export const PlayerDocker = defineComponent<
 
     // --- mouseleave on videoArea → 隐藏控制栏 ---
     const onMouseLeaveVideoArea = (): void => {
+      // 豁免（与既有实现一致）：
+      // 网页全屏 / 全屏下，弹幕输入框聚焦时不隐藏控制栏，
+      // 避免鼠标从输入框附近移开时控制栏被收起打断输入
+      const displayMode = stateMgr?.get(PlayerStateKeyEnum.DISPLAY_MODE);
+      const isFull = stateMgr?.get(PlayerStateKeyEnum.IS_FULLSCREEN) ?? false;
+      if ((displayMode === 'web' || isFull) && isSendFocus) {
+        return;
+      }
       hideControls();
     };
     videoArea.addEventListener("mouseleave", onMouseLeaveVideoArea);
@@ -835,14 +1809,39 @@ export const PlayerDocker = defineComponent<
       perch.removeEventListener("dblclick", onDblClickPerch),
     );
 
-    // --- mousemove on perch → 显示控制栏并重置自动隐藏 ---
+    // --- mousemove on perch → 显示控制栏并重置自动隐藏（与既有实现一致） ---
     const onMouseMovePerch = (): void => {
-      showControls();
+      showControls("video");
     };
-    videoArea.addEventListener("mousemove", onMouseMovePerch);
+    perch.addEventListener("mousemove", onMouseMovePerch);
     cleanupFns.push(() =>
-      videoArea.removeEventListener("mousemove", onMouseMovePerch),
+      perch.removeEventListener("mousemove", onMouseMovePerch),
     );
+
+    // --- mousemove on 控制栏 / 顶栏 → 仅显示、不自动隐藏 ---
+    // 避免用户悬停菜单时被 3 秒定时器收起（与既有实现 showControls("control"/"top") 一致）
+    const controlWrap = container.querySelector<HTMLElement>(
+      ".player-control-wrap",
+    );
+    if (controlWrap) {
+      const onMouseMoveControl = (): void => {
+        showControls("control");
+      };
+      controlWrap.addEventListener("mousemove", onMouseMoveControl);
+      cleanupFns.push(() =>
+        controlWrap.removeEventListener("mousemove", onMouseMoveControl),
+      );
+    }
+    const topWrap = container.querySelector<HTMLElement>(".player-top-wrap");
+    if (topWrap) {
+      const onMouseMoveTop = (): void => {
+        showControls("top");
+      };
+      topWrap.addEventListener("mousemove", onMouseMoveTop);
+      cleanupFns.push(() =>
+        topWrap.removeEventListener("mousemove", onMouseMoveTop),
+      );
+    }
 
     // --- click on perch → 切换播放/暂停（400ms 延迟区分双击） ---
     /** 点击延迟定时器，用于区分单击和双击 */
@@ -877,9 +1876,28 @@ export const PlayerDocker = defineComponent<
       document.removeEventListener("leavepictureinpicture", onPipChange),
     );
 
-    // --- 键盘事件监听 ---
-    document.addEventListener("keydown", onKeyboard);
-    cleanupFns.push(() => document.removeEventListener("keydown", onKeyboard));
+    // --- 键盘事件监听（受 interaction.keyboard 配置控制，支持运行时启停） ---
+    // keydown / keyup 成对注册：→ 键的「长按倍速」需要 keyup 还原播放速率
+    const keyboardConfig =
+      configStore?.getPath<boolean | Record<string, unknown>>(
+        "interaction.keyboard",
+      ) ??
+      props.config?.interaction?.keyboard ??
+      true;
+    setKeyboardEnabled(keyboardConfig !== false);
+    cleanupFns.push(() => {
+      setKeyboardEnabled(false);
+      hotkeyHandlers.destroy();
+    });
+
+    // --- 滚轮调节音量 ---
+    // 既有实现仅在网页全屏 / 全屏时绑定 document 滚轮，
+    // 退出时解绑；普通模式下不绑定，页面滚轮行为不受影响。
+    // 绑定 / 解绑由 toggleWebFullscreen 与 onFullscreenChange 的进入 / 退出分支驱动，
+    // 此处仅兜底解绑（cleanupFns），防止销毁时残留监听
+    cleanupFns.push(() =>
+      document.removeEventListener("wheel", handleVolumeWheel),
+    );
 
     // --- 右键菜单监听 ---
     container.addEventListener("contextmenu", onContextMenu);
@@ -894,16 +1912,12 @@ export const PlayerDocker = defineComponent<
           if (!entry.isIntersecting) {
             requestAnimationFrame(() => {
               // 播放器不可见 → 进入迷你播放器模式
-              playerInfo.isMinPlayer = true;
-              docker.classList.add("mode-mini");
-              playerContainerRef.value?.setAttribute("data-screen", "mini");
+              enterMiniPlayer();
             });
           } else {
             requestAnimationFrame(() => {
               // 播放器可见 → 退出迷你播放器模式
-              playerInfo.isMinPlayer = false;
-              docker.classList.remove("mode-mini");
-              playerContainerRef.value?.setAttribute("data-screen", "normal");
+              exitMiniPlayer();
             });
           }
         });
@@ -924,6 +1938,10 @@ export const PlayerDocker = defineComponent<
     initVideo();
     // 绑定所有 DOM 事件
     initEvent();
+    // 订阅清晰度切换事件（补充档位展示名）
+    setupQualityEvents();
+    // 订阅配置中心的动态变化（progress.segments / interaction.keyboard）
+    setupConfigSubscriptions();
 
     // 触发挂载完成回调
     if (
@@ -954,7 +1972,10 @@ export const PlayerDocker = defineComponent<
     }
 
     // 清理网页全屏状态
-    if (isWebFullscreen && isBrowser()) {
+    if (
+      (stateMgr?.get(PlayerStateKeyEnum.IS_WEB_FULLSCREEN) ?? false) &&
+      isBrowser()
+    ) {
       playerDockerRef.value?.classList.remove("mode-webscreen");
       document.body.classList.remove("webscreen-fix");
     }
@@ -972,11 +1993,30 @@ export const PlayerDocker = defineComponent<
       videoRef.value.removeEventListener("ended", handleEnded);
       videoRef.value.removeEventListener("waiting", handleWaiting);
       videoRef.value.removeEventListener("canplay", handleCanPlay);
+      videoRef.value.removeEventListener("canplaythrough", handleCanPlayThrough);
     }
 
     // 清理所有 DOM 事件监听
     cleanupFns.forEach((fn) => fn());
     cleanupFns.length = 0;
+
+    // 销毁懒挂载的面板（ColorPanel / VideoInfo / HotkeyPanel）
+    Object.values(lazyPanelVNodes).forEach((panelVNode) => {
+      if (panelVNode) destroy(panelVNode);
+    });
+    lazyPanelVNodes.color = undefined;
+    lazyPanelVNodes.info = undefined;
+    lazyPanelVNodes.keyboard = undefined;
+
+    // 清理迷你播放器拖拽期间可能残留在 document 上的监听
+    if (miniDragMouseMove) {
+      document.removeEventListener("mousemove", miniDragMouseMove);
+      miniDragMouseMove = null;
+    }
+    if (miniDragMouseUp) {
+      document.removeEventListener("mouseup", miniDragMouseUp);
+      miniDragMouseUp = null;
+    }
 
     // 断开 ResizeObserver
     resizeObserver?.disconnect();
@@ -1009,7 +2049,8 @@ export const PlayerDocker = defineComponent<
           "player-container state-paused state-no-cursor state-disable-box-shadow",
         "data-angle": "d3d11",
         "data-screen": "normal",
-        "data-ctrl-hidden": "false",
+        // 初始隐藏控制栏（与既有实现模板一致），由鼠标移动 / 播放交互驱动显示
+        "data-ctrl-hidden": "true",
         "aria-label": props.playerName || "嗨哩播放器",
         ref: 'playerContainerRef',
       },
@@ -1059,6 +2100,9 @@ export const PlayerDocker = defineComponent<
               rowDmApi.playPause = data.playPause;
               rowDmApi.showDmTip = data.showDmTip;
               rowDmApi.hideDmTip = data.hideDmTip;
+              // 持有弹幕外层容器，供可见性 / 透明度 / 速度的命令式控制
+              danmakuWrapEl = data.playerRowDmWrap ?? null;
+              syncDanmakuToLayer();
               lifecycle.emit?.("danmakuLayerMounted", data);
               // 弹幕层挂载完成，通知插件系统（不使用 DANMAKU_TOGGLE，那是切换弹幕可见性的事件）
             },
@@ -1071,7 +2115,7 @@ export const PlayerDocker = defineComponent<
               dialogApi.showDmTip?.(
                 {
                   content: data.element?.textContent ?? "",
-                  timePoint: videoInfo.currentTime,
+                  timePoint: readCurrentTime(),
                 },
                 data.element,
               );
@@ -1104,6 +2148,21 @@ export const PlayerDocker = defineComponent<
               props.events?.emit("interactionLayerMounted", data);
             },
           }),
+          // 顶部栏（标题 / 关注 / 问题反馈，既有实现挂载于视频区域；
+          // ui.title 动态更新时由 configStore 订阅驱动 setTitle）
+          h(Top, {
+            title: props.config?.ui?.title ?? props.playerName,
+            onTopMounted: (api: TopAPI) => {
+              Object.assign(topApi, api);
+            },
+            onFollowClick: () => {
+              lifecycle.emit?.("follow");
+            },
+            // 问题反馈图标的悬停提示（既有实现的
+            // top.on("show-tooltip"/"hide-tooltip") 接通 Tooltips 组件）
+            onShowTooltip: handleShowTooltip,
+            onHideTooltip: handleHideTooltip,
+          }),
           // 对话框容器
           h(Dialog, {
             onDialogMounted: (data: DialogAPI) => {
@@ -1113,19 +2172,241 @@ export const PlayerDocker = defineComponent<
               lifecycle.emit?.("dialogMounted", data);
             },
           }),
+          // 自动提示（清晰度切换成功 / 失败）
+          h(Toast, {
+            onToastMounted: (api: ToastAPI) => {
+              toastApi.showAutoToast = api.showAutoToast;
+              toastApi.hideAutoToast = api.hideAutoToast;
+              toastApi.showFixedToast = api.showFixedToast;
+              toastApi.hideFixedToast = api.hideFixedToast;
+            },
+          }),
+          // 加载遮罩（清晰度切换中）
+          h(Loading, {
+            onLoadingMounted: (api: LoadingAPI) => {
+              loadingApi.show = api.show;
+              loadingApi.hide = api.hide;
+              loadingApi.setText = api.setText;
+            },
+          }),
+          // 音量提示层（滚轮 / 快捷键调节音量时显示，与既有实现的 volumehint 行为一致）
+          h(VolumeHint, {
+            onVolumeHintMounted: (api: {
+              show: (volume: number) => void;
+              hide: () => void;
+              setVolume: (volume: number) => void;
+              setMuted: (muted: boolean) => void;
+            }) => {
+              volumeHintApi.show = api.show;
+              volumeHintApi.hide = api.hide;
+            },
+          }),
+          // 色彩调整面板 / 视频统计信息面板 / 快捷键说明面板：
+          // 改为按需懒挂载（见上方 ensurePanel，既有实现的懒创建模式），
+          // 首次通过右键菜单打开时才创建，不再常驻渲染
+          // 片尾推荐面板（默认隐藏，播放结束时显示、重新播放时隐藏；
+          // 推荐列表无真实数据源，仅渲染面板结构）
+          h(Ending, {
+            onRestart: () => {
+              seekTo(0);
+              void videoRef.value?.play();
+            },
+            onLike: () => {
+              lifecycle.emit?.("like");
+            },
+            onCoin: () => {
+              lifecycle.emit?.("coin");
+            },
+            onCollect: () => {
+              lifecycle.emit?.("favorite");
+            },
+            onFollow: () => {
+              lifecycle.emit?.("follow");
+            },
+            onEndingMounted: (api: EndingApi) => {
+              Object.assign(endingApi, api);
+            },
+          }),
+          // 迷你播放器面板（默认隐藏，播放器滚出视口进入迷你模式时由
+          // data-screen="mini" 的样式规则显示；关闭 / 状态切换回调向上处理）
+          h(Mini, {
+            onClose: () => {
+              // 关闭迷你窗口 → 退出迷你模式（与既有实现 close-mini 一致）
+              exitMiniPlayer();
+            },
+            onStateChange: () => {
+              togglePlayPause();
+            },
+            onMiniMounted: (api: MiniApi & { wrap?: HTMLElement | null }) => {
+              Object.assign(miniApi, api);
+              // 持有迷你窗口元素，用于绑定拖拽（与既有实现 playerMiniWarp.onmousedown 一致）
+              if (api.wrap && !miniWarpEl) {
+                miniWarpEl = api.wrap;
+                miniWarpEl.addEventListener("mousedown", handleMiniDragDown);
+              }
+            },
+          }),
           // 视频控制栏
           h(Controls, {
-            duration: videoInfo.duration,
-            volume: playerInfo.volume,
-            backrate: playerInfo.backrate,
+            duration: readDuration(),
+            volume: readVolume(),
+            backrate: readBackrate(),
+            // ===== 控件条交互接线（设计文档阶段 J）=====
+            // 控制栏挂载完成：持有其操作 API（时间/音量/缓冲等显示更新的入口）
+            onControlsMounted: (api: ControlsAPI) => {
+              Object.assign(controlsApi, api);
+            },
+            // 播放 / 暂停
+            onPlayPause: togglePlayPause,
+            // 进度跳转与拖拽
+            onSeek: seekTo,
+            onSeekStart: () => {
+              props.events?.emit(PlayerEventEnum.SEEK_START, {
+                time: readCurrentTime(),
+                previousTime: readCurrentTime(),
+              });
+            },
+            onSeekEnd: () => {
+              props.events?.emit(PlayerEventEnum.SEEK_END, {
+                time: readCurrentTime(),
+                previousTime: readCurrentTime(),
+              });
+            },
+            // 音量 / 静音 / 倍速
+            onVolumeChange: setVolume,
+            onMuteToggle: toggleMute,
+            onBackrateChange: applyPlaybackRate,
+            // 画面模式
+            onFullscreenToggle: toggleFullscreen,
+            onPipToggle: togglePip,
+            // 网页全屏按钮
+            onWebFullscreenToggle: toggleWebFullscreen,
+            // 分 P 切换：向上交给 VideoPlayer 的 prev() / next() / switchTo()
+            onPrev: () => {
+              lifecycle.emit?.("prev");
+            },
+            onNext: () => {
+              lifecycle.emit?.("next");
+            },
+            onEplistChange: (id: string) => {
+              lifecycle.emit?.("eplistChange", id);
+            },
+            // 设置菜单：向上转发，由 VideoPlayer 统一应用
+            onSettingChange: (payload: {
+              key: string;
+              value: boolean | string | number;
+            }) => {
+              lifecycle.emit?.("settingChange", payload);
+            },
+            onMoreSettingClick: () => {
+              lifecycle.emit?.("moreSettingClick");
+            },
+            // tooltip / 菜单动画 / 状态变化：接通 Tooltips 组件并向上转发
+            onShowTooltip: handleShowTooltip,
+            onHideTooltip: handleHideTooltip,
+            onMenuAnimation: (payload: { type: string; action: "show" | "hide" }) => {
+              lifecycle.emit?.("menuAnimation", payload);
+            },
+            onStateChange: (payload: unknown) => {
+              lifecycle.emit?.("stateChange", payload);
+            },
+            // 清晰度切换：向上暴露给 VideoPlayer，由其转发给流媒体中间件 / 插件
+            onQualityChange: (quality: string) => {
+              lifecycle.emit?.("qualityChange", quality);
+            },
+            // 顶部进度条挂载完成，持有其更新 API（timeupdate / progress 时调用）
+            onProgressBarMounted: (api: ProgressBarApi) => {
+              progressBarApi.updateProgress = api.updateProgress;
+              progressBarApi.updateBuffer = api.updateBuffer;
+              progressBarApi.setDuration = api.setDuration;
+              progressBarApi.rebuildSegments = api.rebuildSegments;
+            },
           }),
         ),
-        // 发送区域（弹幕输入等）
-        h("div", {
-          class: "player-sending-area",
-          ref: 'playerSendingAreaRef',
-        }),
+        // 发送区域（弹幕输入栏，既有实现+ sendbar 挂载方式：
+        // .player-sending-area > .player-sending-bar）
+        h(
+          "div",
+          {
+            class: "player-sending-area",
+            ref: 'playerSendingAreaRef',
+          },
+          h(SendBar, {
+            // 弹幕开关初始状态来自运行时状态（与设置面板共享同一状态源）
+            danmakuSwitch: stateMgr?.get(PlayerStateKeyEnum.DANMAKU_VISIBLE) ?? true,
+            // 输入框聚焦 / 失焦：维护 isSendFocus，供 mouseleave 豁免判断
+            onInputFocus: () => {
+              isSendFocus = true;
+              // 聚焦输入时保持控制栏显示、取消自动隐藏（既有实现 input-focus 行为）
+              showControls("control");
+            },
+            onInputBlur: () => {
+              isSendFocus = false;
+            },
+            // 弹幕开关：写运行时状态（驱动弹幕层显隐订阅）+ 向上广播
+            onDanmakuSwitch: (checked: boolean) => {
+              stateMgr?.set(PlayerStateKeyEnum.DANMAKU_VISIBLE, checked);
+              props.events?.emit(PlayerEventEnum.DANMAKU_TOGGLE, {
+                visible: checked,
+              });
+              lifecycle.emit?.("danmakuToggle");
+            },
+            // 发送弹幕：向上转发文本，同时广播到事件总线（§4.2 danmakuSend）
+            onSendDanmaku: (text: string) => {
+              props.events?.emit(PlayerEventEnum.DANMAKU_SEND, { text });
+              props.events?.emit(PlayerEventEnum.DANMAKU_SENT, { text });
+              lifecycle.emit?.("sendDanmaku", text);
+            },
+            // 弹幕开关提示气泡：与控制栏 tooltip 走同一通道（接通 Tooltips 组件）
+            onShowTooltip: handleShowTooltip,
+            onHideTooltip: handleHideTooltip,
+            // 持有 SendBar 控制方法（setInputValue / focusInput 等）
+            onSendBarMounted: (api: SendBarAPI) => {
+              Object.assign(sendBarApi, api);
+            },
+          }),
+        ),
       ),
+      // 按钮悬停提示工具（既有实现挂载于 .player-container：
+      // new Tooltips(this.playerContainer!)；Controls / SendBar / Top 的
+      // tooltip 事件经 handleShowTooltip / handleHideTooltip 接通至此）
+      h(Tooltips, {
+        onTooltipsMounted: (api: {
+          openTip: (btnElement: HTMLElement | null, name: string) => void;
+          closeTip: (name: string) => void;
+          updateTip: (name: string, text: string) => void;
+          setScreen: (screen: 'normal' | 'full' | 'web') => void;
+          hideAll: () => void;
+        }) => {
+          Object.assign(tooltipsApi, api);
+        },
+      }),
+      // 右键菜单（默认隐藏，右键视频区域时在鼠标位置显示）
+      h(ContextMenu, {
+        onContextMounted: (api: {
+          showMenu: (x: number, y: number) => void;
+          hideMenu: () => void;
+        }) => {
+          contextApi.showMenu = api.showMenu;
+          contextApi.hideMenu = api.hideMenu;
+        },
+        onOpenPanel: (panel: 'color' | 'keyboard' | 'info') => {
+          // 面板按需懒挂载：首次打开才创建（既有实现的懒创建模式），之后复用
+          ensurePanel(panel);
+          // 「视频色彩调整」菜单项 → 打开色彩调整面板
+          if (panel === 'color') {
+            colorPanelApi.open?.();
+          }
+          // 「快捷键说明」菜单项 → 打开快捷键面板
+          if (panel === 'keyboard') {
+            hotkeyPanelApi.open?.();
+          }
+          // 「视频统计信息」菜单项 → 打开统计信息面板
+          if (panel === 'info') {
+            videoInfoApi.open?.();
+          }
+        },
+      }),
     ),
   );
 });

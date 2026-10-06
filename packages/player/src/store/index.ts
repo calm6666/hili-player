@@ -53,3 +53,7 @@ export {
   defaultRuntimeState as defaultRuntimeStateManager,
 } from './runtimeState';
 export type { RuntimeState, RuntimeStateManager } from './runtimeState';
+
+// 可订阅配置中心
+export { createConfigStore, ConfigStoreContext } from './configStore';
+export type { ConfigStore } from './configStore';

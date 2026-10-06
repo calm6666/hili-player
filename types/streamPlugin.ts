@@ -112,6 +112,27 @@ export interface QualityLevel {
   height: number;
   /** 码率 (比特/秒) */
   bitrate: number;
+  /** 是否为自动档（ABR）。MP4 场景恒为 false */
+  isAuto?: boolean;
+}
+
+/**
+ * 清晰度变化事件 payload（对应 StreamPluginEventEnum.QUALITY_CHANGE / PlayerEventEnum.STREAM_QUALITY_CHANGE）
+ * 在基础分辨率信息之外，附带切换后生效的档位 id 与展示名，便于上层判断「切到了哪一档」
+ */
+export interface StreamQualityChangePayload {
+  /** 视频宽度 */
+  width: number;
+  /** 视频高度 */
+  height: number;
+  /** 码率 (比特/秒) */
+  bitrate?: number;
+  /** 是否自动档（ABR） */
+  isAuto?: boolean;
+  /** 切换后生效的档位 id（'auto' 表示自动档） */
+  qualityId?: string;
+  /** 档位展示名 */
+  label?: string;
 }
 
 /** 流媒体插件接口 — 继承 Plugin */
@@ -170,7 +191,33 @@ export interface StreamPlugin extends Plugin {
 
   /**
    * 设置画质
-   * @param quality - 画质标识
+   * @param quality - 画质标识（'auto' 表示自动档）
    */
   setQuality(quality: string): void;
+
+  /**
+   * 获取当前生效的档位 id（'auto' 表示自动档）
+   * @returns 档位 id；插件未就绪或不支持时返回 ''
+   */
+  getCurrentQuality(): string;
+
+  /**
+   * 订阅清晰度列表的变化/就绪
+   * HLS 在清单解析完成后（MANIFEST_PARSED）、DASH 在流初始化完成后（STREAM_INITIALIZED）推送
+   * @param cb - 列表变化回调
+   * @returns 取消订阅函数
+   */
+  onQualitiesChange?(cb: (list: QualityLevel[]) => void): () => void;
+
+  /**
+   * 是否支持自动档（ABR 自适应码率）
+   * @returns 是否支持自动档；未实现时按不支持处理
+   */
+  supportsAutoQuality?(): boolean;
+
+  /**
+   * 应用清晰度上限/下限限制（映射到各流媒体库的原生配置）
+   * @param limits - 上限/下限（像素高度）
+   */
+  applyLimits?(limits: { max?: number; min?: number }): void;
 }

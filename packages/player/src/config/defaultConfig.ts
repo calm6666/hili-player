@@ -1,51 +1,125 @@
-import { QualityLevel, PlayMode } from "@/types";
-import type { PlayerConfig } from "@/types";
+import type { PlayerConfig } from '@/types';
+import type { ControlsConfig } from '@/hili-player/types';
+import { PlayMode } from '@/types';
+import { LogLevel } from '@/utils';
 
 /**
- * 默认配置
+ * 默认控件开关
+ *
+ * 说明：此处是控件开关的**唯一默认值来源**，供 `defaultConfig.ui.controls`
+ * 与运行时 `defaultControlConfig` 转发使用，避免两处默认值漂移。
+ */
+export const defaultControlConfig: ControlsConfig = {
+  prev: true,
+  next: true,
+  viewpoint: false,
+  quality: true,
+  episodes: false,
+  setting: true,
+  pip: true,
+  wideScreen: true,
+  webFullscreen: true,
+};
+
+/**
+ * 默认配置（命名空间形态）
+ *
+ * 注意：所有嵌套对象（playback / ui / danmaku / subtitle / plugins / storage /
+ * ssr / advanced 等）都必须写全默认值。合并由 `mergePlayerConfig()` 做深度合并
+ * （见 config/mergeConfig.ts），用户只传部分字段时，同层其余默认值会被保留。
+ *
+ * progress.segments 默认为空数组：不要放占位分段，
+ * 否则会在进度条上渲染出一个并不存在的分段。
  */
 const defaultConfig: PlayerConfig = {
-  src: "",
+  // ── 顶层资源 ──
   container: undefined,
-  autoplay: false,
-  playerName: "嗨哩播放器",
-  muted: false,
-  volume: 1,
-  playbackRate: 1,
-  loop: false,
-  controlBtns: {
-    prev: false,
-    next: false,
-    setting: false,
-    pip: false,
-    wide: false,
-    web: false,
+  src: '',
+  poster: '',
+
+  // ── 播放行为 ──
+  playback: {
+    autoplay: false,
+    muted: false,
+    volume: 1,
+    playbackRate: 1,
+    loop: false,
+    playMode: PlayMode.ORDER,
+    preload: 'metadata',
+    playsinline: true,
+    startTime: 0,
   },
-  poster: "",
-  defaultQuality: QualityLevel.AUTO,
-  playMode: PlayMode.ORDER,
-  keyboard: true,
-  subtitles: [],
+
+  // ── 播放列表 ──
+  playlist: [],
+  playlistIndex: 0,
+
+  // ── 外观与控件 ──
+  ui: {
+    title: '嗨哩播放器',
+    controls: defaultControlConfig,
+  },
+
+  // ── 交互 ──
+  interaction: {
+    keyboard: true,
+  },
+
+  // ── 清晰度 ──
+  quality: {
+    default: 'auto',
+    mode: 'auto',
+  },
+
+  // ── 进度条 ──
+  progress: {
+    segments: [],
+  },
+
+  // ── 弹幕 ──
   danmaku: {
     enabled: false,
-    source: "",
+    url: '',
+    visible: true,
     opacity: 0.8,
     speed: 1,
-    visible: true,
+    fontSize: 25,
+    area: 0.5,
   },
-  progressSegments: [
-    {
-      startTime: 0,
-      endTime: 90,
-      pointText: "",
-    },
-  ],
+
+  // ── 字幕 ──
+  subtitle: {
+    enabled: false,
+    list: [],
+  },
+
+  // ── 插件 ──
+  plugins: {
+    list: [],
+    options: {},
+  },
+
+  // ── 持久化 ──
+  storage: {
+    enabled: true,
+    prefix: 'hili-player:',
+  },
+
+  // ── SSR ──
   ssr: {
     enabled: false,
+    placeholder: '<div class="hili-player-placeholder">视频加载中...</div>',
     deferHydration: false,
   },
-  plugins: [],
-  debug: false,
+
+  // ── 高级 ──
+  advanced: {
+    debug: false,
+    logLevel: LogLevel.SILENT,
+  },
+
+  // ── 回调 ──
+  callbacks: {},
 };
 
 export default defaultConfig;

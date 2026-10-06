@@ -30,7 +30,7 @@ import type { MediaManifest } from '../vendor/types';
 import { manifestToHls } from '../vendor/manifest-to-hls';
 import type { VideoPlayer } from '@hili-player/player';
 import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
-import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource } from '@/types/streamPlugin';
+import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
@@ -158,6 +158,9 @@ export class HlsPlugin implements StreamPlugin {
 
   /** 首帧事件处理器引用（用于移除监听） */
   private firstFrameHandler: (() => void) | null = null;
+
+  /** 清晰度列表变化订阅者集合 */
+  private qualityListeners = new Set<(list: QualityLevel[]) => void>();
 
   /**
    * 构造函数
@@ -570,6 +573,8 @@ export class HlsPlugin implements StreamPlugin {
       if (data && 'levels' in data && Array.isArray(data.levels)) {
         logger.info('清单解析完成，可用画质:', data.levels.length);
         this.eventBus?.emit(StreamPluginEventEnum.METADATA_LOADED, data);
+        // 清单解析后清晰度列表就绪，推送给订阅者
+        this.notifyQualitiesChange();
       }
     });
 
@@ -616,16 +621,24 @@ export class HlsPlugin implements StreamPlugin {
     this.hlsPlayer.on(Events.LEVEL_SWITCHED, (_event: string, data: LevelSwitchedData) => {
       logger.info('画质切换至级别:', data.level);
       this.eventBus?.emit(StreamPluginEventEnum.STATS_UPDATE, this.getStats());
-      const stats = this.getStats();
-      if (stats.resolution) {
-        const isAuto = this.hlsPlayer?.currentLevel === -1;
-        this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, {
-          width: stats.resolution.width,
-          height: stats.resolution.height,
-          bitrate: stats.videoBitrate,
-          isAuto,
-        });
-      }
+      // 级别切换时列表可能已变化，重新推送一次
+      this.notifyQualitiesChange();
+
+      // 从 levels 中取实际生效的档位（Auto 模式下 data.level 为 ABR 选中的真实档位）
+      const levelObj = this.hlsPlayer?.levels[data.level];
+      if (!levelObj) return;
+
+      // 切到 auto 时同样会触发 LEVEL_SWITCHED，此时 isAuto=true 且附带真实档位 id，
+      // 作为「切换成功」的信号上报给上层
+      const payload: StreamQualityChangePayload = {
+        width: levelObj.width,
+        height: levelObj.height,
+        bitrate: levelObj.bitrate,
+        isAuto: this.isAutoQuality(),
+        qualityId: String(data.level),
+        label: levelObj.height ? `${levelObj.height}p` : `Level ${data.level}`,
+      };
+      this.eventBus?.emit(StreamPluginEventEnum.QUALITY_CHANGE, payload);
     });
   }
 
@@ -687,6 +700,7 @@ export class HlsPlugin implements StreamPlugin {
     this.loadStartTime = 0;
     this.firstFrameRecorded = false;
     this.firstFrameTime = 0;
+    this.qualityListeners.clear();
   }
 
   /**
@@ -777,6 +791,104 @@ export class HlsPlugin implements StreamPlugin {
       const level = quality === 'auto' ? -1 : Number(quality);
       this.hlsPlayer.currentLevel = level;
     }
+  }
+
+  /**
+   * 获取当前生效的档位 id
+   * - 处于 ABR 自动档时返回 'auto'
+   * - 否则返回当前实际播放的档位索引字符串
+   *
+   * 注意：hls.js 在自动档下 currentLevel 仍返回实际选中的档位索引，
+   * 因此自动档判断基于 autoLevelEnabled（manualLevel === -1），
+   * 并兼容 currentLevel === -1 的未加载 / 显式自动态。
+   *
+   * @returns 'auto' | 档位索引字符串 | ''（实例未就绪）
+   */
+  getCurrentQuality(): string {
+    const hls = this.hlsPlayer;
+    if (!hls) return '';
+    if (this.isAutoQuality()) return 'auto';
+    return String(hls.currentLevel);
+  }
+
+  /**
+   * 应用清晰度上限/下限限制（映射到 hls.js 原生配置）
+   * - 上限（像素高度）：autoLevelCapping 取 levels 中 height <= max 的最高档索引；max 为空表示不限制（-1）
+   * - 下限（像素高度）：hls.js 无直接「最低档」API，用 config.minAutoBitrate（码率阈值）近似，
+   *   取 levels 中 height >= min 的最低档的码率；min 为空表示不限制（0）
+   *
+   * @param limits - 上限/下限（像素高度）
+   */
+  applyLimits(limits: { max?: number; min?: number }): void {
+    const hls = this.hlsPlayer;
+    if (!hls) return;
+
+    const levels = hls.levels ?? [];
+
+    // 上限：levels 按码率/分辨率升序，取 height <= max 的最高档索引
+    if (limits.max === undefined) {
+      hls.autoLevelCapping = -1;
+    } else {
+      let capIndex = -1;
+      for (let i = 0; i < levels.length; i++) {
+        if (levels[i].height > 0 && levels[i].height <= limits.max) {
+          capIndex = i;
+        }
+      }
+      hls.autoLevelCapping = capIndex;
+    }
+
+    // 下限：取 height >= min 的最低档码率作为 minAutoBitrate 阈值
+    if (limits.min === undefined) {
+      hls.config.minAutoBitrate = 0;
+    } else {
+      let minBitrate = Number.POSITIVE_INFINITY;
+      for (const level of levels) {
+        if (level.height >= limits.min && level.bitrate < minBitrate) {
+          minBitrate = level.bitrate;
+        }
+      }
+      hls.config.minAutoBitrate = Number.isFinite(minBitrate) ? minBitrate : 0;
+    }
+  }
+
+  /**
+   * 订阅清晰度列表变化
+   * @param cb - 列表变化回调
+   * @returns 取消订阅函数
+   */
+  onQualitiesChange(cb: (list: QualityLevel[]) => void): () => void {
+    this.qualityListeners.add(cb);
+    return () => {
+      this.qualityListeners.delete(cb);
+    };
+  }
+
+  /**
+   * 是否支持自动档（ABR 自适应码率）
+   * hls.js 支持 `currentLevel = -1` 的自动档
+   * @returns 恒为 true
+   */
+  supportsAutoQuality(): boolean {
+    return true;
+  }
+
+  /**
+   * 当前是否处于 ABR 自动档
+   * 优先依据 hls.js 的 autoLevelEnabled（manualLevel === -1），
+   * 并兼容 currentLevel === -1 的未加载 / 显式自动态
+   */
+  private isAutoQuality(): boolean {
+    const hls = this.hlsPlayer;
+    if (!hls) return false;
+    return hls.autoLevelEnabled || hls.currentLevel === -1;
+  }
+
+  /** 通知所有清晰度订阅者（清单解析/级别切换时调用） */
+  private notifyQualitiesChange(): void {
+    if (this.qualityListeners.size === 0) return;
+    const list = this.getQualities();
+    this.qualityListeners.forEach((cb) => cb(list));
   }
 
   /**

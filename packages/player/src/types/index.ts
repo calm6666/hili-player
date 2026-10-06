@@ -11,9 +11,11 @@ export type {
   VolumeProgress,
   Popup,
   Tooltip,
-  ControlConfig,
   SwitchBtns,
 } from './controls';
+
+// 控制条配置（`ControlsConfig` 与 `PlayerConfig` 同源，定义在根类型模块）
+export type { ControlsConfig } from '@/types';
 
 export type {
   CardType,

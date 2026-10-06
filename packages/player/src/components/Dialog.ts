@@ -7,6 +7,7 @@
 
 import { h, defineComponent, useTemplateRef } from '@/core';
 import { isBrowser } from '@/utils';
+import { Close } from '@/hili-player/components/icons';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -146,11 +147,11 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
       tipEl.appendChild(colorRow);
     }
 
-    // 关闭按钮
+    // 关闭按钮（图标使用既有实现 icons 的 Close SVG，禁止用 unicode 字符当图标）
     /** 关闭弹幕提示的按钮元素 */
     const closeBtn = document.createElement('div');
     closeBtn.className = 'player-dm-tip-close';
-    closeBtn.textContent = '×';
+    closeBtn.innerHTML = Close;
     closeBtn.addEventListener('click', () => {
       hideDmTip();
       props.onClose?.();

@@ -8,6 +8,8 @@
 
 import { h, defineComponent, useTemplateRef } from '@/core';
 import { LottieIcon, LottieIconApi } from './LottieIcon';
+import { Switch } from '@/hili-player/components/Switch';
+import { ArrowRight } from './icons';
 import settingHoverAnimationData from '../assets/lottie-icon/settings-animation.json';
 
 /**
@@ -39,15 +41,6 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
   /** 右侧面板容器元素引用 */
   const menuRightRef = useTemplateRef<HTMLDivElement>(lifecycle, 'menuRightRef');
 
-  /** 镜像画面菜单项元素引用 */
-  const mirrorItemRef = useTemplateRef<HTMLDivElement>(lifecycle, 'mirrorItemRef');
-
-  /** 洗脑循环菜单项元素引用 */
-  const loopItemRef = useTemplateRef<HTMLDivElement>(lifecycle, 'loopItemRef');
-
-  /** 自动开播菜单项元素引用 */
-  const autostartItemRef = useTemplateRef<HTMLDivElement>(lifecycle, 'autostartItemRef');
-
   /** 播放方式单选按钮组元素引用 */
   const handoffRadioRef = useTemplateRef<HTMLDivElement>(lifecycle, 'handoffRadioRef');
 
@@ -63,14 +56,7 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
   // 状态
   // ============================================
 
-  /** 镜像画面是否开启 */
-  let mirrorEnabled = false;
-
-  /** 洗脑循环是否开启 */
-  let loopEnabled = false;
-
-  /** 自动开播是否开启 */
-  let autostartEnabled = false;
+  // 开关状态由 Switch 子组件持有并通过 onChange 回调上报，本地不再保存副本
 
   // ============================================
   // 事件处理函数
@@ -92,43 +78,43 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
   };
 
   /**
-   * 切换镜像画面的开关状态
+   * 镜像画面开关变化（与既有实现一致：菜单子项内嵌 ui-switch 开关）
+   * @param checked - 是否开启
    */
-  const toggleMirror = (): void => {
-    mirrorEnabled = !mirrorEnabled;
-    if (mirrorItemRef.value) {
-      mirrorItemRef.value.classList.toggle('active', mirrorEnabled);
-    }
-    lifecycle.emit?.('settingChange', { key: 'mirror', value: mirrorEnabled });
+  const handleMirrorChange = (checked: boolean): void => {
+    lifecycle.emit?.('settingChange', { key: 'mirror', value: checked });
   };
 
   /**
-   * 切换洗脑循环的开关状态
+   * 洗脑循环开关变化
+   * @param checked - 是否开启
    */
-  const toggleLoop = (): void => {
-    loopEnabled = !loopEnabled;
-    if (loopItemRef.value) {
-      loopItemRef.value.classList.toggle('active', loopEnabled);
-    }
-    lifecycle.emit?.('settingChange', { key: 'loop', value: loopEnabled });
+  const handleLoopChange = (checked: boolean): void => {
+    lifecycle.emit?.('settingChange', { key: 'loop', value: checked });
   };
 
   /**
-   * 切换自动开播的开关状态
+   * 自动开播开关变化
+   * @param checked - 是否开启
    */
-  const toggleAutostart = (): void => {
-    autostartEnabled = !autostartEnabled;
-    if (autostartItemRef.value) {
-      autostartItemRef.value.classList.toggle('active', autostartEnabled);
-    }
-    lifecycle.emit?.('settingChange', { key: 'autostart', value: autostartEnabled });
+  const handleAutostartChange = (checked: boolean): void => {
+    lifecycle.emit?.('settingChange', { key: 'autostart', value: checked });
   };
 
   /**
    * 点击更多设置菜单项，展开右侧面板
+   *
+   * 与既有实现一致：
+   * - state-show-right 加在 .ui-area 元素上（Controls.handleMenuAnimation 的
+   *   extraElements[0] 同样指向 .ui-area，hover 离开 300ms 后由其统一移除，
+   *   若加在 .player-ctrl-setting-menu 上则 Controls 无法清掉，导致下次
+   *   hover 时左右面板类残留、布局错乱）
+   * - player-ctrl-seting-more-area 加在 .player-ctrl-seting-menu-right 上
    */
   const handleMoreClick = (): void => {
-    menuAreaRef.value?.classList.add('state-show-right');
+    menuAreaRef.value
+      ?.querySelector('.ui-area')
+      ?.classList.add('state-show-right');
     menuRightRef.value?.classList.add('player-ctrl-seting-more-area');
     lifecycle.emit?.('moreSettingClick');
   };
@@ -184,8 +170,11 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
    * 组件销毁前的回调，重置右侧面板状态
    */
   lifecycle.onBeforeDestroy = (): void => {
-    // 重置右侧面板状态
-    menuAreaRef.value?.classList.remove('state-show-right');
+    // 重置右侧面板状态（与 handleMoreClick 的目标元素保持一致：.ui-area）
+    menuAreaRef.value
+      ?.querySelector('.ui-area')
+      ?.classList.remove('state-show-right');
+    menuRightRef.value?.classList.remove('player-ctrl-seting-more-area');
   };
 
   // ============================================
@@ -214,31 +203,30 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
         h('div', { class: 'ui-area' },
           // 左侧菜单
           h('div', { class: 'player-ctrl-seting-menu-left' },
-            // 镜像画面
-            h('div', {
-              class: 'player-ctrl-seting-menu-left-item',
-              ref: 'mirrorItemRef',
-              onClick: toggleMirror,
-            }, h('span', {}, '镜像画面')),
+            // 镜像画面（子项内嵌 ui-switch 开关，与既有实现 initCtrlSetting 一致）
+            h('div', { class: 'player-ctrl-seting-menu-left-item' },
+              h('span', {}, '镜像画面'),
+              h(Switch, { size: 'small', onChange: handleMirrorChange }),
+            ),
             // 洗脑循环
-            h('div', {
-              class: 'player-ctrl-seting-menu-left-item',
-              ref: 'loopItemRef',
-              onClick: toggleLoop,
-            }, h('span', {}, '洗脑循环')),
+            h('div', { class: 'player-ctrl-seting-menu-left-item' },
+              h('span', {}, '洗脑循环'),
+              h(Switch, { size: 'small', onChange: handleLoopChange }),
+            ),
             // 自动开播
-            h('div', {
-              class: 'player-ctrl-seting-menu-left-item',
-              ref: 'autostartItemRef',
-              onClick: toggleAutostart,
-            }, h('span', {}, '自动开播')),
-            // 更多播放设置
+            h('div', { class: 'player-ctrl-seting-menu-left-item' },
+              h('span', {}, '自动开播'),
+              h(Switch, { size: 'small', onChange: handleAutostartChange }),
+            ),
+            // 更多播放设置（箭头图标使用既有实现 icons 的 ArrowRight SVG；
+            // 既有实现直接内联 16×16 SVG，
+            // 不包 .common-svg-icon——该类会将 SVG 拉伸为 100% 尺寸导致图标过大、挤压菜单布局）
             h('div', {
               class: 'player-ctrl-seting-menu-left-item setting-more',
               onClick: handleMoreClick,
             },
               h('span', {}, '更多播放设置'),
-              h('span', { class: 'common-svg-icon' })
+              h('span', { innerHTML: ArrowRight })
             )
           ),
           // 右侧面板

@@ -6,13 +6,11 @@
  */
 
 import { h, defineComponent, useTemplateRef, useContext } from "@/core";
-import { isBrowser } from "@/utils";
 import type {
   CtrlShowMenu,
   VolumeProgress,
-  Popup,
   Tooltip,
-  ControlConfig,
+  ControlsConfig,
 } from "@/hili-player/types";
 import { ConfigContext } from "@/store/runtimeState";
 import { formatTime } from "@/utils/formatTime";
@@ -23,6 +21,7 @@ import { LeftControls } from "./LeftControls";
 import { RightControls } from "./RightControls";
 import { TopControls } from "./TopControls";
 import { PbpControls } from "./PbpControls";
+import type { ProgressBarApi } from "./ProgressBar";
 
 /**
  * 菜单类型
@@ -105,6 +104,8 @@ export type ControlsEvents = {
   menuAnimation: { type: MenuType; action: "show" | "hide" };
   progressChange: number;
   stateChange: unknown;
+  /** 顶部进度条挂载完成，向上层回传其更新 API */
+  progressBarMounted: ProgressBarApi;
 };
 
 export interface ControlsProps {
@@ -149,9 +150,9 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     let volume = props.volume;
     /** 当前播放倍速 */
     const backrate = props.backrate;
-    const configCtx = useContext<ControlConfig>(ConfigContext);
+    const configCtx = useContext<ControlsConfig>(ConfigContext);
     /** 控制条配置（浅拷贝，避免修改原始 props） */
-    const config: ControlConfig = {
+    const config: ControlsConfig = {
       ...configCtx,
     };
 
@@ -159,20 +160,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     const videoProgress: VideoPlayerProgress = {
       bufferTime: 0,
       currentTime: 0,
-    };
-
-    /** 是否正在拖拽进度条 */
-    let isDragging = false;
-    /** 鼠标在进度条上的水平偏移量（像素） */
-    let indicatorLeft = 0;
-
-    /** 弹出层状态（进度条悬浮预览） */
-    const popup: Popup = {
-      isActive: false,
-      left: 0,
-      delay: null,
-      currentTime: 0,
-      prevTime: 0,
     };
 
     /** 各菜单的显示/隐藏定时器状态 */
@@ -187,6 +174,20 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
 
     /** 各菜单的 DOM 元素引用配置 */
     const menuConfig: MenuConfig = {};
+
+    /**
+     * 菜单类型 → 菜单挂载点（按钮容器）选择器
+     * 与既有实现 CLASS_NAMES.CTRL_*_BTN 保持一致：
+     * state-show 类加在按钮容器上，由 CSS `.state-show .player-ctrl-*-menu-wrap` 控制菜单展开
+     */
+    const MENU_SELECTORS: Record<MenuType, string> = {
+      viewpoint: ".player-ctrl-btn.player-ctrl-viewpoint",
+      quality: ".player-ctrl-btn.player-ctrl-quality",
+      eplist: ".player-ctrl-btn.player-ctrl-eplist",
+      playbackrate: ".player-ctrl-btn.player-ctrl-playbackrate",
+      volume: ".player-ctrl-btn.player-ctrl-volume",
+      setting: ".player-ctrl-btn.player-ctrl-setting",
+    };
 
     /** 音量滑块拖拽状态 */
     const volumeProgress: VolumeProgress = {
@@ -227,11 +228,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       lifecycle,
       "progressThumbRef",
     );
-    /** 进度条鼠标跟随指示器元素 */
-    const moveIndicatorRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "moveIndicatorRef",
-    );
     /** 当前播放时间文本元素 */
     const playerCtrlTimeCurrentRef = useTemplateRef<HTMLDivElement>(
       lifecycle,
@@ -241,16 +237,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     const playerCtrlTimeDurationRef = useTemplateRef<HTMLDivElement>(
       lifecycle,
       "playerCtrlTimeDurationRef",
-    );
-    /** 进度条悬浮预览弹出层元素 */
-    const progressPopupRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "progressPopupRef",
-    );
-    /** 进度条悬浮预览时间文本元素 */
-    const previewTimeRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "previewTimeRef",
     );
     /** 音量按钮元素 */
     const ctrlVolumeBtnRef = useTemplateRef<HTMLDivElement>(
@@ -307,131 +293,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // ============================================
 
     /**
-     * 鼠标在进度条区域移动时，更新指示器位置和预览时间
-     * @param event - 鼠标事件
-     */
-    const mouseMove = (event: MouseEvent): void => {
-      event.preventDefault();
-      if (playerProgressAreaRef.value) {
-        const containerRect =
-          playerProgressAreaRef.value.getBoundingClientRect();
-        indicatorLeft = Math.min(
-          Math.max(0, event.clientX - containerRect.left + 1),
-          containerRect.width,
-        );
-        if (moveIndicatorRef.value) {
-          moveIndicatorRef.value.style.transform = `translateX(${indicatorLeft}px)`;
-        }
-        popup.currentTime = (indicatorLeft / containerRect.width) * duration;
-        if (previewTimeRef.value) {
-          previewTimeRef.value.innerHTML = formatTime(popup.currentTime);
-        }
-        if (indicatorLeft <= 80) {
-          popup.left = 0;
-        } else if (indicatorLeft >= containerRect.width - 80) {
-          popup.left = containerRect.width - 160;
-        } else {
-          popup.left = indicatorLeft - 80;
-        }
-        if (progressPopupRef.value) {
-          progressPopupRef.value.style.left = `${popup.left}px`;
-        }
-      }
-    };
-
-    /**
-     * 鼠标在进度条上按下时，开始拖拽并跳转到对应时间点
-     * @param event - 鼠标事件
-     */
-    const handleMouseDown = (event: MouseEvent): void => {
-      if (!isBrowser() || !playerProgressAreaRef.value) return;
-      isDragging = true;
-      const containerRect = playerProgressAreaRef.value.getBoundingClientRect();
-      const offsetX = event.clientX - containerRect.left;
-      const currentTime =
-        Math.min(Math.max(0.00001, offsetX / containerRect.width), 0.99999) *
-        duration;
-      updateCurrent(currentTime);
-      lifecycle.emit?.(ComponentEventEnum.PROGRESS_CHANGE, currentTime);
-      lifecycle.emit?.("seek", currentTime);
-      lifecycle.emit?.(ComponentEventEnum.STATE_CHANGE, "seekStart");
-      lifecycle.emit?.("seekStart");
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.addEventListener("touchmove", handleTouchMove);
-      document.addEventListener("touchend", handleTouchEnd);
-    };
-
-    /**
-     * 拖拽过程中鼠标移动时，实时更新播放进度
-     * @param event - 鼠标事件
-     */
-    const handleMouseMove = (event: MouseEvent): void => {
-      if (!isDragging || !playerProgressAreaRef.value) return;
-      const containerRect = playerProgressAreaRef.value.getBoundingClientRect();
-      const offsetX = event.clientX - containerRect.left;
-      const currentTime =
-        Math.min(Math.max(0.00001, offsetX / containerRect.width), 0.99999) *
-        duration;
-      updateCurrent(currentTime);
-      lifecycle.emit?.(ComponentEventEnum.PROGRESS_CHANGE, currentTime);
-      lifecycle.emit?.("seek", currentTime);
-    };
-
-    /**
-     * 触摸拖拽过程中手指移动时，实时更新播放进度
-     * @param event - 触摸事件
-     */
-    const handleTouchMove = (event: TouchEvent): void => {
-      if (!isDragging || !playerProgressAreaRef.value) return;
-      event.preventDefault();
-      const offsetX =
-        event.touches[0].clientX -
-        playerProgressAreaRef.value.getBoundingClientRect().left;
-      const currentTime =
-        Math.min(
-          Math.max(
-            0.00001,
-            offsetX / playerProgressAreaRef.value.getBoundingClientRect().width,
-          ),
-          0.99999,
-        ) * duration;
-      updateCurrent(currentTime);
-      lifecycle.emit?.(ComponentEventEnum.PROGRESS_CHANGE, currentTime);
-      lifecycle.emit?.("seek", currentTime);
-    };
-
-    /**
-     * 鼠标释放时，结束进度条拖拽
-     */
-    const handleMouseUp = (): void => {
-      isDragging = false;
-      removeMouseMoveListeners();
-      lifecycle.emit?.(ComponentEventEnum.STATE_CHANGE, "seekEnd");
-      lifecycle.emit?.("seekEnd");
-    };
-
-    /**
-     * 触摸结束时，结束进度条拖拽
-     */
-    const handleTouchEnd = (): void => {
-      isDragging = false;
-      removeMouseMoveListeners();
-      lifecycle.emit?.(ComponentEventEnum.STATE_CHANGE, "seekEnd");
-      lifecycle.emit?.("seekEnd");
-    };
-
-    /**
-     * 移除进度条拖拽相关的鼠标和触摸事件监听
-     */
-    const removeMouseMoveListeners = (): void => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("touchmove", handleTouchMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.removeEventListener("touchend", handleTouchEnd);
-    };
-
-    /**
      * 控制菜单的显示/隐藏动画，带 300ms 延迟
      * @param type - 菜单类型
      * @param action - 动作：'show' 显示或 'hide' 隐藏
@@ -460,49 +321,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
           });
         }
       }, 300);
-    };
-
-    /**
-     * 音量滑块区域鼠标按下时，直接跳转到对应音量
-     * @param event - 鼠标事件
-     */
-    /**
-     * 音量拖拽过程中鼠标移动时，实时更新音量
-     * @param event - 鼠标事件
-     */
-    const handleVolumeMouseMove = (event: MouseEvent): void => {
-      if (!volumeProgress.isDragging) return;
-      const offsetY = volumeProgress.startY - event.clientY;
-      const currPer = offsetY / 60;
-      const clampedVolume = Math.max(0, Math.min(1, volume + currPer));
-      updateVolumeDisplay(clampedVolume);
-      lifecycle.emit?.(ComponentEventEnum.VOLUME_CHANGE, clampedVolume);
-      lifecycle.emit?.("volumeChange", clampedVolume);
-      volumeProgress.startY = event.clientY;
-    };
-
-    /**
-     * 音量拖拽鼠标释放时，结束音量拖拽
-     */
-    const handlVolumeMouseUp = (): void => {
-      volumeProgress.isDragging = false;
-      removeVolumeMouseMoveListeners();
-    };
-
-    /**
-     * 添加音量拖拽相关的鼠标事件监听
-     */
-    const addVolumeMouseMoveListeners = (): void => {
-      document.addEventListener("mousemove", handleVolumeMouseMove);
-      document.addEventListener("mouseup", handlVolumeMouseUp);
-    };
-
-    /**
-     * 移除音量拖拽相关的鼠标事件监听
-     */
-    const removeVolumeMouseMoveListeners = (): void => {
-      document.removeEventListener("mousemove", handleVolumeMouseMove);
-      document.removeEventListener("mouseup", handlVolumeMouseUp);
     };
 
     /**
@@ -570,7 +388,9 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      * @param current - 当前时间（秒）
      */
     const updateThumbPosition = (current: number): void => {
+      // 总时长非法时跳过，避免除零产生 NaN/Infinity（与 ProgressBar 的边界处理一致）
       if (!progressThumbRef.value || !playerProgressAreaRef.value) return;
+      if (duration <= 0) return;
       const position =
         (current / duration) * playerProgressAreaRef.value.clientWidth - 10;
       applyTransform(progressThumbRef.value, 1, `translateX(${position}px)`);
@@ -612,10 +432,39 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // ============================================
 
     lifecycle.onMounted = (): void => {
-      console.log("[Controls] 组件挂载完成", volumeNumberRef.value);
       initDuration();
       initBackrate();
       initTooltip();
+
+      // 填充菜单配置：子组件（LeftControls / RightControls）先于父组件挂载，
+      // 此处控制条主体 DOM 已就绪，可直接在实体容器内检索各菜单挂载点
+      // （与既有实现 initMenu 的 querySelector 初始化方式一致）
+      const entity = controlEntityRef.value;
+      if (entity) {
+        (Object.keys(MENU_SELECTORS) as MenuType[]).forEach((type) => {
+          menuConfig[type] = {
+            element: entity.querySelector<HTMLDivElement>(MENU_SELECTORS[type]),
+          };
+        });
+        // 设置面板的附加元素（二级面板区域），与既有实现 menuConfig.setting.extraElements 一致
+        const settingElement = menuConfig.setting?.element ?? null;
+        if (settingElement) {
+          const extraElements = [
+            settingElement.querySelector<HTMLDivElement>(
+              ".player-ctrl-setting-menu.ui .ui-area",
+            ),
+            settingElement.querySelector<HTMLDivElement>(
+              ".player-ctrl-setting-menu.ui .ui-area .player-ctrl-seting-menu-right",
+            ),
+          ].filter((el): el is HTMLDivElement => el !== null);
+          if (extraElements.length > 0) {
+            menuConfig.setting = {
+              element: settingElement,
+              extraElements,
+            };
+          }
+        }
+      }
 
       // 暴露控制栏 API 给父组件
       lifecycle.emit?.("controlsMounted", {
@@ -704,7 +553,11 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         "div",
         {
           class: "player-control-entity",
-          "data-shadow-show": "false",
+          // 初始为 "true"（与既有实现一致）：
+          // scss 中 data-shadow-show="false" 会强制显示 .player-control-top（进度条），
+          // 而 data-ctrl-hidden 只控制 .player-control-bottom 的显隐。
+          // 若初始为 "false"，会出现「进度条显示了但底部按钮没一起显示」的不同步现象。
+          "data-shadow-show": "true",
           ref: "controlEntityRef",
         },
         h(TopControls, {
@@ -719,6 +572,9 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
           onSeekEnd: () => {
             lifecycle.emit?.("seekEnd");
           },
+          // 继续向上转发 ProgressBar 的更新 API，最终由 PlayerDocker 持有
+          onProgressBarMounted: (api) =>
+            lifecycle.emit?.("progressBarMounted", api),
         }),
         h(
           "div",

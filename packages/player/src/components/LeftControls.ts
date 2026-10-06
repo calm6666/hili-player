@@ -15,6 +15,7 @@ import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
+import { ConfigStoreContext } from '@/store/configStore';
 import { PlayerState } from '@/types';
 import { formatTime } from '@/utils/formatTime';
 import { LottieIcon, type LottieIconApi } from './LottieIcon';
@@ -62,6 +63,33 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   const configCtx = useContext(ConfigContext);
   const config = configCtx;
 
+  /** 可订阅配置中心（由 VideoPlayer 注入），用于 prev/next 按钮「设置即生效」 */
+  const configStore = useContext(ConfigStoreContext);
+
+  /** 底部左侧根节点（用于按类名检索按钮） */
+  const bottomLeftRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bottomLeftRef');
+
+  /** 受配置控制的按钮键 → 选择器 */
+  const CONTROL_SELECTORS: Record<'prev' | 'next', string> = {
+    prev: '.player-ctrl-prev',
+    next: '.player-ctrl-next',
+  };
+
+  /** 配置订阅清理函数 */
+  const configCleanups: Array<() => void> = [];
+
+  /**
+   * 命令式显示 / 隐藏 prev / next 按钮
+   * @param key - 控件键
+   * @param visible - 是否可见
+   */
+  const setControlVisible = (key: 'prev' | 'next', visible: boolean): void => {
+    const el = bottomLeftRef.value?.querySelector<HTMLElement>(
+      CONTROL_SELECTORS[key],
+    );
+    if (el) el.style.display = visible ? '' : 'none';
+  };
+
   /**
    * 通过 useContext 获取状态管理器
    * StateContext 由 VideoPlayer 通过 provide 注入
@@ -69,8 +97,9 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    */
   const state = useContext(StateContext);
 
-  /** 从状态管理器读取当前时长，用于 onMounted 初始化显示 */
+  /** 从状态管理器读取当前时长与当前时间，用于 onMounted 初始化显示 */
   const duration = state?.get(PlayerStateKeyEnum.DURATION) ?? 0;
+  const currentTime = state?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
 
   // ============================================
   // DOM 引用
@@ -232,11 +261,14 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
      * 加载中时禁用播放按钮，防止重复操作
      * 手动操作 DOM：el.style.pointerEvents = 'none'
      * 例如：state.set(PlayerStateKeyEnum.IS_LOADING, true)
+     * TODO: 待确认 loading 期间的 DOM 表现——既有实现中 loading 由独立的 Loading 组件
+     *       （player-loading-panel / state-loading 类）负责，未在控制栏切换 pointer-events，
+     *       且本组件没有播放按钮的 DOM 引用，故暂不实现回调体，仅占位监听。
      */
     useState(
       state,
       PlayerStateKeyEnum.IS_LOADING,
-      (isLoading) => {
+      (_isLoading) => {
       },
       lifecycle
     );
@@ -328,9 +360,10 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
     time: () => h('div', { class: 'player-ctrl-btn player-ctrl-time' },
       h('input', { id: 'playerCtrlTimeSeekInput', class: 'player-ctrl-time-seek', type: 'text', value: '0:00', style: 'display: none;' },),
       h('div', { class: 'player-ctrl-time-label' },
-        h('span', { class: 'player-ctrl-time-current', ref: 'playerCtrlTimeCurrentRef' }),
+        // 初始即渲染 formatTime(0)（"00:00"），未播放时时间显示不再是空白
+        h('span', { class: 'player-ctrl-time-current', ref: 'playerCtrlTimeCurrentRef' }, formatTime(currentTime)),
         h('span', { class: 'player-ctrl-time-divide' }, '/'),
-        h('span', { class: 'player-ctrl-time-duration', ref: 'playerCtrlTimeDurationRef' })
+        h('span', { class: 'player-ctrl-time-duration', ref: 'playerCtrlTimeDurationRef' }, formatTime(duration))
       )
     ),
     /** 渲染看点菜单，仅在看点数量大于 1 时显示 */
@@ -354,29 +387,59 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   // ============================================
 
   /**
-   * 组件挂载后，初始化总时长显示
-   * 手动操作 DOM：el.innerHTML = formatTime(duration)
+   * 组件挂载后，初始化当前时间与总时长显示
+   * 手动操作 DOM：el.innerHTML = formatTime(...)
    * 框架无响应式，必须手动更新 DOM
+   *
+   * 说明：useState 的订阅在首帧不执行回调（core/state.ts subscribe 跳过初始运行），
+   * 因此挂载时需手动刷一次，保证未播放时显示 "00:00 / 00:00" 而非空白
    */
   lifecycle.onMounted = (): void => {
+    if (playerCtrlTimeCurrentRef.value) {
+      playerCtrlTimeCurrentRef.value.innerHTML = formatTime(
+        state?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0,
+      );
+    }
     if (playerCtrlTimeDurationRef.value) {
       playerCtrlTimeDurationRef.value.innerHTML = formatTime(duration);
     }
+
+    // prev / next 按钮：按当前配置初始化显隐，并订阅 ui.controls.* 实现设置即生效
+    (['prev', 'next'] as const).forEach((key) => {
+      const initial =
+        configStore?.getPath<boolean>(`ui.controls.${key}`) ??
+        config[key] ??
+        true;
+      setControlVisible(key, initial !== false);
+    });
+    if (configStore) {
+      (['prev', 'next'] as const).forEach((key) => {
+        configCleanups.push(
+          configStore.subscribePath(`ui.controls.${key}`, (value) => {
+            setControlVisible(key, value !== false);
+          }),
+        );
+      });
+    }
+
     lifecycle.emit?.('leftControlsMounted');
+  };
+
+  /** 组件销毁前取消配置订阅 */
+  lifecycle.onBeforeDestroy = (): void => {
+    configCleanups.forEach((fn) => fn());
+    configCleanups.length = 0;
   };
 
   // ============================================
   // 主渲染函数
   // ============================================
-  return h('div', { class: 'player-control-bottom-left' },
+  return h('div', { class: 'player-control-bottom-left', ref: 'bottomLeftRef' },
     ...bottomLeftOrder
       .map(key => {
         /** 当前键对应的渲染函数 */
         const renderer = bottomLeftRenderers[key];
         if (!renderer) return null;
-        /** 根据 config 配置决定是否渲染 prev/next 按钮 */
-        if (key === 'prev' && !config.prev) return null;
-        if (key === 'next' && !config.next) return null;
         return renderer();
       })
       .filter((vnode): vnode is VNode => vnode !== null)

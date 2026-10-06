@@ -6,6 +6,21 @@
 
 import { h, defineComponent, useTemplateRef } from '@/core';
 import type { ComponentLifecycle } from '@/types';
+import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from '@/utils/rafTimeout';
+import { Plus, Issue } from '@/hili-player/components/icons';
+
+/**
+ * 顶栏提示信息（与既有实现的 Tooltip 结构一致）
+ */
+export interface TopTooltip {
+  /** 触发提示的 DOM 元素 */
+  element: HTMLElement | null;
+  /** 提示名称 */
+  name: string;
+  /** 提示的数据属性名（对应 Tooltips 提示项的 name） */
+  dataName: string;
+}
 
 /**
  * 顶部栏组件 Props 接口
@@ -21,6 +36,10 @@ export interface TopProps {
   onIssueClick?: () => void;
   /** 关注按钮点击回调 */
   onFollowClick?: () => void;
+  /** 请求显示 tooltip（问题反馈图标悬停） */
+  onShowTooltip?: (tooltip: TopTooltip) => void;
+  /** 请求隐藏 tooltip */
+  onHideTooltip?: (tooltip: TopTooltip) => void;
 }
 
 /**
@@ -39,6 +58,37 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
 
   /** 头像图片元素引用 */
   const avatarRef = useTemplateRef<HTMLImageElement>(lifecycle, 'avatarRef');
+
+  /** 问题反馈图标元素引用 */
+  const issueIconRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'issueIconRef');
+
+  // ============================================
+  // 问题反馈图标的悬停提示（与既有实现一致）
+  // ============================================
+
+  /** 提示延迟显示的定时器 */
+  let inTimer: AnimationFrameID | null = null;
+
+  /** 反馈按钮提示信息（dataName 对应 Tooltips 的 feedback-btn 提示项） */
+  const issueTooltip: TopTooltip = {
+    element: null,
+    name: 'issue',
+    dataName: 'feedback-btn',
+  };
+
+  /** 图标悬停 300ms 后显示提示 */
+  const handleIssueEnter = (): void => {
+    cancelRaf(inTimer!);
+    inTimer = rafTimeout(() => {
+      props.onShowTooltip?.(issueTooltip);
+    }, 300);
+  };
+
+  /** 移开图标立即隐藏提示 */
+  const handleIssueLeave = (): void => {
+    cancelRaf(inTimer!);
+    props.onHideTooltip?.(issueTooltip);
+  };
 
   // ============================================
   // 事件处理函数
@@ -110,6 +160,9 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
       hide();
     }
 
+    // 悬停提示的目标元素（挂载后才有 DOM 引用）
+    issueTooltip.element = issueIconRef.value;
+
     lifecycle.emit?.('topMounted', {
       setTitle,
       setAvatar,
@@ -158,7 +211,8 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
           h(
             'span',
             { class: 'player-follow-icon' },
-            h('span', { class: 'common-svg-icon' }, '+')
+            // 关注图标：既有实现 icons 的 Plus SVG（禁止用 unicode 字符当图标）
+            h('span', { class: 'common-svg-icon', innerHTML: Plus })
           ),
           h('span', { class: 'player-follow-text' }, '关注')
         )
@@ -169,8 +223,15 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
       { class: 'player-top-issue' },
       h(
         'span',
-        { class: 'player-top-issue-icon', onClick: handleIssueClick },
-        h('span', { class: 'common-svg-icon' }, '?')
+        {
+          class: 'player-top-issue-icon',
+          ref: 'issueIconRef',
+          onMouseEnter: handleIssueEnter,
+          onMouseLeave: handleIssueLeave,
+          onClick: handleIssueClick,
+        },
+        // 问题反馈图标：既有实现 icons 的 Issue SVG（禁止用 unicode 字符当图标）
+        h('span', { class: 'common-svg-icon', innerHTML: Issue })
       )
     )
   );

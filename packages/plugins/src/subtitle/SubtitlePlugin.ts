@@ -29,7 +29,10 @@ import type { VideoPlayer } from '../../../player/src/player/VideoPlayer';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { PlayerEventEnum } from '@/core/events';
 import { parseSubtitle } from '@/utils/subtitle';
-import { isBrowser } from '@/utils';
+import { isBrowser, createLogger } from '@/utils';
+
+/** 字幕插件日志（仅 error 级别的加载失败诊断） */
+const logger = createLogger('SubtitlePlugin');
 
 // ============================================
 // 类型定义
@@ -409,7 +412,7 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
       this.currentIndex = -1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[SubtitlePlugin] 字幕加载失败: ${message}`);
+      logger.error(`字幕加载失败: ${message}`);
     }
   }
 

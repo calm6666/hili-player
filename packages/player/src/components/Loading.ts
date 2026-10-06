@@ -37,9 +37,14 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
 
   /**
    * 显示加载面板
+   *
+   * 面板在 scss 中默认 `display: none`，可见性由既有类名 `state-loading` 驱动
+   * （见 styles/loading.scss `.player-loading-panel.state-loading { display: block }`），
+   * 因此此处必须补上该类，否则仅清空内联 display 无法真正显示。
    */
   const show = (): void => {
     if (loadingPanelRef.value) {
+      loadingPanelRef.value.classList.add('state-loading');
       loadingPanelRef.value.style.display = '';
     }
   };

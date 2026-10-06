@@ -113,7 +113,12 @@ export class PluginManager {
         pluginWithOpts.options &&
         pluginWithOpts.options.debug === undefined
       ) {
-        pluginWithOpts.options.debug = this.player.props.debug;
+        // 新命名空间为 advanced.debug；兼容迁移期仍读取旧扁平键 debug 的调用方
+        const legacy: Record<string, unknown> = this.player.props;
+        const legacyDebug =
+          typeof legacy.debug === "boolean" ? legacy.debug : undefined;
+        pluginWithOpts.options.debug =
+          this.player.props.advanced?.debug ?? legacyDebug;
       }
     }
 

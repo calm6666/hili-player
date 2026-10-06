@@ -327,71 +327,317 @@ export enum PlayerState {
 }
 
 /**
- * 播放器倍速枚举
- * 表示视频播放速度
- */
-export enum PlaybackRate {
-  /** 两倍速 */
-  DOUBLE_SPEED = 2,
-  /** 1.5 倍速 */
-  ONE_POINT_FIVE_SPEED = 1.5,
-  /** 1.25 倍速 */
-  ONE_POINT_TWO_FIVE_SPEED = 1.25,
-  /** 正常倍速 */
-  NORMAL_SPEED = 1,
-  /** 0.75 倍速 */
-  ZERO_POINT_SEVEN_FIVE_SPEED = 0.75,
-  /** 0.5 倍速 */
-  HALF_SPEED = 0.5,
-}
-
-/**
  * 播放模式枚举
+ *
+ * 说明：单曲循环语义由顶层 `loop: true` 承担，此处不再提供 SINGLE_LOOP。
  */
 export enum PlayMode {
   /** 顺序播放 */
   ORDER = "order",
   /** 列表循环 */
-  LOOP = "loop",
-  /** 单曲循环 */
-  SINGLE_LOOP = "singleLoop",
+  REPEAT_ALL = "repeatAll",
   /** 随机播放 */
-  RANDOM = "random",
-}
-
-/**
- * 画质等级枚举
- */
-export enum QualityLevel {
-  /** 自动选择 */
-  AUTO = "auto",
-  /** 4K 超清 */
-  P4K = "4k",
-  /** 1080P 高清 */
-  P1080 = "1080p",
-  /** 720P 标清 */
-  P720 = "720p",
-  /** 480P 流畅 */
-  P480 = "480p",
-  /** 360P 省流 */
-  P360 = "360p",
+  SHUFFLE = "shuffle",
 }
 
 import type { Plugin } from "@/hili-player/core/plugin";
+import type { LogLevel } from "@/utils";
+import type { MediaManifestSource } from "@/types/streamPlugin";
 
 // ============================================
-// 播放器配置接口
+// 播放器配置接口（命名空间化）
+// ============================================
+// 依据 docs/player-api-design.md §3.1：
+//   - 顶层只保留资源类三项（container / src / poster）
+//   - 其余按功能分组为命名空间，便于深度合并与运行时动态更新
 // ============================================
 
 /**
- * 播放器配置接口
- * 初始化播放器时的配置选项
+ * 深层可选：把某个值的可空联合展开为「可选」
+ * - 数组整体替换（保留元素原类型，不逐元素深可选）
+ * - 函数原样保留（避免把回调映射成空对象）
+ * - 非纯对象的联合（如 `HTMLElement | string`）原样保留
  */
-export interface PlayerConfig {
+type OptionalOf<V> = undefined extends V ? undefined : never;
+
+type DeepPartialValue<V> = NonNullable<V> extends (...args: never[]) => unknown
+  ? V
+  : NonNullable<V> extends readonly (infer U)[]
+    ? OptionalOf<V> | U[]
+    : string extends keyof NonNullable<V>
+      ? V
+      : NonNullable<V> extends object
+        ? | OptionalOf<V>
+          | {
+              [K in keyof NonNullable<V>]?: DeepPartialValue<NonNullable<V>[K]>;
+            }
+        : V;
+
+/**
+ * 深层可选类型
+ *
+ * 用于「用户输入配置」：嵌套命名空间可部分传参。
+ */
+export type DeepPartial<T> = {
+  [K in keyof T]?: DeepPartialValue<T[K]>;
+};
+
+/**
+ * 视频源
+ * - `string`：单个 URL
+ * - `ProgressiveVariant[]`：渐进式（MP4）多清晰度变体，**仅 MP4 使用**
+ * - `MediaManifestSource`：HLS/DASH 的清单对象（对象注入模式）
+ */
+export type PlayerSource = string | ProgressiveVariant[] | MediaManifestSource;
+
+/**
+ * 清晰度选择模式
+ * - `auto`：自适应（HLS/DASH 走 ABR；MP4 取默认档）
+ * - `manual`：用户显式指定档位
+ */
+export type QualityMode = 'auto' | 'manual';
+
+/**
+ * 画面显示模式
+ * - `normal`：普通
+ * - `web`：网页全屏
+ * - `wide`：宽屏
+ * - `mini`：迷你播放器
+ */
+export type DisplayMode = 'normal' | 'web' | 'wide' | 'mini';
+
+/**
+ * 播放列表条目
+ * 复用同一 video 元素与整棵 DOM 换源时使用
+ */
+export interface MediaItem {
+  /** 条目唯一标识 */
+  id?: string;
+  /** 视频源 */
+  src: PlayerSource;
+  /** 条目标题 */
+  title?: string;
+  /** 条目封面图 */
+  poster?: string;
+  /** 起播时间（秒） */
+  startTime?: number;
+  /** 该条目的弹幕地址 */
+  danmakuUrl?: string;
+  /** 该条目的字幕轨道列表 */
+  subtitleList?: SubtitleConfig[];
+}
+
+/**
+ * 播放行为配置
+ * 键名沿用 HTMLMediaElement 惯例
+ */
+export interface PlaybackConfig {
+  /** 自动播放 */
+  autoplay?: boolean;
+  /** 初始静音 */
+  muted?: boolean;
+  /** 初始音量 (0-1) */
+  volume?: number;
+  /** 初始倍速 */
+  playbackRate?: number;
+  /** 是否循环播放（单曲循环语义由此承担） */
+  loop?: boolean;
+  /** 播放模式（列表连播策略） */
+  playMode?: PlayMode;
+  /** 预加载策略 */
+  preload?: 'none' | 'metadata' | 'auto';
+  /** 移动端内联播放 */
+  playsinline?: boolean;
+  /** 起播时间（秒），续播场景 */
+  startTime?: number;
+}
+
+/**
+ * 快捷键步长配置
+ * 支持把 `keyboard` 从布尔升级为对象形式
+ */
+export interface KeyboardStepConfig {
+  /** 方向键快进/快退步长（秒） */
+  seekStep?: number;
+  /** 方向键音量步长 (0-1) */
+  volumeStep?: number;
+  /** 长按加速倍率 */
+  holdRate?: number;
+}
+
+/**
+ * UI 外观与控件配置
+ */
+export interface UiConfig {
+  /** 播放器名称（原 playerName），用于 aria-label / 日志 */
+  title?: string;
+  /** 控制条开关（单一来源） */
+  controls?: ControlsConfig;
+}
+
+/**
+ * 交互配置
+ */
+export interface InteractionConfig {
+  /** 快捷键：布尔开关，或对象形式配置步长 */
+  keyboard?: boolean | KeyboardStepConfig;
+}
+
+/**
+ * 清晰度配置
+ */
+export interface QualityConfig {
+  /** 默认画质（档位 id，或 'auto'） */
+  default?: string;
+  /** 选择模式 */
+  mode?: QualityMode;
+  /** 清晰度上限（像素高度） */
+  max?: number;
+  /** 清晰度下限（像素高度） */
+  min?: number;
+  /** 自定义菜单文案，按档位 id 索引 */
+  labels?: Record<string, string>;
+}
+
+/**
+ * 进度条配置
+ */
+export interface ProgressConfig {
+  /** 进度条分段数据 */
+  segments?: ProgressSegment[];
+}
+
+/**
+ * 弹幕配置（命名空间形态）
+ */
+export interface DanmakuConfigSpace {
+  /** 是否启用弹幕能力 */
+  enabled?: boolean;
+  /** 弹幕数据源 URL（原 source） */
+  url?: string;
+  /** 是否显示弹幕 */
+  visible?: boolean;
+  /** 弹幕透明度 (0-1) */
+  opacity?: number;
+  /** 弹幕速度倍率 */
+  speed?: number;
+  /** 字号（px） */
+  fontSize?: number;
+  /** 显示区域占比 (0-1) */
+  area?: number;
+}
+
+/**
+ * 字幕配置（命名空间形态）
+ */
+export interface SubtitleConfigSpace {
+  /** 是否启用字幕 */
+  enabled?: boolean;
+  /** 字幕轨道列表（原 subtitles） */
+  list?: SubtitleConfig[];
+}
+
+/**
+ * 插件配置
+ */
+export interface PluginsConfig {
+  /** 插件实例列表 */
+  list?: Plugin[];
+  /** 按插件名索引的插件选项 */
+  options?: Record<string, unknown>;
+}
+
+/**
+ * 持久化配置
+ */
+export interface StorageConfig {
+  /** 是否启用持久化 */
+  enabled?: boolean;
+  /** localStorage 键前缀 */
+  prefix?: string;
+}
+
+/**
+ * SSR 配置（命名空间形态）
+ */
+export interface SsrConfig {
+  /** 是否启用 SSR 模式 */
+  enabled?: boolean;
+  /** SSR 占位符 HTML */
+  placeholder?: string;
+  /** 是否延迟 hydration */
+  deferHydration?: boolean;
+}
+
+/**
+ * 高级配置
+ */
+export interface AdvancedConfig {
+  /** 日志级别 */
+  logLevel?: LogLevel;
+  /** 调试模式（等价 logLevel: 'debug'） */
+  debug?: boolean;
+}
+
+/**
+ * 播放器配置（命名空间形态）
+ *
+ * 顶层只保留资源类三项，其余按功能分组。
+ * 这是「配置可动态更新」的对外类型，`mergePlayerConfig` 会与默认值深度合并。
+ */
+export type PlayerConfig = {
+  // ── 资源（顶层）──
   /** 容器元素或选择器 */
   container?: HTMLElement | string;
-  /** 视频源 URL、URL 数组（备用源）或多清晰度源数组 */
-  src: string | string[] | QualitySource[];
+  /** 视频源 */
+  src?: PlayerSource;
+  /** 封面图 URL */
+  poster?: string;
+
+  // ── 分组 ──
+  /** 播放行为 */
+  playback?: PlaybackConfig;
+  /** 播放列表（复用 DOM 换视频用） */
+  playlist?: MediaItem[];
+  /** 初始播放第几个 */
+  playlistIndex?: number;
+  /** 外观与控件 */
+  ui?: UiConfig;
+  /** 交互与快捷键 */
+  interaction?: InteractionConfig;
+  /** 清晰度 */
+  quality?: QualityConfig;
+  /** 进度条 */
+  progress?: ProgressConfig;
+  /** 弹幕 */
+  danmaku?: DanmakuConfigSpace;
+  /** 字幕 */
+  subtitle?: SubtitleConfigSpace;
+  /** 插件 */
+  plugins?: PluginsConfig;
+  /** 持久化 */
+  storage?: StorageConfig;
+  /** SSR */
+  ssr?: SsrConfig;
+  /** 高级 */
+  advanced?: AdvancedConfig;
+  /** 配置式事件回调 */
+  callbacks?: EventListeners;
+};
+
+/**
+ * 旧「扁平」配置形态
+ *
+ * 仅用于兼容层 `normalizeConfig()` 的输入类型描述，
+ * 表示历史版本直接写在顶层的配置键。新代码请使用 `PlayerConfig`。
+ */
+export interface LegacyPlayerConfig {
+  /** 容器元素或选择器 */
+  container?: HTMLElement | string;
+  /** 视频源（含旧的 string[] 备用源写法） */
+  src?: string | string[] | ProgressiveVariant[];
+  /** 封面图 URL */
+  poster?: string;
   /** 自动播放 */
   autoplay?: boolean;
   /** 默认静音 */
@@ -399,48 +645,68 @@ export interface PlayerConfig {
   /** 默认音量 (0-1) */
   volume?: number;
   /** 默认播放速度 */
-  playbackRate?: PlaybackRate;
+  playbackRate?: number;
   /** 是否循环播放 */
   loop?: boolean;
-  /** 控制条配置 */
-  controlBtns?: ControlBtnConfig;
-  /** 封面图 URL */
-  poster?: string;
-  /** 默认画质 */
-  defaultQuality?: QualityLevel;
   /** 播放模式 */
   playMode?: PlayMode;
+  /** 预加载策略 */
+  preload?: 'none' | 'metadata' | 'auto';
+  /** 移动端内联播放 */
+  playsinline?: boolean;
+  /** 控制条配置（旧键名之一） */
+  controls?: ControlsConfig;
+  /** 控制条配置（更早的旧键名） */
+  controlBtns?: ControlsConfig;
+  /** 默认画质（档位 id） */
+  defaultQuality?: string;
   /** 是否启用键盘快捷键 */
-  keyboard?: boolean;
+  keyboard?: boolean | KeyboardStepConfig;
   /** 视频进度条分段 */
   progressSegments?: ProgressSegment[];
   /** 播放器名称 */
   playerName?: string;
-  /** 字幕配置 */
+  /** 字幕轨道列表 */
   subtitles?: SubtitleConfig[];
-  /** 弹幕配置 */
-  danmaku?: DanmakuConfig;
+  /** 弹幕配置（兼容旧的 `source` 字段） */
+  danmaku?: DanmakuConfigSpace & { source?: string };
   /** SSR 配置 */
   ssr?: SSRConfig;
-  /** 插件配置列表 */
   /** 插件列表 */
   plugins?: Plugin[];
-  /** 是否开启调试模式（开启后输出详细日志，关闭则静默） */
+  /** 是否开启调试模式 */
   debug?: boolean;
   /** 事件回调函数 */
   callbacks?: EventListeners;
 }
 
 /**
- * 控制配置
+ * 控制条配置
+ *
+ * 由原 `ControlBtnConfig`（对外配置）与运行时 `ControlConfig` 合并而来，
+ * 是控件开关的唯一类型来源。控件键与状态/事件名对齐（`wideScreen` / `webFullscreen`）。
  */
-export interface ControlBtnConfig {
+export interface ControlsConfig {
+  /** 上一个分 P 按钮 */
   prev?: boolean;
+  /** 下一个分 P 按钮 */
   next?: boolean;
+  /** 看点按钮 */
+  viewpoint?: boolean;
+  /** 清晰度菜单 */
+  quality?: boolean;
+  /** 选集菜单 */
+  episodes?: boolean;
+  /** 设置菜单 */
   setting?: boolean;
+  /** 画中画按钮 */
   pip?: boolean;
-  wide?: boolean;
-  web?: boolean;
+  /** 宽屏按钮 */
+  wideScreen?: boolean;
+  /** 网页全屏按钮 */
+  webFullscreen?: boolean;
+  /** 进度条分段（运行时从配置透传给控制条） */
+  progressSegments?: ProgressSegment[];
 }
 
 /**
@@ -466,7 +732,7 @@ export interface ProgressSegment {
   /** 阴影文本元素（用于显示时间预览等） */
   shadowTextElement?: HTMLDivElement;
   /** 分段文本描述 */
-  pointText: string;
+  label: string;
 }
 
 /**
@@ -483,21 +749,24 @@ export interface SSRConfig {
 }
 
 /**
- * 多清晰度视频源
+ * 渐进式（MP4）清晰度变体
+ *
+ * ⚠️ 仅 MP4 多文件场景需要手填；HLS/DASH 的清晰度由 manifest 在运行时发现，不要传。
+ * `height` 与 `label` 至少提供其一（都缺时开发环境会打印警告）。
  */
-export interface QualitySource {
-  /** 清晰度等级 */
-  quality: QualityLevel;
+export interface ProgressiveVariant {
   /** 视频 URL */
   url: string;
-  /** 显示名称 */
-  name: string;
+  /** 显示名称（不传则由 height 推导） */
+  label?: string;
   /** 视频宽度（像素） */
   width?: number;
-  /** 视频高度（像素） */
+  /** 视频高度（像素），既是标识也是排序依据 */
   height?: number;
   /** 视频码率（bps） */
   bitrate?: number;
+  /** 档位标识（可选，默认用数组索引） */
+  quality?: string;
 }
 
 /**
@@ -509,9 +778,9 @@ export interface SubtitleConfig {
   /** 显示名称 */
   label: string;
   /** 字幕文件 URL (WebVTT 格式) */
-  src: string;
+  url: string;
   /** 是否默认启用 */
-  default?: boolean;
+  isDefault?: boolean;
 }
 
 /**
@@ -521,7 +790,7 @@ export interface DanmakuConfig {
   /** 是否启用弹幕 */
   enabled: boolean;
   /** 弹幕数据源 URL 或 WebSocket 地址 */
-  source: string;
+  url: string;
   /** 弹幕透明度 (0-1) */
   opacity?: number;
   /** 弹幕速度倍率 */
@@ -555,7 +824,7 @@ export interface PlayerEvents extends Record<string, (...args: any[]) => void> {
   /** 播放速度变化 */
   ratechange: (rate: number) => void;
   /** 画质切换 */
-  qualitychange: (quality: QualityLevel) => void;
+  qualitychange: (quality: string) => void;
   /** 进入全屏 */
   fullscreenchange: (isFullscreen: boolean) => void;
   /** 进入画中画 */
@@ -617,8 +886,8 @@ export interface PlayerStateData {
   muted: boolean;
   /** 当前播放速度 */
   playbackRate: number;
-  /** 当前画质 */
-  quality: QualityLevel;
+  /** 当前画质（档位 id） */
+  quality: string;
   /** 是否全屏 */
   isFullscreen: boolean;
   /** 是否画中画 */
@@ -743,12 +1012,12 @@ export interface ErrorProps {
  * 画质选择组件属性
  */
 export interface QualitySelectorProps {
-  /** 当前画质 */
-  current: QualityLevel;
+  /** 当前画质（档位 id） */
+  current: string;
   /** 可用画质列表 */
-  qualities: QualityLevel[];
+  qualities: ProgressiveVariant[];
   /** 画质切换回调 */
-  onChange: (quality: QualityLevel) => void;
+  onChange: (quality: string) => void;
   /** 下拉菜单打开回调 */
   onOpen?: () => void;
   /** 下拉菜单关闭回调 */
@@ -775,10 +1044,10 @@ export interface ControlBarProps {
   muted: boolean;
   /** 播放速度 */
   playbackRate: number;
-  /** 当前画质 */
-  quality: QualityLevel;
+  /** 当前画质（档位 id） */
+  quality: string;
   /** 可用画质列表 */
-  qualities: QualityLevel[];
+  qualities: ProgressiveVariant[];
   /** 播放模式 */
   playMode: PlayMode;
   /** 是否全屏 */
@@ -798,7 +1067,7 @@ export interface ControlBarProps {
   /** 速度变化回调 */
   onRateChange: (rate: number) => void;
   /** 画质切换回调 */
-  onQualityChange: (quality: QualityLevel) => void;
+  onQualityChange: (quality: string) => void;
   /** 播放模式切换回调 */
   onPlayModeChange: (mode: PlayMode) => void;
   /** 全屏切换回调 */
@@ -852,7 +1121,7 @@ export interface PlayerMethods {
   /** 切换画中画 */
   togglePip(): void;
   /** 切换画质 */
-  setQuality(quality: QualityLevel): void;
+  setQuality(quality: string): void;
   /** 销毁播放器 */
   destroy(): void;
   /** 获取当前状态 */

@@ -340,12 +340,20 @@ function switchPlayerSource(): void {
   try {
     const config: PlayerConfig = {
       src,
-      autoplay: false,
-      muted: true,
-      volume: 0.8,
-      keyboard: true,
-      plugins,
-      debug: false,
+      playback: {
+        autoplay: false,
+        muted: true,
+        volume: 0.8,
+      },
+      interaction: {
+        keyboard: true,
+      },
+      plugins: {
+        list: plugins,
+      },
+      advanced: {
+        debug: false,
+      },
     };
 
     const newPlayer = new VideoPlayer(config);

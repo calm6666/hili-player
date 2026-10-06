@@ -9,6 +9,14 @@ import { h, defineComponent, useTemplateRef } from '@/core';
 import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
 import type { AnimationFrameID } from '@/utils/rafTimeout';
 import type { ComponentLifecycle } from '@/types';
+import { DmSetting } from '@/hili-player/components/DmSetting';
+import { Selection } from '@/hili-player/components/Selection';
+import {
+  DanmakuSwitchOn,
+  DanmakuSwitchOff,
+  DanmakuSetting,
+  DanmakuTextSetting,
+} from '@/hili-player/components/icons';
 
 /**
  * 面板显示状态
@@ -130,15 +138,17 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
   // 事件处理
   // ============================================
 
-  /** 处理输入框获得焦点事件 */
+  /**
+   * 处理输入框获得焦点事件
+   * 说明：lifecycle.emit 会同时路由到 props.onInputFocus（框架 onXxx 约定），
+   * 因此这里不再显式调用 props 回调，否则会重复触发
+   */
   const handleInputFocus = (): void => {
-    props.onInputFocus?.();
     lifecycle.emit?.('inputFocus');
   };
 
-  /** 处理输入框失去焦点事件 */
+  /** 处理输入框失去焦点事件（同上，避免重复触发 props 回调） */
   const handleInputBlur = (): void => {
-    props.onInputBlur?.();
     lifecycle.emit?.('inputBlur');
   };
 
@@ -151,10 +161,9 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
     inputValue = event.target.value;
   };
 
-  /** 处理发送弹幕，清空输入框并触发回调 */
+  /** 处理发送弹幕，清空输入框并触发回调（emit 会路由到 props.onSendDanmaku） */
   const handleSend = (): void => {
     if (inputValue.trim()) {
-      props.onSendDanmaku?.(inputValue.trim());
       lifecycle.emit?.('sendDanmaku', inputValue.trim());
       if (inputRef.value) {
         inputRef.value.value = '';
@@ -165,17 +174,18 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
 
   /**
    * 处理弹幕开关变化事件
+   * emit 会同时路由到 props.onDanmakuSwitch，不再显式调用 props 回调
    * @param event - 变化事件
    */
   const handleSwitchChange = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) return;
     isDanmakuEnabled = event.target.checked;
-    props.onDanmakuSwitch?.(event.target.checked);
     lifecycle.emit?.('danmakuSwitch', event.target.checked);
   };
 
   /**
    * 显示弹幕开关的提示气泡
+   * emit 会同时路由到 props.onShowTooltip，不再显式调用 props 回调
    * @param event - 鼠标进入事件
    */
   const showSwitchTip = (event: Event): void => {
@@ -184,16 +194,14 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
     }
     cancelRaf(tipInTimer!);
     tipInTimer = rafTimeout(() => {
-      props.onShowTooltip?.(tooltip);
       lifecycle.emit?.('showTooltip', tooltip);
     }, 300);
   };
 
-  /** 隐藏弹幕开关的提示气泡 */
+  /** 隐藏弹幕开关的提示气泡（同上，避免重复触发 props 回调） */
   const hideSwitchTip = (): void => {
     cancelRaf(tipInTimer!);
-    props.onHideTooltip?.();
-    lifecycle.emit?.('hideTooltip');
+    lifecycle.emit?.('hideTooltip', tooltip);
   };
 
   /**
@@ -337,10 +345,12 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
           }),
           h('label', { class: 'danmaku-switch-label' },
             h('span', { class: 'danmaku-switch-on' },
-              h('span', { class: 'common-svg-icon' })
+              // 弹幕开关图标：既有实现 icons 的 DanmakuSwitchOn SVG
+              h('span', { class: 'common-svg-icon', innerHTML: DanmakuSwitchOn })
             ),
             h('span', { class: 'danmaku-switch-off' },
-              h('span', { class: 'common-svg-icon' })
+              // 弹幕开关图标：既有实现 icons 的 DanmakuSwitchOff SVG
+              h('span', { class: 'common-svg-icon', innerHTML: DanmakuSwitchOff })
             )
           )
         )
@@ -350,9 +360,13 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
         class: 'player-dm-setting',
         ref: 'settingIconRef',
       },
-        h('span', { class: 'common-svg-icon' }),
+        // 弹幕设置图标：既有实现 icons 的 DanmakuSetting SVG
+        h('span', { class: 'common-svg-icon', innerHTML: DanmakuSetting }),
         h('div', { class: 'player-dm-setting-wrap', ref: 'settingWrapRef' },
-          h('div', { class: 'player-dm-setting-box ui ui-panel ui-dark' })
+          h('div', { class: 'player-dm-setting-box ui ui-panel ui-dark' },
+            // 弹幕设置面板（显示区域 / 不透明度 / 字号 / 速度，写入运行时状态）
+            h(DmSetting, {}),
+          )
         )
       ),
       // 输入栏
@@ -364,9 +378,13 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
             ref: 'textSettingIconRef',
           },
             h('span', { class: 'player-iconfont player-iconfont-danmakutype' },
-              h('span', { class: 'common-svg-icon' })
+              // 弹幕类型图标：既有实现 icons 的 DanmakuTextSetting SVG
+              h('span', { class: 'common-svg-icon', innerHTML: DanmakuTextSetting })
             ),
-            h('div', { class: 'player-mode-selection-container', ref: 'selectionContainerRef' })
+            h('div', { class: 'player-mode-selection-container', ref: 'selectionContainerRef' },
+              // 弹幕类型选择面板（字号 / 模式 / 颜色，写入运行时状态）
+              h(Selection, {}),
+            ),
           ),
           // 登录提示
           props.showLoginTip ? h('div', { class: 'player-dm-wrap' },

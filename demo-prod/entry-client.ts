@@ -258,7 +258,9 @@ function switchSource(): void {
   sourceIndex++;
 
   // 根据视频源类型选择对应的流媒体插件
-  const plugins: Array<ReturnType<typeof createHlsPlugin>> = [];
+  const plugins: Array<
+    ReturnType<typeof createHlsPlugin> | ReturnType<typeof createDashPlugin>
+  > = [];
   if (src.includes(".m3u8")) {
     plugins.push(createHlsPlugin({ autoplay: false }));
   }
@@ -269,12 +271,20 @@ function switchSource(): void {
   // 创建新播放器实例并挂载
   const player = new VideoPlayer({
     src,
-    autoplay: false,
-    muted: true,
-    volume: 0.8,
-    keyboard: true,
-    plugins,
-    debug: false,
+    playback: {
+      autoplay: false,
+      muted: true,
+      volume: 0.8,
+    },
+    interaction: {
+      keyboard: true,
+    },
+    plugins: {
+      list: plugins,
+    },
+    advanced: {
+      debug: false,
+    },
   });
 
   wrapper.innerHTML = "";

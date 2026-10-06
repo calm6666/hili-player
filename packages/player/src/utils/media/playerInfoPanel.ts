@@ -13,6 +13,7 @@ import {
   formatBitrate,
 } from './chart';
 import { PlayerType, type PlayerStats, type DashPlayer, type HlsPlayer, type FlvPlayer } from './types';
+import { Close } from '@/hili-player/components/icons';
 
 /** 面板配置 */
 export interface PanelConfig {
@@ -160,7 +161,8 @@ export class PlayerInfoPanel {
     `;
 
     const closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '✕';
+    // 关闭图标使用既有实现 icons 的 Close SVG（禁止用 unicode 字符当图标）
+    closeBtn.innerHTML = Close;
     closeBtn.style.cssText = `
       background: none;
       border: none;
@@ -170,6 +172,8 @@ export class PlayerInfoPanel {
       padding: 4px 8px;
       border-radius: 4px;
       transition: background 0.2s;
+      display: flex;
+      align-items: center;
     `;
     closeBtn.onmouseover = (): void => {
       closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';

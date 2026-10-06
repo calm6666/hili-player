@@ -5,6 +5,7 @@
  */
 
 import { h, defineComponent, useTemplateRef } from '@/core';
+import { Close } from '@/hili-player/components/icons';
 import type { ComponentLifecycle } from '@/types';
 
 /**
@@ -67,6 +68,24 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
   // ============================================
 
   /**
+   * 同步外层容器（.player-toast-wrap）的可见性
+   *
+   * scss 中 `.player-toast-wrap` 默认 `display: none`，仅设置内部节点 display
+   * 不足以显示提示，故需在任一提示可见时把容器切回 flex。
+   */
+  const updateWrapVisibility = (): void => {
+    const wrap =
+      autoToastRef.value?.parentElement ?? fixedToastRef.value?.parentElement;
+    if (!wrap) return;
+    const autoVisible =
+      autoToastRef.value !== null && autoToastRef.value.style.display !== 'none';
+    const fixedVisible =
+      fixedToastRef.value !== null &&
+      fixedToastRef.value.style.display !== 'none';
+    wrap.style.display = autoVisible || fixedVisible ? 'flex' : 'none';
+  };
+
+  /**
    * 显示自动消失的短暂提示
    * @param text - 提示文本内容
    * @param duration - 显示持续时间（毫秒），默认 3000ms
@@ -76,6 +95,7 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
       autoToastRef.value.textContent = text;
       autoToastRef.value.style.display = '';
     }
+    updateWrapVisibility();
     // 清除之前的定时器
     if (autoToastTimer !== null) {
       clearTimeout(autoToastTimer);
@@ -93,6 +113,7 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
     if (autoToastRef.value) {
       autoToastRef.value.style.display = 'none';
     }
+    updateWrapVisibility();
     if (autoToastTimer !== null) {
       clearTimeout(autoToastTimer);
       autoToastTimer = null;
@@ -114,6 +135,7 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
     if (fixedToastRef.value) {
       fixedToastRef.value.style.display = '';
     }
+    updateWrapVisibility();
   };
 
   /** 隐藏固定提示 */
@@ -121,6 +143,7 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
     if (fixedToastRef.value) {
       fixedToastRef.value.style.display = 'none';
     }
+    updateWrapVisibility();
   };
 
   // ============================================
@@ -164,7 +187,8 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
       h(
         'div',
         { class: 'player-toast-close', onClick: handleClose },
-        h('span', { class: 'common-svg-icon' }, '×')
+        // 关闭图标使用既有实现 icons 的 Close SVG（禁止用 unicode 字符当图标）
+        h('span', { class: 'common-svg-icon', innerHTML: Close })
       ),
       h('span', { class: 'player-toast-text', ref: 'fixedTextRef' }, props.text ?? '记忆你上次看到'),
       h('span', { class: 'player-toast-time', ref: 'fixedTimeRef' }, props.jumpTime ?? '00:00'),

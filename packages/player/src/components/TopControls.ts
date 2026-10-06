@@ -6,7 +6,7 @@
  */
 
 import { h, defineComponent } from "@/core";
-import { ProgressBar } from "./ProgressBar";
+import { ProgressBar, type ProgressBarApi } from "./ProgressBar";
 import type { ProgressSegment } from "@/types";
 
 /**
@@ -24,6 +24,8 @@ export type TopControlsEvents = {
   seekStart: undefined;
   seekEnd: undefined;
   topControlsMounted: undefined;
+  /** ProgressBar 挂载完成，向上层回传其更新 API */
+  progressBarMounted: ProgressBarApi;
 };
 
 export const TopControls = defineComponent<TopControlsProps, TopControlsEvents>((props, lifecycle) => {
@@ -49,6 +51,8 @@ export const TopControls = defineComponent<TopControlsProps, TopControlsEvents>(
       onSeek: (time) => lifecycle.emit?.('seek', time),
       onSeekStart: () => lifecycle.emit?.('seekStart'),
       onSeekEnd: () => lifecycle.emit?.('seekEnd'),
+      // 进度条挂载后拿到其更新 API，继续向上层（Controls → PlayerDocker）回传
+      onProgressBarMounted: (api) => lifecycle.emit?.('progressBarMounted', api),
     }),
   );
 });

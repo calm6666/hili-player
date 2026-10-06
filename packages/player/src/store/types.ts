@@ -7,19 +7,13 @@
  * 弹幕/字幕等插件设置由各插件自己管理持久化
  */
 
+import type { QualityLevel } from '@/types/streamPlugin';
+
 /**
  * 画质选项
+ * @deprecated 用运行时清晰度模型 `QualityLevel` 代替（字段更全，插件直接产出）
  */
-export interface QualityOption {
-  /** 清晰度编号 */
-  qn: number;
-  /** 清晰度名称 */
-  name: string;
-  /** 描述 */
-  description: string;
-  /** 编码格式 */
-  codec: string;
-}
+export type QualityOption = QualityLevel;
 
 /**
  * 用户偏好设置（仅包含播放器通用偏好，插件设置由插件自己管理）

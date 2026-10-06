@@ -7,6 +7,7 @@
  */
 
 import type { TypedEventBus } from './eventBus';
+import type { QualityLevel } from '@/types/streamPlugin';
 
 /**
  * 播放器事件数据类型映射
@@ -31,8 +32,6 @@ export type PlayerEventMap = {
   waiting: undefined;
   canPlay: undefined;
   canPlayThrough: undefined;
-  loading: undefined;
-  loaded: undefined;
 
   // HTML5 媒体元素标准事件（与 <video> 事件一一对应）
   loadStart: undefined;
@@ -50,7 +49,54 @@ export type PlayerEventMap = {
   volumeChange: { volume: number; muted: boolean };
   mutedChange: boolean;
   rateChange: number;
-  qualityChange: { quality: string; name?: string; isBackup?: boolean } | string;
+  /**
+   * 清晰度切换完成（等价于 qualityChangeRendered，保留此名以兼容既有调用方）
+   *
+   * 注意：该载荷此前是 `{...} | string` 的联合类型，导致消费方必须做类型判断。
+   * 现统一为确定的对象形态。
+   */
+  qualityChange: {
+    /** 切换后的档位 id（'auto' 表示自动档） */
+    quality: string;
+    /** 档位展示名 */
+    label?: string;
+    /** 是否自动档 */
+    isAuto?: boolean;
+    /** 是否切换到备用源（原生 MP4 降级场景） */
+    isBackup?: boolean;
+  };
+  /** 清晰度列表就绪/变化：payload 为运行时档位列表与清晰度能力类型 */
+  qualityListChange: {
+    qualities: QualityLevel[];
+    mode: 'none' | 'static' | 'adaptive';
+  };
+  /** 清晰度切换请求已发出（切换中）：UI 应显示「正在切换」反馈 */
+  qualityChangeRequested: {
+    /** 切换前的档位 id */
+    from: string;
+    /** 目标档位 id */
+    to: string;
+    /** 目标档位展示名 */
+    label?: string;
+  };
+  /** 清晰度切换成功（新档位已真正生效，可播放）：UI 应给出成功提示 */
+  qualityChangeRendered: {
+    from: string;
+    to: string;
+    /** 生效后的档位信息（自动档下由库回传实际档位） */
+    quality?: QualityLevel;
+    /** 从请求到生效的耗时（毫秒） */
+    elapsed: number;
+  };
+  /** 清晰度切换失败（超时或库报错） */
+  qualityChangeFailed: {
+    from: string;
+    to: string;
+    /** 失败原因描述 */
+    reason: string;
+  };
+  /** 清晰度模式变化（自动 / 手动） */
+  qualityModeChange: { mode: 'auto' | 'manual' };
   resize: { width: number; height: number };
   durationChange: undefined;
 
@@ -60,13 +106,15 @@ export type PlayerEventMap = {
   webFullscreenChange: { isWebFullscreen: boolean };
   wideScreenChange: { isWideScreen: boolean };
 
+  // 持久化相关事件
+  /** 已从持久化存储恢复上次观看位置，payload: { time }（秒） */
+  restoreProgress: { time: number };
+
   // 错误相关事件
   error: { error: unknown; code?: number; message?: string };
   errorRecovery: undefined;
 
   // 控制栏相关事件
-  controlsShow: undefined;
-  controlsHide: undefined;
   seekStart: { time: number; previousTime: number };
   seekEnd: { time: number; previousTime: number };
 
@@ -78,29 +126,32 @@ export type PlayerEventMap = {
   destroy: undefined;
 
   // 弹幕相关事件
-  danmakuToggle: undefined;
-  danmakuDensityChange: number;
+  /** 弹幕显示状态切换，payload 为切换后的可见性 */
+  danmakuToggle: { visible: boolean };
+  /** 弹幕数据加载完成 */
+  danmakuLoaded: { count: number; url?: string };
   danmakuOpacityChange: number;
   danmakuSpeedChange: number;
   danmakuSend: { text: string; options?: Record<string, unknown> };
   danmakuSent: Record<string, unknown>;
   danmakuClear: undefined;
-  danmakuSettingChange: Record<string, unknown>;
 
   // 字幕相关事件
-  subtitleToggle: undefined;
+  /** 字幕显示状态切换，payload 为切换后的可见性 */
+  subtitleToggle: { visible: boolean };
   subtitleLangChange: string;
   subtitleSwitch: { lang: string };
+  /** 字幕列表变化 */
+  subtitleListChange: { count: number };
 
-  // 监控相关事件
-  monitorStats: Record<string, unknown>;
-  monitorBitrate: Record<string, unknown>;
-  monitorBuffer: Record<string, unknown>;
-  monitorFps: Record<string, unknown>;
-  monitorThroughput: Record<string, unknown>;
-  monitorStart: undefined;
-  monitorStop: undefined;
-  monitorSetPlayer: unknown;
+  // 播放列表 / 多 P 相关事件
+  /** 当前播放的条目发生变化（换源成功） */
+  episodeChange: { index: number; total: number; id?: string; title?: string };
+  /** 播放列表本身变化（setConfig 更换列表时） */
+  playlistChange: { index: number; total: number };
+  /** 请求切换上一个 / 下一个分 P（由 UI 触发的意图事件） */
+  prevRequest: undefined;
+  nextRequest: undefined;
 
   // 互动相关事件
   interactionLike: undefined;
@@ -114,21 +165,17 @@ export type PlayerEventMap = {
   interactionPositionChange: { type: string; index: number; top: number; left: number };
 
   // 流媒体相关事件
-  streamLoadComplete: Record<string, unknown>;
   streamError: { message?: string; error?: unknown; [key: string]: unknown };
-  streamStatsUpdate: Record<string, unknown>;
-  streamMetadataLoaded: Record<string, unknown>;
-  streamPlayStart: undefined;
-  streamPlayPause: undefined;
-  streamBufferStart: undefined;
-  streamBufferEnd: undefined;
-  streamNetworkError: Record<string, unknown>;
-  streamDecodeError: Record<string, unknown>;
-  streamQualityChange: { width: number; height: number; bitrate?: number; isAuto?: boolean };
-
-  // 提示工具相关事件
-  tooltipShow: { text: string; x: number; y: number };
-  tooltipHide: undefined;
+  streamQualityChange: {
+    width: number;
+    height: number;
+    bitrate?: number;
+    isAuto?: boolean;
+    /** 档位 id（'auto' 或 provider 定义的档位标识） */
+    qualityId?: string;
+    /** 档位展示名 */
+    label?: string;
+  };
 } & Record<string, unknown>;
 
 /** 播放器类型安全事件总线类型 */
@@ -158,10 +205,6 @@ export enum PlayerEventEnum {
   CAN_PLAY = 'canPlay',
   /** 可播放至结尾 */
   CAN_PLAY_THROUGH = 'canPlayThrough',
-  /** 加载中 */
-  LOADING = 'loading',
-  /** 加载完成 */
-  LOADED = 'loaded',
 
   // HTML5 媒体元素标准事件（与 <video> 事件一一对应）
   /** 开始加载媒体 */
@@ -192,8 +235,18 @@ export enum PlayerEventEnum {
   MUTED_CHANGE = 'mutedChange',
   /** 播放速度改变 */
   RATE_CHANGE = 'rateChange',
-  /** 画质改变 */
+  /** 画质改变（切换完成，兼容名） */
   QUALITY_CHANGE = 'qualityChange',
+  /** 清晰度列表就绪/变化，payload: { qualities, mode } */
+  QUALITY_LIST_CHANGE = 'qualityListChange',
+  /** 清晰度切换请求已发出（切换中），payload: { from, to, label } */
+  QUALITY_CHANGE_REQUESTED = 'qualityChangeRequested',
+  /** 清晰度切换成功，payload: { from, to, quality, elapsed } */
+  QUALITY_CHANGE_RENDERED = 'qualityChangeRendered',
+  /** 清晰度切换失败，payload: { from, to, reason } */
+  QUALITY_CHANGE_FAILED = 'qualityChangeFailed',
+  /** 清晰度模式变化（自动 / 手动），payload: { mode } */
+  QUALITY_MODE_CHANGE = 'qualityModeChange',
   /** 视频尺寸改变 */
   RESIZE = 'resize',
   /** 时长改变 */
@@ -209,6 +262,10 @@ export enum PlayerEventEnum {
   /** 宽屏模式改变 */
   WIDE_SCREEN_CHANGE = 'wideScreenChange',
 
+  // 持久化相关事件
+  /** 已从持久化存储恢复上次观看位置，payload: { time }（秒） */
+  RESTORE_PROGRESS = 'restoreProgress',
+
   // 错误相关事件
   /** 播放错误 */
   ERROR = 'error',
@@ -216,10 +273,6 @@ export enum PlayerEventEnum {
   ERROR_RECOVERY = 'errorRecovery',
 
   // 控制栏相关事件
-  /** 控制栏显示 */
-  CONTROLS_SHOW = 'controlsShow',
-  /** 控制栏隐藏 */
-  CONTROLS_HIDE = 'controlsHide',
   /** 进度条拖动开始 */
   SEEK_START = 'seekStart',
   /** 进度条拖动结束 */
@@ -234,10 +287,10 @@ export enum PlayerEventEnum {
   DESTROY = 'destroy',
 
   // 弹幕相关事件
-  /** 弹幕显示状态改变 */
+  /** 弹幕显示状态改变，payload: { visible } */
   DANMAKU_TOGGLE = 'danmakuToggle',
-  /** 弹幕密度改变 */
-  DANMAKU_DENSITY_CHANGE = 'danmakuDensityChange',
+  /** 弹幕数据加载完成，payload: { count, url? } */
+  DANMAKU_LOADED = 'danmakuLoaded',
   /** 弹幕透明度改变 */
   DANMAKU_OPACITY_CHANGE = 'danmakuOpacityChange',
   /** 弹幕速度改变 */
@@ -248,34 +301,26 @@ export enum PlayerEventEnum {
   DANMAKU_SENT = 'danmakuSent',
   /** 清空弹幕 */
   DANMAKU_CLEAR = 'danmakuClear',
-  /** 弹幕设置变更 */
-  DANMAKU_SETTING_CHANGE = 'danmakuSettingChange',
 
   // 字幕相关事件
-  /** 字幕显示状态改变 */
+  /** 字幕显示状态改变，payload: { visible } */
   SUBTITLE_TOGGLE = 'subtitleToggle',
   /** 字幕语言改变 */
   SUBTITLE_LANG_CHANGE = 'subtitleLangChange',
   /** 字幕切换 */
   SUBTITLE_SWITCH = 'subtitleSwitch',
+  /** 字幕列表变化，payload: { count } */
+  SUBTITLE_LIST_CHANGE = 'subtitleListChange',
 
-  // 监控相关事件
-  /** 监控数据更新 */
-  MONITOR_STATS = 'monitorStats',
-  /** 码率信息更新 */
-  MONITOR_BITRATE = 'monitorBitrate',
-  /** 缓冲区信息更新 */
-  MONITOR_BUFFER = 'monitorBuffer',
-  /** 帧率信息更新 */
-  MONITOR_FPS = 'monitorFps',
-  /** 吞吐量信息更新 */
-  MONITOR_THROUGHPUT = 'monitorThroughput',
-  /** 开始监控 */
-  MONITOR_START = 'monitorStart',
-  /** 停止监控 */
-  MONITOR_STOP = 'monitorStop',
-  /** 设置播放器实例到监控器 */
-  MONITOR_SET_PLAYER = 'monitorSetPlayer',
+  // 播放列表 / 多 P 相关事件
+  /** 当前播放条目发生变化 */
+  EPISODE_CHANGE = 'episodeChange',
+  /** 播放列表变化 */
+  PLAYLIST_CHANGE = 'playlistChange',
+  /** 请求切换上一个分 P */
+  PREV_REQUEST = 'prevRequest',
+  /** 请求切换下一个分 P */
+  NEXT_REQUEST = 'nextRequest',
 
   // 互动相关事件
   /** 互动点赞 */
@@ -298,34 +343,10 @@ export enum PlayerEventEnum {
   INTERACTION_POSITION_CHANGE = 'interactionPositionChange',
 
   // 流媒体相关事件
-  /** 流媒体加载完成 */
-  STREAM_LOAD_COMPLETE = 'streamLoadComplete',
   /** 流媒体错误 */
   STREAM_ERROR = 'streamError',
-  /** 流媒体统计更新 */
-  STREAM_STATS_UPDATE = 'streamStatsUpdate',
-  /** 流媒体元数据加载 */
-  STREAM_METADATA_LOADED = 'streamMetadataLoaded',
-  /** 流媒体播放开始 */
-  STREAM_PLAY_START = 'streamPlayStart',
-  /** 流媒体播放暂停 */
-  STREAM_PLAY_PAUSE = 'streamPlayPause',
-  /** 流媒体缓冲开始 */
-  STREAM_BUFFER_START = 'streamBufferStart',
-  /** 流媒体缓冲结束 */
-  STREAM_BUFFER_END = 'streamBufferEnd',
-  /** 流媒体网络错误 */
-  STREAM_NETWORK_ERROR = 'streamNetworkError',
-  /** 流媒体解码错误 */
-  STREAM_DECODE_ERROR = 'streamDecodeError',
   /** 流媒体清晰度变化（自动或手动切换），payload: { width, height, bitrate, isAuto } */
   STREAM_QUALITY_CHANGE = 'streamQualityChange',
-
-  // 提示工具相关事件
-  /** 显示 tooltip 提示 */
-  TOOLTIP_SHOW = 'tooltipShow',
-  /** 隐藏 tooltip 提示 */
-  TOOLTIP_HIDE = 'tooltipHide',
 }
 
 /**
@@ -362,10 +383,14 @@ export enum PlayerMethodEnum {
   // 画质方法
   /** 设置画质 */
   SET_QUALITY = 'setQuality',
-  /** 获取当前画质 */
-  GET_QUALITY = 'getQuality',
+  /** 获取当前画质（档位 id，'auto' 表示自动档） */
+  GET_CURRENT_QUALITY = 'getCurrentQuality',
   /** 获取可用画质列表 */
   GET_QUALITIES = 'getQualities',
+  /** 设置清晰度模式（自动 / 手动） */
+  SET_QUALITY_MODE = 'setQualityMode',
+  /** 应用清晰度上下限 */
+  APPLY_QUALITY_LIMITS = 'applyQualityLimits',
 
   // 全屏/画中画方法
   /** 进入全屏 */
@@ -388,6 +413,30 @@ export enum PlayerMethodEnum {
   TOGGLE_WEB_FULLSCREEN = 'toggleWebFullscreen',
   /** 切换宽屏 */
   TOGGLE_WIDE_SCREEN = 'toggleWideScreen',
+  /** 设置显示模式（普通 / 网页全屏 / 宽屏） */
+  SET_DISPLAY_MODE = 'setDisplayMode',
+
+  // 配置方法
+  /** 动态更新配置（深合并并立即生效） */
+  SET_CONFIG = 'setConfig',
+  /** 读取当前生效配置 */
+  GET_CONFIG = 'getConfig',
+
+  // 媒体加载与播放列表方法
+  /** 换源加载（复用同一 video 元素与 DOM） */
+  LOAD = 'load',
+  /** 播放列表内跳转到指定索引 */
+  SWITCH_TO = 'switchTo',
+  /** 播放下一个 */
+  NEXT = 'next',
+  /** 播放上一个 */
+  PREV = 'prev',
+  /** 获取播放列表 */
+  GET_PLAYLIST = 'getPlaylist',
+  /** 获取当前条目索引 */
+  GET_CURRENT_INDEX = 'getCurrentIndex',
+  /** 设置封面 */
+  SET_POSTER = 'setPoster',
 
   // 状态获取方法
   /** 获取播放器状态 */
@@ -398,22 +447,44 @@ export enum PlayerMethodEnum {
   GET_DURATION = 'getDuration',
   /** 获取缓冲进度 */
   GET_BUFFERED = 'getBuffered',
+  /** 是否暂停中 */
+  IS_PAUSED = 'isPaused',
+  /** 是否正在播放 */
+  IS_PLAYING = 'isPlaying',
+  /** 是否全屏 */
+  IS_FULLSCREEN = 'isFullscreen',
+  /** 是否静音 */
+  IS_MUTED = 'isMuted',
+  /** 相对当前位置跳转 */
+  SEEK_BY = 'seekBy',
 
   // 弹幕方法
   /** 发送弹幕 */
   SEND_DANMAKU = 'sendDanmaku',
-  /** 显示/隐藏弹幕 */
+  /** 显示/隐藏弹幕（返回切换后的可见性） */
   TOGGLE_DANMAKU = 'toggleDanmaku',
+  /** 设置弹幕可见性 */
+  SET_DANMAKU_VISIBLE = 'setDanmakuVisible',
+  /** 查询弹幕是否可见 */
+  IS_DANMAKU_VISIBLE = 'isDanmakuVisible',
   /** 设置弹幕不透明度 */
   SET_DANMAKU_OPACITY = 'setDanmakuOpacity',
+  /** 设置弹幕速度 */
+  SET_DANMAKU_SPEED = 'setDanmakuSpeed',
+  /** 设置弹幕数据源 */
+  SET_DANMAKU_SOURCE = 'setDanmakuSource',
   /** 清除弹幕 */
   CLEAR_DANMAKU = 'clearDanmaku',
 
   // 字幕方法
   /** 切换字幕显示 */
   TOGGLE_SUBTITLE = 'toggleSubtitle',
+  /** 设置字幕可见性 */
+  SET_SUBTITLE_VISIBLE = 'setSubtitleVisible',
   /** 设置字幕语言 */
   SET_SUBTITLE_LANG = 'setSubtitleLang',
+  /** 设置字幕列表 */
+  SET_SUBTITLE_LIST = 'setSubtitleList',
 
   // 播放器控制方法
   /** 销毁播放器 */

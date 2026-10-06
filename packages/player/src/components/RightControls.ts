@@ -9,8 +9,9 @@ import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
+import { ConfigStoreContext } from '@/store/configStore';
 import { VolumeSlider } from './VolumeSlider';
-import { QualityMenu, type QualityItem } from './QualityMenu';
+import { QualityMenu } from './QualityMenu';
 import { PlaybackRateMenu } from './PlaybackRateMenu';
 import { SettingMenu } from './SettingMenu';
 import { LottieIcon, type LottieIconApi } from './LottieIcon';
@@ -52,8 +53,55 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   const configCtx = useContext(ConfigContext);
   const config = configCtx;
   const state = useContext(StateContext);
+  /** 可订阅配置中心（由 VideoPlayer 注入），用于控件开关「设置即生效」 */
+  const configStore = useContext(ConfigStoreContext);
 
-  const qualities: QualityItem[] = [];
+  // ============================================
+  // 控件开关 → 命令式显隐（ui.controls.*）
+  // ============================================
+
+  /** 受配置控制的按钮键（与 ControlsConfig 键对齐） */
+  type ToggleControlKey =
+    | 'quality'
+    | 'episodes'
+    | 'setting'
+    | 'pip'
+    | 'wideScreen'
+    | 'webFullscreen';
+
+  /** 控件键 → 根节点选择器（沿用现有类名，不新增类） */
+  const CONTROL_SELECTORS: Record<ToggleControlKey, string> = {
+    quality: '.player-ctrl-quality',
+    episodes: '.player-ctrl-eplist',
+    setting: '.player-ctrl-setting',
+    pip: '.player-ctrl-pip',
+    wideScreen: '.player-ctrl-wide',
+    webFullscreen: '.player-ctrl-web',
+  };
+
+  /** 全部受控键 */
+  const CONTROL_KEYS = Object.keys(CONTROL_SELECTORS) as ToggleControlKey[];
+
+  /** 右侧控制栏根节点（用于按类名检索按钮） */
+  const bottomRightRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bottomRightRef');
+
+  /** 配置订阅清理函数 */
+  const configCleanups: Array<() => void> = [];
+
+  /**
+   * 命令式显示 / 隐藏某个按钮
+   * @param key - 控件键
+   * @param visible - 是否可见
+   */
+  const setControlVisible = (key: ToggleControlKey, visible: boolean): void => {
+    const el = bottomRightRef.value?.querySelector<HTMLElement>(
+      CONTROL_SELECTORS[key],
+    );
+    if (el) el.style.display = visible ? '' : 'none';
+  };
+
+  // 运行时可用清晰度列表：初始快照由 QualityMenu 内部订阅后续变化
+  const qualities = state?.get(PlayerStateKeyEnum.AVAILABLE_QUALITIES) ?? [];
   const currentQuality = state?.get(PlayerStateKeyEnum.QUALITY) ?? 'auto';
   const rate = state?.get(PlayerStateKeyEnum.PLAYBACK_RATE) ?? 1;
   const rates = [2, 1.5, 1.25, 1, 0.75, 0.5];
@@ -67,8 +115,25 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   const onSettingChange = (key: string, value: boolean | string | number): void => {
     lifecycle.emit?.('settingChange', { key, value });
   };
-  const onMenuAnimation = (type: 'quality' | 'eplist' | 'playbackrate' | 'volume' | 'setting', action: 'show' | 'hide'): void => {
-    lifecycle.emit?.('menuAnimation', { type, action });
+  /**
+   * 菜单动画事件桥接（QualityMenu / PlaybackRateMenu / SettingMenu 均以
+   * 单个 payload 对象 { type, action } 发射，与 eplist 的内联发射保持一致）
+   */
+  const onMenuAnimation = (payload: {
+    type: 'quality' | 'eplist' | 'playbackrate' | 'volume' | 'setting';
+    action: 'show' | 'hide';
+  }): void => {
+    lifecycle.emit?.('menuAnimation', payload);
+  };
+
+  /** 音量滑块拖拽 / 点击调量事件桥接（VolumeSlider 以单个数值发射） */
+  const onVolumeChange = (volume: number): void => {
+    lifecycle.emit?.('volumeChange', volume);
+  };
+
+  /** 音量图标点击静音切换事件桥接 */
+  const onMuteToggle = (): void => {
+    lifecycle.emit?.('muteToggle');
   };
 
   // ============================================
@@ -195,7 +260,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       state,
       PlayerStateKeyEnum.IS_FULLSCREEN,
       (isFullscreen) => {
-        console.log("RightControls isFullscreen: ", isFullscreen);
         if (fullBtnRef.value) {
           fullBtnRef.value.classList.toggle('state-active', isFullscreen);
         }
@@ -212,7 +276,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       state,
       PlayerStateKeyEnum.IS_WEB_FULLSCREEN,
       (isWebFullscreen) => {
-        console.log("RightControls isWebFullscreen: ", isWebFullscreen);
         if (webBtnRef.value) {
           webBtnRef.value.classList.toggle('state-active', isWebFullscreen);
         }
@@ -229,7 +292,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       state,
       PlayerStateKeyEnum.IS_PIP,
       (isPip) => {
-        console.log("RightControls isPip: ", isPip);
         if (pipBtnRef.value) {
           pipBtnRef.value.classList.toggle('state-active', isPip);
         }
@@ -262,12 +324,10 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   const bottomRightRenderers: Record<string, () => VNode | null> = {
     /** 渲染画质选择菜单 */
     quality: () => {
-      if (!config.quality) return null;
       return h(QualityMenu, { qualities, currentQuality, onQualityChange, onMenuAnimation });
     },
     /** 渲染选集菜单 */
     eplist: () => {
-      if (!config.eplist) return null;
       return h('div', {
         class: 'player-ctrl-btn player-ctrl-eplist',
         role: 'button',
@@ -315,16 +375,14 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     },
     /** 渲染播放速率选择菜单 */
     playbackrate: () => h(PlaybackRateMenu, { rate, rates, onRateChange, onMenuAnimation }),
-    /** 渲染音量滑块组件 */
-    volume: () => h(VolumeSlider, {}),
+    /** 渲染音量滑块组件（hover 展开 / 拖拽调量 / 静音切换） */
+    volume: () => h(VolumeSlider, { onMenuAnimation, onVolumeChange, onMuteToggle }),
     /** 渲染设置菜单 */
     setting: () => {
-      if (!config.setting) return null;
       return h(SettingMenu, { onSettingChange, onMenuAnimation });
     },
     /** 渲染画中画按钮 */
     pip: () => {
-      if (!config.pip) return null;
       return h('div', {
         class: 'player-ctrl-btn player-ctrl-pip',
         role: 'button',
@@ -357,7 +415,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     },
     /** 渲染宽屏按钮 */
     wide: () => {
-      if (!config.wide) return null;
       return h('div', {
         class: 'player-ctrl-btn player-ctrl-wide',
         role: 'button',
@@ -390,7 +447,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     },
     /** 渲染网页全屏按钮 */
     web: () => {
-      if (!config.web) return null;
       return h('div', {
         class: 'player-ctrl-btn player-ctrl-web',
         role: 'button',
@@ -452,16 +508,40 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   // ============================================
 
   /**
-   * 组件挂载后，通知上层组件
+   * 组件挂载后：按当前配置初始化按钮显隐，并订阅 ui.controls.* 实现设置即生效
    */
   lifecycle.onMounted = (): void => {
+    CONTROL_KEYS.forEach((key) => {
+      const initial =
+        configStore?.getPath<boolean>(`ui.controls.${key}`) ??
+        config[key] ??
+        true;
+      setControlVisible(key, initial !== false);
+    });
+
+    if (configStore) {
+      CONTROL_KEYS.forEach((key) => {
+        configCleanups.push(
+          configStore.subscribePath(`ui.controls.${key}`, (value) => {
+            setControlVisible(key, value !== false);
+          }),
+        );
+      });
+    }
+
     lifecycle.emit?.('rightControlsMounted');
+  };
+
+  /** 组件销毁前取消配置订阅 */
+  lifecycle.onBeforeDestroy = (): void => {
+    configCleanups.forEach((fn) => fn());
+    configCleanups.length = 0;
   };
 
   // ============================================
   // 主渲染函数
   // ============================================
-  return h('div', { class: 'player-control-bottom-right' },
+  return h('div', { class: 'player-control-bottom-right', ref: 'bottomRightRef' },
     ...bottomRightOrder
       .map(key => {
         /** 当前键对应的渲染函数 */

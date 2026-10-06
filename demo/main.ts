@@ -1151,11 +1151,17 @@ const PlayerSection = defineComponent(() => {
    */
   const playerConfig: PlayerConfig = {
     src: DEFAULT_PLAYER_SRC,
-    autoplay: false,
-    muted: true,
-    volume: 0.8,
-    keyboard: true,
-    debug: false,
+    playback: {
+      autoplay: false,
+      muted: true,
+      volume: 0.8,
+    },
+    interaction: {
+      keyboard: true,
+    },
+    advanced: {
+      debug: false,
+    },
   };
 
   const player = new VideoPlayer(playerConfig);

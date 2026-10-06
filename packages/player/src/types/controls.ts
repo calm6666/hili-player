@@ -6,7 +6,6 @@
  */
 
 import type { AnimationFrameID } from "@/utils/rafTimeout";
-import type { ProgressSegment } from "@/types";
 
 /**
  * 菜单显示状态项
@@ -55,22 +54,6 @@ export interface Tooltip {
   element: HTMLElement | null;
   name: string;
   dataName: string;
-}
-
-/**
- * 控制配置
- */
-export interface ControlConfig {
-  progressSegments?: ProgressSegment[];
-  prev?: boolean;
-  next?: boolean;
-  viewpoint?: boolean;
-  quality?: boolean;
-  eplist?: boolean;
-  setting?: boolean;
-  pip?: boolean;
-  wide?: boolean;
-  web?: boolean;
 }
 
 /**

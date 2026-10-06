@@ -11,6 +11,6 @@ export { rafInterval, clearRafInterval } from './rafInterval';
 export { dom } from './dom';
 export { isServer, isBrowser, createSSRConfig, safeResizeObserver, safeIntersectionObserver } from './ssr';
 export type { SSRConfig } from './ssr';
-export { smartMerge } from './smartMerge';
+export { deepMerge, smartMerge } from './smartMerge';
 export { createLogger, Logger, LogLevel, loggerManager } from './logger';
 export type { LoggerConfig, LogEntry, LogHandler } from './logger';

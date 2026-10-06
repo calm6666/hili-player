@@ -23,20 +23,62 @@ export class StreamMiddleware {
   private activePlugin: StreamPlugin | null = null;
   private video: HTMLVideoElement;
 
+  /** 清晰度列表订阅者集合 */
+  private qualitySubscribers = new Set<(list: QualityLevel[]) => void>();
+
+  /** 当前插件的 onQualitiesChange 取消订阅函数 */
+  private pluginQualityUnsub: (() => void) | null = null;
+
   constructor(video: HTMLVideoElement) {
     this.video = video;
   }
 
   /** PluginManager 安装 StreamPlugin 时调用 */
   registerStreamPlugin(plugin: StreamPlugin): void {
+    // 先解绑上一个插件的桥接，避免残留订阅
+    this.pluginQualityUnsub?.();
+    this.pluginQualityUnsub = null;
+
     this.activePlugin = plugin;
     this.mode = PlayerMode.STREAMING;
+
+    // 桥接插件的清晰度推送（插件推送 → 通知所有中间件订阅者）
+    if (plugin.onQualitiesChange) {
+      this.pluginQualityUnsub = plugin.onQualitiesChange((list) => {
+        this.emitQualities(list);
+      });
+    }
+
+    // 插件已能同步给出档位时，立即通知一次订阅者
+    const list = plugin.getQualities();
+    if (list.length > 0) {
+      this.emitQualities(list);
+    }
   }
 
   /** PluginManager 卸载 StreamPlugin 时调用 */
   unregisterStreamPlugin(): void {
+    this.pluginQualityUnsub?.();
+    this.pluginQualityUnsub = null;
     this.activePlugin = null;
     this.mode = PlayerMode.NATIVE;
+  }
+
+  /**
+   * 订阅清晰度列表的变化/就绪
+   * @param cb - 列表变化回调
+   * @returns 取消订阅函数
+   */
+  onQualitiesChange(cb: (list: QualityLevel[]) => void): () => void {
+    this.qualitySubscribers.add(cb);
+    return () => {
+      this.qualitySubscribers.delete(cb);
+    };
+  }
+
+  /** 通知所有清晰度订阅者 */
+  private emitQualities(list: QualityLevel[]): void {
+    this.qualitySubscribers.forEach((cb) => cb(list));
   }
 
   /** 获取当前播放模式 */
@@ -119,8 +161,43 @@ export class StreamMiddleware {
     }
   }
 
+  /**
+   * 获取当前生效的档位 id
+   * @returns 流媒体模式转发给插件；原生模式返回 ''（原生单文件无档位概念）
+   */
+  getCurrentQuality(): string {
+    if (this.mode === PlayerMode.STREAMING && this.activePlugin) {
+      return this.activePlugin.getCurrentQuality();
+    }
+    return '';
+  }
+
+  /**
+   * 是否支持自动档（ABR）
+   * @returns 流媒体模式转发给插件；原生模式恒为 false
+   */
+  supportsAutoQuality(): boolean {
+    if (this.mode === PlayerMode.STREAMING && this.activePlugin) {
+      return this.activePlugin.supportsAutoQuality?.() ?? false;
+    }
+    return false;
+  }
+
+  /**
+   * 应用清晰度上限/下限限制
+   * @param limits - 上限/下限（像素高度）
+   */
+  applyLimits(limits: { max?: number; min?: number }): void {
+    if (this.mode === PlayerMode.STREAMING && this.activePlugin) {
+      this.activePlugin.applyLimits?.(limits);
+    }
+  }
+
   /** 销毁中间件，释放资源 */
   destroy(): void {
+    this.pluginQualityUnsub?.();
+    this.pluginQualityUnsub = null;
+    this.qualitySubscribers.clear();
     if (this.activePlugin) {
       this.activePlugin.destroy();
     }

@@ -12,3 +12,6 @@ export * from './utils/index';
 export { manifestToHls } from './manifest-to-hls';
 export type { HlsManifestData } from './manifest-to-hls';
 export { manifestToDash } from './manifest-to-dash';
+
+// 文本解析器导出（m3u8 / mpd → 档位信息）
+export { parseHlsManifest, parseDashManifest, fetchAndParseManifest } from './manifest-parser';

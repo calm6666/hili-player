@@ -71,6 +71,74 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
   const items = props.items ?? DEFAULT_TOOLTIP_ITEMS;
 
   /**
+   * 当前屏幕模式（对应既有实现 Tooltips.screen 字段）：
+   * 全屏 / 网页全屏下提示框显示在按钮上方更远处（32px vs 23px），
+   * 由 PlayerDocker 在显示模式 / 全屏状态变化时通过 setScreen 同步
+   */
+  let screen: 'normal' | 'full' | 'web' = props.screen ?? 'normal';
+
+  /**
+   * 更新屏幕模式（对应既有实现的 tooltips.screen 赋值）
+   */
+  const setScreen = (next: 'normal' | 'full' | 'web'): void => {
+    screen = next;
+  };
+
+  /**
+   * 按 name 获取提示项 DOM 元素
+   */
+  const getTipElement = (name: string): HTMLDivElement | null => {
+    return itemRefMap[name]?.value ?? null;
+  };
+
+  /**
+   * 计算提示框显示位置（与既有实现的
+   * calculateTipPosition 一致，坐标系为视口坐标，样式为 position: fixed）
+   * @param btnElement - 触发提示的按钮元素
+   * @param tipElement - 提示项元素
+   * @param name - 提示项名称（决定上下偏移规则）
+   */
+  const calculateTipPosition = (
+    btnElement: HTMLElement,
+    tipElement: HTMLElement,
+    name: string,
+  ): { left: number; top: number } => {
+    const tipClient = tipElement.getBoundingClientRect();
+    const btnClient = btnElement.getBoundingClientRect();
+    /** 水平方向：提示框中心对齐按钮中心 */
+    let left = btnClient.left - (tipClient.width / 2 - btnClient.width / 2);
+    let top = 0;
+
+    if (name === 'feedback-btn') {
+      // 反馈按钮在顶栏，提示显示在按钮下方
+      top = btnClient.top + btnClient.height + 10;
+    } else if (name === 'danmaku_switch') {
+      // 弹幕开关提示显示在按钮上方 8px
+      top = btnClient.top - 8 - tipClient.height;
+    } else {
+      // 其余按钮：全屏 / 网页全屏下偏移更大
+      top =
+        screen === 'full' || screen === 'web'
+          ? btnClient.top - 32 - tipClient.height
+          : btnClient.top - 23 - tipClient.height;
+    }
+
+    // 水平方向夹紧到播放器容器内（左右各留 12px）
+    const container = tipElement.closest<HTMLElement>('.player-container');
+    if (container) {
+      const containerLeft = container.getBoundingClientRect().left;
+      const containerWidth = container.getBoundingClientRect().width;
+      if (containerLeft >= left || left <= 12) {
+        left = containerLeft + 12;
+      } else if (containerLeft + containerWidth <= left + tipClient.width) {
+        left = containerLeft + containerWidth - 12 - tipClient.width;
+      }
+    }
+
+    return { left, top };
+  };
+
+  /**
    * 获取指定提示项的样式
    * 激活时显示在指定位置，未激活时隐藏
    */
@@ -157,6 +225,46 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
   };
 
   /**
+   * 打开指定名称的提示项（与既有实现的 openTip 一致）：
+   * 依据按钮元素实时计算位置后显示
+   * @param btnElement - 触发提示的按钮元素
+   * @param name - 提示项名称（Tooltip.dataName）
+   */
+  const openTip = (btnElement: HTMLElement | null, name: string): void => {
+    const tipElement = getTipElement(name);
+    if (tipElement && btnElement) {
+      const { left, top } = calculateTipPosition(btnElement, tipElement, name);
+      showTooltip(name, { left: Math.floor(left), top: Math.floor(top) });
+    }
+  };
+
+  /**
+   * 关闭指定名称的提示项（与既有实现的 closeTip 一致）
+   */
+  const closeTip = (name: string): void => {
+    hideTooltip(name);
+  };
+
+  /**
+   * 更新提示项文本内容（与既有实现的 updateTip 一致）
+   * 优先更新 .player-tooltip-title 子元素的文本，保持内部结构不变
+   * @param name - 提示项名称
+   * @param text - 新的提示文本
+   */
+  const updateTip = (name: string, text: string): void => {
+    const tipElement = getTipElement(name);
+    if (!tipElement) return;
+    const titleElement = tipElement.querySelector<HTMLDivElement>(
+      '.player-tooltip-title',
+    );
+    if (titleElement) {
+      titleElement.textContent = text;
+    } else {
+      tipElement.textContent = text;
+    }
+  };
+
+  /**
    * 隐藏所有提示项
    */
   const hideAll = (): void => {
@@ -178,10 +286,18 @@ export const Tooltips = defineComponent<TooltipsProps>((props, lifecycle: Compon
   // ============================================
 
   /**
-   * 组件挂载后，向上层暴露显示、隐藏和全部隐藏方法
+   * 组件挂载后，向上层暴露打开、关闭、更新提示与同步屏幕模式的方法
+   * （对应既有实现的 showTooltip / hideTooltip 及
+   * handleFullscreenChange / toggleWebFullscreen 中的 screen 与 updateTip 调用）
    */
   lifecycle.onMounted = (): void => {
-    lifecycle.emit?.('tooltipsMounted', { showTooltip, hideTooltip, hideAll });
+    lifecycle.emit?.('tooltipsMounted', {
+      openTip,
+      closeTip,
+      updateTip,
+      setScreen,
+      hideAll,
+    });
   };
 
   /**
