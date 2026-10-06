@@ -339,12 +339,18 @@ if (btnDestroyPlayer) {
 const MEDIA_LIST: MediaItem[] = [];
 const OBJECT_URLS: string[] = [];
 
-function collectPlugins(): Plugin[] {
-  return [
-    createDashPlugin({ autoplay: false }),
-    createHlsPlugin({ autoplay: false }),
-    DanmakuPlugin(),
-  ];
+function collectPlugins(source?: PlayerSource): Plugin[] {
+  const list: Plugin[] = [DanmakuPlugin()];
+  const text = typeof source === "string" ? source : JSON.stringify(source ?? "");
+  if (/\.m3u8(\?|$)/i.test(text)) {
+    list.unshift(createHlsPlugin({ autoplay: false }));
+  } else if (/\.mpd(\?|$)/i.test(text)) {
+    list.unshift(createDashPlugin({ autoplay: false }));
+  } else if (/\.json(\?|$)/i.test(text) || typeof source !== "string") {
+    list.unshift(createDashPlugin({ autoplay: false }));
+    list.unshift(createHlsPlugin({ autoplay: false }));
+  }
+  return list;
 }
 
 function parseSource(text: string): PlayerSource | null {
@@ -472,10 +478,13 @@ function rebuildPlayer(targetIndex: number): void {
 
   wrapper.innerHTML = "";
 
+  const current = MEDIA_LIST[targetIndex];
   const config: PlayerConfig = {
+    src: current ? current.src : undefined,
     playlist: MEDIA_LIST,
+    playlistIndex: targetIndex,
     playback: {
-      autoplay: false,
+      autoplay: true,
       muted: true,
       volume: 0.8,
     },
@@ -483,7 +492,7 @@ function rebuildPlayer(targetIndex: number): void {
       keyboard: true,
     },
     plugins: {
-      list: collectPlugins(),
+      list: collectPlugins(current ? current.src : undefined),
     },
     advanced: {
       debug: false,

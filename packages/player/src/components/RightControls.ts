@@ -122,6 +122,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     if (!el) return;
     el.style.visibility = '';
     el.style.width = '';
+    el.style.display = total > 1 ? '' : 'none';
     el.classList.toggle('player-has-playlist', total > 1);
   };
 
