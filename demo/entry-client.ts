@@ -444,10 +444,8 @@ const MEDIA_LIST: MediaItem[] = [];
 const OBJECT_URLS: string[] = [];
 
 if (playerInstance) {
-  const seeded = playerInstance.getPlaylist();
-  if (seeded.length > 0) {
-    seeded.forEach((item) => MEDIA_LIST.push(item));
-  } else {
+  SAMPLE_SOURCES.forEach((src) => MEDIA_LIST.push({ src, title: src.slice(0, 64) }));
+  if (MEDIA_LIST.length === 0) {
     const initialConfig = playerInstance.getConfig();
     if (initialConfig.src) {
       MEDIA_LIST.push({ src: initialConfig.src });
@@ -476,22 +474,98 @@ function parseSource(text: string): PlayerSource | null {
   return value;
 }
 
-function sourceLabel(item: MediaItem, index: number): string {
+function sourceKind(item: MediaItem): string {
+  const src = item.src;
+  if (typeof src === "string") {
+    if (src.startsWith("blob:")) return "本地";
+    if (/\.mpd(\?|$)/i.test(src)) return "DASH";
+    if (/\.m3u8(\?|$)/i.test(src)) return "HLS";
+    if (/\.json(\?|$)/i.test(src)) return "JSON";
+    return "MP4";
+  }
+  if (Array.isArray(src)) return "MP4";
+  const text = JSON.stringify(src).slice(0, 2000);
+  if (/mpd|SegmentTemplate|Period/i.test(text)) return "DASH";
+  if (/m3u8|EXT-X|playlist/i.test(text)) return "HLS";
+  return "JSON";
+}
+
+function sourceTitle(item: MediaItem, index: number): string {
   if (item.title) return `${index + 1}. ${item.title}`;
   if (typeof item.src === "string") return `${index + 1}. ${item.src.slice(0, 64)}`;
   return `${index + 1}. JSON 视频源`;
+}
+
+function removeSourceAt(index: number): void {
+  const removed = MEDIA_LIST[index];
+  if (!removed) return;
+  const current = playerInstance?.getCurrentIndex() ?? 0;
+  const wasCurrent = current === index;
+  if (typeof removed.src === "string" && removed.src.startsWith("blob:")) {
+    URL.revokeObjectURL(removed.src);
+    const urlIndex = OBJECT_URLS.indexOf(removed.src);
+    if (urlIndex >= 0) OBJECT_URLS.splice(urlIndex, 1);
+  }
+  MEDIA_LIST.splice(index, 1);
+  if (MEDIA_LIST.length === 0) {
+    destroyCurrentPlayer();
+    renderSourceList();
+    return;
+  }
+  if (wasCurrent) {
+    rebuildPlayer(Math.min(index, MEDIA_LIST.length - 1));
+    return;
+  }
+  if (index < current) {
+    rebuildPlayer(current - 1);
+    return;
+  }
+  renderSourceList();
 }
 
 function renderSourceList(): void {
   const list = document.getElementById("source-list");
   if (!list) return;
   list.innerHTML = "";
+  if (MEDIA_LIST.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "source-empty";
+    empty.textContent = "暂无来源";
+    list.appendChild(empty);
+    return;
+  }
   const current = playerInstance?.getCurrentIndex() ?? 0;
   MEDIA_LIST.forEach((item, index) => {
     const li = document.createElement("li");
     li.className = index === current ? "source-item player-state-active" : "source-item";
     li.dataset.index = String(index);
-    li.textContent = sourceLabel(item, index);
+
+    const main = document.createElement("span");
+    main.className = "source-item-main";
+
+    const title = document.createElement("span");
+    title.className = "source-item-title";
+    title.textContent = sourceTitle(item, index);
+
+    const badge = document.createElement("span");
+    badge.className = "source-item-badge";
+    badge.textContent = sourceKind(item);
+
+    main.appendChild(title);
+    main.appendChild(badge);
+
+    const remove = document.createElement("button");
+    remove.className = "source-item-remove";
+    remove.type = "button";
+    remove.textContent = "✕";
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeSourceAt(index);
+    });
+
+    li.appendChild(main);
+    li.appendChild(remove);
+
     li.addEventListener("click", () => {
       const target = playerInstance;
       if (target) {
@@ -499,6 +573,7 @@ function renderSourceList(): void {
       }
       renderSourceList();
     });
+
     list.appendChild(li);
   });
 }
@@ -594,9 +669,44 @@ if (btnAddSource) {
   btnAddSource.addEventListener("click", handleAddSource);
 }
 
+function handleJsonFile(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const file = target.files?.item(0);
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = typeof reader.result === "string" ? reader.result : "";
+    const source = parseSource(text);
+    if (!source) {
+      appEventBus.emit("ACTION_LOG", {
+        action: "JSON 文件解析失败: " + file.name,
+        timestamp: Date.now(),
+      });
+      console.error("[Demo] JSON 文件解析失败", file.name);
+      return;
+    }
+    addSource(source, file.name);
+  };
+  reader.onerror = () => {
+    appEventBus.emit("ACTION_LOG", {
+      action: "JSON 文件读取失败: " + file.name,
+      timestamp: Date.now(),
+    });
+    console.error("[Demo] JSON 文件读取失败", file.name);
+  };
+  reader.readAsText(file);
+  target.value = "";
+}
+
 const inputLocalFile = document.getElementById("input-local-file");
 if (inputLocalFile) {
   inputLocalFile.addEventListener("change", handleLocalFile);
+}
+
+const inputJsonFile = document.getElementById("input-json-file");
+if (inputJsonFile) {
+  inputJsonFile.addEventListener("change", handleJsonFile);
 }
 
 const btnDestroyWithCleanup = document.getElementById("btn-destroy-player");

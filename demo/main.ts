@@ -1110,7 +1110,7 @@ const HydrationPanel = defineComponent((_props, _lifecycle) => {
  * 默认视频源（MP4，原生 HTML5 支持，无需流媒体插件）
  * 用于 SSR 阶段直接渲染播放器 UI
  */
-const DEFAULT_PLAYER_SRC = "http://127.0.0.1:9000/hfs/728bcabae3e5b034d96d90b96b77fe72111bee5dfd0ad24eb31f0e06654d4865.mp4";
+const DEFAULT_PLAYER_SRC = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 
 /**
  * VideoPlayer 实例持有者
@@ -1152,7 +1152,7 @@ const PlayerSection = defineComponent(() => {
   const playerConfig: PlayerConfig = {
     src: DEFAULT_PLAYER_SRC,
     playback: {
-      autoplay: false,
+      autoplay: true,
       muted: true,
       volume: 0.8,
     },
@@ -1221,31 +1221,71 @@ const PlayerSection = defineComponent(() => {
       ),
     ),
     h(
-      "div",
+      "section",
       {
-        class: "player-controls",
+        class: "source-card",
       },
-      h("input", {
-        id: "input-source-url",
-        class: "source-input",
-        placeholder: "粘贴 mpd / m3u8 链接，或 DASH/HLS JSON",
-      }),
+      h("h3", { class: "source-card-title" }, "添加来源"),
       h(
-        "button",
+        "div",
         {
-          id: "btn-add-source",
-          class: "btn-accent",
+          class: "source-row",
         },
-        "添加视频",
+        h("input", {
+          id: "input-source-url",
+          class: "source-input",
+          placeholder: "粘贴 mpd / m3u8 链接，或 DASH/HLS JSON",
+        }),
+        h(
+          "button",
+          {
+            id: "btn-add-source",
+            class: "btn-accent source-btn",
+          },
+          "添加链接",
+        ),
       ),
-      h("input", {
-        id: "input-local-file",
-        class: "source-input",
-        type: "file",
-        accept: "video/*",
-      }),
+      h(
+        "div",
+        {
+          class: "source-row",
+        },
+        h(
+          "label",
+          {
+            class: "source-file",
+          },
+          h("span", { class: "source-file-label" }, "本地视频"),
+          h("input", {
+            id: "input-local-file",
+            class: "source-file-input",
+            type: "file",
+            accept: "video/*",
+          }),
+        ),
+        h(
+          "label",
+          {
+            class: "source-file",
+          },
+          h("span", { class: "source-file-label" }, "JSON 清单"),
+          h("input", {
+            id: "input-json-file",
+            class: "source-file-input",
+            type: "file",
+            accept: ".json,application/json",
+          }),
+        ),
+      ),
     ),
-    h("ul", { id: "source-list", class: "source-list" }),
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "来源列表"),
+      h("ul", { id: "source-list", class: "source-list" }),
+    ),
     h(
       "p",
       {

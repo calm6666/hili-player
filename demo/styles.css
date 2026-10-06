@@ -673,3 +673,184 @@
   color: var(--text-secondary);
   line-height: 1.6;
 }
+
+.source-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.source-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.source-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.source-input {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-primary, #e0e0e0);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.source-input:focus {
+  outline: none;
+  border-color: rgba(0, 180, 216, 0.8);
+}
+
+.source-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.source-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.source-file {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.source-file:hover {
+  border-color: rgba(0, 180, 216, 0.8);
+}
+
+.source-file-label {
+  flex: none;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.source-file-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.source-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.source-item.player-state-active {
+  background: rgba(0, 180, 216, 0.14);
+  border-color: rgba(0, 180, 216, 0.6);
+}
+
+.source-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.source-item-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.source-item-badge {
+  flex: none;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.source-item-remove {
+  flex: none;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.source-item-remove:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+.source-empty {
+  padding: 8px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+@media screen and (max-width: 640px) {
+  .source-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .source-input,
+  .source-file {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .source-btn {
+    width: 100%;
+  }
+}
