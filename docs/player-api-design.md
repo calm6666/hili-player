@@ -21,7 +21,7 @@
 | 9 | **DASH 无法在运行时切回自动档** | `DashPlugin.ts:644` `setQuality` 对 `'auto'` 直接 NaN 跳过；ABR 只在 load 时通过 `updateSettings` 设置 | 「自动清晰度」在 DASH 下不可用 |
 | 10 | **`RowDm` 与 `DanmakuPlugin` 争抢同一弹幕容器** | `RowDm` 自建 `.player-row-dm-wrap` 并自行渲染；`DanmakuPlugin.ts:134` 又 querySelector 抓同一容器建 `DanmakuManager` | 两套渲染并存 |
 | 11 | **多个组件导出但从未挂载** | `Toast`/`Loading`/`State`/`Top`/`Tooltips`/`VolumeHint`/`Selection`/`VideoInfo`/`Switch`/`Ending`/`Mini` 全仓库无 `h(...)` 渲染 | 「切换中/成功」UI 反馈缺载体 |
-| 12 | **`smartMerge` 语义不清** | 既有实现在 `controls/rowcmd` 里用作增量 diff，但本项目的版本此前是浅合并 | 已在本轮修正为真深合并 |
+| 12 | **`smartMerge` 语义不清** | 既有实现里用作增量 diff，但本项目的版本此前是浅合并 | 已在本轮修正为真深合并 |
 
 ---
 

@@ -124,19 +124,6 @@ hili-player/
 └── utils/rafInterval.ts                # RAF工具
 ```
 
-### 1.2 既有播放器说明
-
-既有实现使用 `Component` 基类模式：
-
-- `template()` 返回 HTML 字符串定义 DOM
-- `setup()` 中用 `querySelector` 获取元素引用并绑定事件
-- 子组件通过 `new ChildComponent(container)` 实例化，传入容器元素
-- 子组件向父组件通信用 `this.trigger("事件名", data)`
-- 父组件监听子组件用 `child.on("事件名", handler)`
-
-**我们从这个既有播放器提取**：DOM 结构、CSS 类名、交互逻辑。
-**我们不使用**：Component 基类模式 — 改为 h() + defineComponent。
-
 ### 1.3 新框架说明
 
 `packages/player/src/` 是使用 h() 函数的播放器实现：
@@ -273,7 +260,6 @@ private videoEl: HTMLVideoElement | null = null;
 - 类/方法/函数必须带 `@param` / `@returns` / `@throws` 等 JSDoc 标注
 - 函数内部关键步骤用 `// 步骤N: 描述` 注释
 - 禁止写 "added for X flow"、"used by Y"、"handles the case from issue #Z" 等外部上下文引用
-- 既有代码（不能动的）用 `[参考/不动]` 标记
 - 已有正确代码用 `[已有/正确]` 标记
 - 需要修改的代码用 `[已有/需改]` 标记
 
