@@ -60,10 +60,15 @@ async function createServer() {
    *   自定义模式，Vite 不会注入默认的 HTML 处理中间件
    *   我们自己处理 HTML 模板的读取和 SSR 注入
    */
+  const httpServer = app.listen(PORT, () => {
+    console.log(`SSR 开发服务器已启动: http://localhost:${PORT}`);
+  });
+
   const vite = await createViteServer({
     root: path.resolve(__dirname),
     server: {
       middlewareMode: true,
+      hmr: { server: httpServer },
     },
     appType: 'custom',
   });
@@ -298,9 +303,6 @@ async function createServer() {
    * ============================================
    * 监听指定端口，等待客户端连接
    */
-  app.listen(PORT, () => {
-    console.log(`SSR 开发服务器已启动: http://localhost:${PORT}`);
-  });
 }
 
 /**

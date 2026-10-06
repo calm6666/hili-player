@@ -26,6 +26,7 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
   // ============================================
 
   /** 播放图标元素引用 */
+  const playIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playIconRef');
 
   /** 缓冲图标元素引用 */
   const bufferIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bufferIconRef');
@@ -112,6 +113,28 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
     }
   };
 
+  /**
+   * 显示播放图标
+   */
+  const showPlayIcon = (): void => {
+    if (playIconRef.value) {
+      playIconRef.value.style.display = '';
+    }
+  };
+
+  /**
+   * 隐藏播放图标
+   */
+  const hidePlayIcon = (): void => {
+    if (playIconRef.value) {
+      playIconRef.value.style.display = 'none';
+    }
+  };
+
+  // ============================================
+  // 生命周期钩子
+  // ============================================
+
   lifecycle.onMounted = (): void => {
     // 初始状态：先按 props 速度决定速度文本显隐（无有效数据即隐藏）
     applyBufferSpeed(props.bufferSpeed ?? 0);
@@ -121,11 +144,15 @@ export const State = defineComponent<StateProps>((props, lifecycle: ComponentLif
     } else {
       hideBuffering();
     }
+    // 初始隐藏播放图标（由父组件的暂停状态驱动显示）
+    hidePlayIcon();
 
     lifecycle.emit?.('stateMounted', {
       updateBufferSpeed,
       showBuffering,
       hideBuffering,
+      showPlayIcon,
+      hidePlayIcon,
     });
   };
 

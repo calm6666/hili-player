@@ -390,11 +390,6 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
     const dataAuto = source.find(isAutoEntry);
     concreteList = source.filter((item) => item !== dataAuto);
 
-    // 需求：列表从高清到低清（自动项由下方构造逻辑固定排在最后）
-    concreteList = [...concreteList].sort(
-      (a, b) => (b.height ?? 0) - (a.height ?? 0) || (b.bitrate ?? 0) - (a.bitrate ?? 0),
-    );
-
     const autoCapable = detectAutoCapable(source);
     autoId = dataAuto ? dataAuto.id : autoCapable ? AUTO_QUALITY_ID : '';
     menuItems = dataAuto

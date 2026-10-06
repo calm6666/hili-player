@@ -83,7 +83,9 @@ $eplist-scrollbar-width: 6px;
     position: absolute;
     text-align: left;
     transform: translateX(-50%);
-    transition: opacity 0.2s ease, visibility 0.2s ease;
+    transition:
+      opacity 0.2s ease,
+      visibility 0.2s ease;
     visibility: hidden;
     width: 320px;
   }
@@ -210,10 +212,6 @@ $eplist-scrollbar-width: 6px;
     background: transparent;
   }
 }
-
-// ============================================
-// 4. 大屏适配（与既有面板 rules 同断点：index.scss:4895 screen-style 用 750px）
-// ============================================
 
 @media screen and (min-width: 750px) {
   .player-container[data-screen="web"] .player-ctrl-btn.player-ctrl-eplist,

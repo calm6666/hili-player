@@ -136,7 +136,9 @@ interface StateAPI {
   /** 隐藏缓冲图标与文本 */
   hideBuffering: () => void;
   /** 显示中央播放图标（暂停态） */
+  showPlayIcon: () => void;
   /** 隐藏中央播放图标 */
+  hidePlayIcon: () => void;
 }
 
 /** 顶部栏组件挂载后回传的控制 API */
@@ -1341,6 +1343,20 @@ export const PlayerDocker = defineComponent<
       lifecycle,
     );
 
+    // 播放状态（player.state）→ 暂停时显示中央播放图标，播放 / 结束 / 出错时隐藏
+    useState(
+      stateMgr,
+      PlayerStateKeyEnum.STATE,
+      (playerState) => {
+        if (playerState === PlayerState.PAUSED) {
+          stateApi.showPlayIcon?.();
+        } else {
+          stateApi.hidePlayIcon?.();
+        }
+      },
+      lifecycle,
+    );
+
     // 清晰度切换：switching / switched / failed 三段反馈
     useState(
       stateMgr,
@@ -2321,10 +2337,13 @@ export const PlayerDocker = defineComponent<
             buffering: stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false,
             onStateMounted: (api: StateAPI) => {
               Object.assign(stateApi, api);
-              // 订阅回调早于 State 挂载时补一次同步（缓冲中直接进入对应显示态）
+              // 订阅回调早于 State 挂载时补一次同步（缓冲中 / 暂停中直接进入对应显示态）
               if (stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false) {
                 stateApi.showBuffering?.();
                 setBufferSpeedSampling(true);
+              }
+              if (stateMgr?.get(PlayerStateKeyEnum.STATE) === PlayerState.PAUSED) {
+                stateApi.showPlayIcon?.();
               }
             },
           }),

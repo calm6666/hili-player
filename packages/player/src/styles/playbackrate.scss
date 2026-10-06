@@ -1,0 +1,47 @@
+.player-docker {
+  .player-container {
+    .player-ctrl-playbackrate {
+      font-size: 14px;
+      width: 50px;
+
+      .player-ctrl-playbackrate-result {
+        cursor: pointer;
+        font-weight: 600;
+        width: 100%;
+      }
+
+      .player-ctrl-playbackrate-menu {
+        background-color: hsla(0, 0%, 8%, 0.9);
+        border-radius: 2px;
+        bottom: 41px;
+        -webkit-box-sizing: border-box;
+        box-sizing: border-box;
+        display: none;
+        left: 50%;
+        margin: 0;
+        padding: 0;
+        position: absolute;
+        text-align: center;
+        -webkit-transform: translateX(-50%);
+        transform: translateX(-50%);
+        width: 70px;
+
+        .player-ctrl-playbackrate-menu-item {
+          cursor: pointer;
+          height: 36px;
+          line-height: 36px;
+          position: relative;
+
+          &:hover {
+            background-color: hsla(0, 0%, 100%, 0.1);
+          }
+        }
+
+        .player-ctrl-playbackrate-menu-item.player-state-active {
+          color: #00a1d6;
+          color: var(--player-primary-color, #00a1d6);
+        }
+      }
+    }
+  }
+}

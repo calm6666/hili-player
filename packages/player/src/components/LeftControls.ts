@@ -91,6 +91,13 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
     if (el) el.style.display = visible ? '' : 'none';
   };
 
+  const applyPlaylistControls = (): void => {
+    const total = state?.get(PlayerStateKeyEnum.PLAYLIST_LENGTH) ?? 0;
+    const index = state?.get(PlayerStateKeyEnum.PLAYLIST_INDEX) ?? 0;
+    setControlVisible('prev', total > 1 && index > 0);
+    setControlVisible('next', total > 1 && index < total - 1);
+  };
+
   /**
    * 通过 useContext 获取状态管理器
    * StateContext 由 VideoPlayer 通过 provide 注入
@@ -287,6 +294,24 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       },
       lifecycle
     );
+
+    useState(
+      state,
+      PlayerStateKeyEnum.PLAYLIST_LENGTH,
+      () => {
+        applyPlaylistControls();
+      },
+      lifecycle
+    );
+
+    useState(
+      state,
+      PlayerStateKeyEnum.PLAYLIST_INDEX,
+      () => {
+        applyPlaylistControls();
+      },
+      lifecycle
+    );
   }
 
   // ============================================
@@ -435,6 +460,8 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
         );
       });
     }
+
+    applyPlaylistControls();
 
     lifecycle.emit?.('leftControlsMounted');
   };

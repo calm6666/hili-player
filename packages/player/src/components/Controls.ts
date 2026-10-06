@@ -219,6 +219,16 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     /** 提示按钮延迟显示的定时器 */
     let inTimer: AnimationFrameID | null = null;
 
+    /** 提示按钮名 → 选择器（按钮由左右控制栏子组件渲染，父层挂载后才可检索到） */
+    const TOOLTIP_SELECTORS: Record<string, string> = {
+      prev: ".player-ctrl-btn.player-ctrl-prev",
+      next: ".player-ctrl-btn.player-ctrl-next",
+      pip: ".player-ctrl-btn.player-ctrl-pip",
+      wide: ".player-ctrl-btn.player-ctrl-wide",
+      web: ".player-ctrl-btn.player-ctrl-web",
+      full: ".player-ctrl-btn.player-ctrl-full",
+    };
+
     // ============================================
     // DOM 元素引用（全部通过 ref 对象获取）
     // ============================================
@@ -455,7 +465,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     lifecycle.onMounted = (): void => {
       initDuration();
       initBackrate();
-      initTooltip();
 
       // 填充菜单配置：子组件（LeftControls / RightControls）先于父组件挂载，
       // 此处控制条主体 DOM 已就绪，可直接在实体容器内检索各菜单挂载点
@@ -485,6 +494,13 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
             };
           }
         }
+
+        tooltipBtns.forEach((btn) => {
+          btn.element = entity.querySelector<HTMLDivElement>(
+            TOOLTIP_SELECTORS[btn.name] ?? "",
+          );
+        });
+        initTooltip();
       }
 
       // 暴露控制栏 API 给父组件
