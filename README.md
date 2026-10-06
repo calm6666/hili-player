@@ -79,8 +79,7 @@ hili-player/
 │           └── stream/         #   流媒体插件共享类型与枚举
 ├── plugins/vite-plugin-hili-compile/   # 编译期 h() 改写插件
 ├── demo/  demo-prod/           # SSR + Hydration 演示（含 Express 服务端）
-├── docs/                       # 设计与分析文档
-└── player-reference/     # 上游既有实现，只读、不入库
+└── docs/                       # 设计与分析文档
 ```
 
 ### 代码规模

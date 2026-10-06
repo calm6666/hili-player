@@ -51,12 +51,6 @@
 
 ```
 hili-player/
-├── player-reference/     # [参考] 禁止修改
-│   └── src/
-│       ├── player.ts                     # 主入口
-│       ├── component/component.ts        # Component 基类
-│       └── component/<组件名>/           # 26个组件 (各含 index.ts + index.scss)
-│
 ├── packages/
 │   ├── player/src/
 │   │   ├── player/VideoPlayer.ts         # 核心播放器
@@ -132,7 +126,7 @@ hili-player/
 
 ### 1.2 既有播放器说明
 
-`player-reference/src/` 是既有实现的播放器实现，使用 `Component` 基类模式：
+既有实现使用 `Component` 基类模式：
 
 - `template()` 返回 HTML 字符串定义 DOM
 - `setup()` 中用 `querySelector` 获取元素引用并绑定事件
@@ -1200,7 +1194,6 @@ hydrate(container: HTMLElement): void {
 
 ```
 hili-player/
-├── player-reference/     # [参考] 不修改
 ├── packages/
 │   ├── player/src/
 │   │   ├── player/VideoPlayer.ts          # [需改] +SSR, +StreamMiddleware
@@ -1344,7 +1337,6 @@ hili-player/
 ## 17. 附录 A: PlayerDocker 入口组件
 
 > **文件**: `packages/player/src/components/PlayerDocker.ts`
-> **参考**: `player-reference/src/player.ts`
 > **状态**: [已有/需改] — DOM 结构已正确，需补充全屏切换/键盘事件/迷你播放器/Controls 延迟初始化逻辑
 
 ```typescript
@@ -1765,7 +1757,6 @@ export const PlayerDocker = defineComponent<PlayerDockerProps>((props, lifecycle
 ## 18. 附录 B: Controls 控制条组件
 
 > **文件**: `packages/player/src/components/Controls.ts`
-> **参考**: `player-reference/src/component/controls/index.ts`
 > **状态**: [已有/正确] — DOM 结构和交互逻辑已与既有实现一致，使用 defineComponent + h()
 
 Controls 组件是控制条的总装容器，负责：
@@ -1916,7 +1907,6 @@ DOM 结构:
 ## 23. 附录 G: SendBar 发送栏
 
 > **文件**: `packages/player/src/components/SendBar.ts`
-> **参考**: `player-reference/src/component/sendbar/index.ts`
 > **状态**: [已有/正确] — DOM 和子组件注入已与既有实现一致
 
 DOM 结构:
