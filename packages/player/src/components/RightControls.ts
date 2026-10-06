@@ -114,6 +114,17 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     if (el) el.style.display = visible ? '' : 'none';
   };
 
+  const applyEplistVisibility = (): void => {
+    const total = state?.get(PlayerStateKeyEnum.PLAYLIST_LENGTH) ?? 0;
+    const el = bottomRightRef.value?.querySelector<HTMLElement>(
+      CONTROL_SELECTORS.episodes,
+    );
+    if (!el) return;
+    const visible = total > 1;
+    el.style.visibility = visible ? '' : 'hidden';
+    el.style.width = visible ? '' : '0';
+  };
+
   // 运行时可用清晰度列表：初始快照由 QualityMenu 内部订阅后续变化
   const qualities = state?.get(PlayerStateKeyEnum.AVAILABLE_QUALITIES) ?? [];
   const currentQuality = state?.get(PlayerStateKeyEnum.QUALITY) ?? 'auto';
@@ -455,6 +466,15 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       },
       lifecycle
     );
+
+    useState(
+      state,
+      PlayerStateKeyEnum.PLAYLIST_LENGTH,
+      () => {
+        applyEplistVisibility();
+      },
+      lifecycle
+    );
   }
 
   // ============================================
@@ -656,6 +676,8 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         );
       });
     }
+
+    applyEplistVisibility();
 
     lifecycle.emit?.('rightControlsMounted');
   };

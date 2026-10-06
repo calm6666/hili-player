@@ -43,7 +43,7 @@ import { VideoPlayer } from "@/hili-player/player";
 import { createHlsPlugin } from "@/hili-player/plugins/hls";
 import { createDashPlugin } from "@/hili-player/plugins/dash";
 import { DanmakuPlugin } from "@/hili-player/plugins/danmaku";
-import type { PlayerConfig } from "@/types";
+import type { MediaItem, PlayerConfig, PlayerSource } from "@/types";
 import type { Plugin } from "@/hili-player/core/plugin";
 
 // ============================================
@@ -439,6 +439,175 @@ const btnDestroyPlayer = document.getElementById("btn-destroy-player");
 if (btnDestroyPlayer) {
   btnDestroyPlayer.addEventListener("click", destroyCurrentPlayer);
 }
+
+const MEDIA_LIST: MediaItem[] = [];
+const OBJECT_URLS: string[] = [];
+
+if (playerInstance) {
+  const seeded = playerInstance.getPlaylist();
+  if (seeded.length > 0) {
+    seeded.forEach((item) => MEDIA_LIST.push(item));
+  } else {
+    const initialConfig = playerInstance.getConfig();
+    if (initialConfig.src) {
+      MEDIA_LIST.push({ src: initialConfig.src });
+    }
+  }
+}
+
+function collectPlugins(): Plugin[] {
+  return [
+    createDashPlugin({ autoplay: false }),
+    createHlsPlugin({ autoplay: false }),
+    DanmakuPlugin(),
+  ];
+}
+
+function parseSource(text: string): PlayerSource | null {
+  const value = text.trim();
+  if (!value) return null;
+  if (value.startsWith("{") || value.startsWith("[")) {
+    try {
+      return JSON.parse(value) as unknown as PlayerSource;
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
+function sourceLabel(item: MediaItem, index: number): string {
+  if (item.title) return `${index + 1}. ${item.title}`;
+  if (typeof item.src === "string") return `${index + 1}. ${item.src.slice(0, 64)}`;
+  return `${index + 1}. JSON 视频源`;
+}
+
+function renderSourceList(): void {
+  const list = document.getElementById("source-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const current = playerInstance?.getCurrentIndex() ?? 0;
+  MEDIA_LIST.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = index === current ? "source-item player-state-active" : "source-item";
+    li.dataset.index = String(index);
+    li.textContent = sourceLabel(item, index);
+    li.addEventListener("click", () => {
+      const target = playerInstance;
+      if (target) {
+        void target.switchTo(index).catch(() => undefined);
+      }
+      renderSourceList();
+    });
+    list.appendChild(li);
+  });
+}
+
+function rebuildPlayer(targetIndex: number): void {
+  destroyCurrentPlayer();
+
+  const wrapper = document.getElementById("player-wrapper");
+  if (!wrapper) return;
+
+  wrapper.innerHTML = "";
+
+  const config: PlayerConfig = {
+    playlist: MEDIA_LIST,
+    playback: {
+      autoplay: false,
+      muted: true,
+      volume: 0.8,
+    },
+    interaction: {
+      keyboard: true,
+    },
+    plugins: {
+      list: collectPlugins(),
+    },
+    advanced: {
+      debug: false,
+    },
+  };
+
+  try {
+    const next = new VideoPlayer(config);
+    setPlayerInstance(next);
+    next.mount(wrapper);
+    (window as unknown as { player: VideoPlayer }).player = next;
+    if (targetIndex > 0) {
+      void next.switchTo(targetIndex).catch(() => undefined);
+    }
+    appEventBus.emit("ACTION_LOG", {
+      action:
+        "视频列表 " + MEDIA_LIST.length + " 项，当前第 " + (targetIndex + 1) + " 项",
+      timestamp: Date.now(),
+    });
+  } catch (e) {
+    console.error("[VideoPlayer Playlist Error]", e);
+  }
+
+  renderSourceList();
+}
+
+function addSource(source: PlayerSource, title: string): void {
+  MEDIA_LIST.push({ src: source, title });
+  rebuildPlayer(MEDIA_LIST.length - 1);
+}
+
+function handleAddSource(): void {
+  const input = document.getElementById("input-source-url");
+  if (!(input instanceof HTMLInputElement)) return;
+  const source = parseSource(input.value);
+  if (!source) {
+    appEventBus.emit("ACTION_LOG", {
+      action: "视频链接为空或 JSON 解析失败",
+      timestamp: Date.now(),
+    });
+    return;
+  }
+  input.value = "";
+  addSource(source, typeof source === "string" ? source.slice(0, 64) : "JSON 视频源");
+}
+
+function handleLocalFile(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const file = target.files?.item(0);
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  OBJECT_URLS.push(url);
+  target.value = "";
+  addSource(url, file.name);
+}
+
+const inputSourceUrl = document.getElementById("input-source-url");
+if (inputSourceUrl) {
+  inputSourceUrl.addEventListener("keydown", (event) => {
+    if (event instanceof KeyboardEvent && event.key === "Enter") {
+      handleAddSource();
+    }
+  });
+}
+
+const btnAddSource = document.getElementById("btn-add-source");
+if (btnAddSource) {
+  btnAddSource.addEventListener("click", handleAddSource);
+}
+
+const inputLocalFile = document.getElementById("input-local-file");
+if (inputLocalFile) {
+  inputLocalFile.addEventListener("change", handleLocalFile);
+}
+
+const btnDestroyWithCleanup = document.getElementById("btn-destroy-player");
+if (btnDestroyWithCleanup) {
+  btnDestroyWithCleanup.addEventListener("click", () => {
+    OBJECT_URLS.forEach((url) => URL.revokeObjectURL(url));
+    OBJECT_URLS.length = 0;
+  });
+}
+
+renderSourceList();
 
 // ============================================
 // 辅：徽章状态更新

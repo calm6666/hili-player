@@ -1221,6 +1221,32 @@ const PlayerSection = defineComponent(() => {
       ),
     ),
     h(
+      "div",
+      {
+        class: "player-controls",
+      },
+      h("input", {
+        id: "input-source-url",
+        class: "source-input",
+        placeholder: "粘贴 mpd / m3u8 链接，或 DASH/HLS JSON",
+      }),
+      h(
+        "button",
+        {
+          id: "btn-add-source",
+          class: "btn-accent",
+        },
+        "添加视频",
+      ),
+      h("input", {
+        id: "input-local-file",
+        class: "source-input",
+        type: "file",
+        accept: "video/*",
+      }),
+    ),
+    h("ul", { id: "source-list", class: "source-list" }),
+    h(
       "p",
       {
         class: "player-description",
