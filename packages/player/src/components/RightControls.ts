@@ -120,9 +120,9 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       CONTROL_SELECTORS.episodes,
     );
     if (!el) return;
-    const visible = total > 1;
-    el.style.visibility = visible ? '' : 'hidden';
-    el.style.width = visible ? '' : '0';
+    el.style.visibility = '';
+    el.style.width = '';
+    el.classList.toggle('player-has-playlist', total > 1);
   };
 
   // 运行时可用清晰度列表：初始快照由 QualityMenu 内部订阅后续变化
@@ -449,6 +449,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         episodes = next;
         eplistKey = nextKey;
         rebuildEplist();
+        applyEplistVisibility();
       },
       lifecycle
     );

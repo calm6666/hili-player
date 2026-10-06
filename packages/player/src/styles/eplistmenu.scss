@@ -33,9 +33,9 @@ $eplist-scrollbar-width: 6px;
 //   .player-docker.mode-webscreen —— PlayerDocker.ts:1507 加类，index.scss:5161 定义
 //   .player-container[data-screen="web"] —— PlayerDocker.ts:450 / VideoPlayer.ts:1945 写属性
 //   .player-container[data-screen="full"] —— PlayerDocker.ts:1749 写属性
-.player-docker.mode-webscreen .player-ctrl-btn.player-ctrl-eplist,
-.player-container[data-screen="web"] .player-ctrl-btn.player-ctrl-eplist,
-.player-container[data-screen="full"] .player-ctrl-btn.player-ctrl-eplist {
+.player-docker.mode-webscreen .player-ctrl-btn.player-ctrl-eplist.player-has-playlist,
+.player-container[data-screen="web"] .player-ctrl-btn.player-ctrl-eplist.player-has-playlist,
+.player-container[data-screen="full"] .player-ctrl-btn.player-ctrl-eplist.player-has-playlist {
   visibility: visible;
   width: auto;
 }

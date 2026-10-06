@@ -293,13 +293,6 @@ if (root) {
  * 示例视频源列表（轮播切换）
  * 包含 HLS / DASH / MP4 三种格式
  */
-const SAMPLE_SOURCES = [
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-  "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
-];
-
-let sampleIndex = 0;
 
 /**
  * 切换视频源（客户端重新创建播放器实例）
@@ -311,98 +304,6 @@ let sampleIndex = 0;
  * 4. 挂载到容器
  *
  * 注意：这是客户端操作，不影响 SSR 已渲染的内容
- */
-function switchPlayerSource(): void {
-  const src = SAMPLE_SOURCES[sampleIndex % SAMPLE_SOURCES.length];
-  sampleIndex++;
-
-  // 销毁当前播放器
-  destroyCurrentPlayer();
-
-  const wrapper = document.getElementById("player-wrapper");
-  if (!wrapper) {
-    console.warn("[PlayerSection] #player-wrapper 未找到");
-    return;
-  }
-
-  // 清空容器
-  wrapper.innerHTML = "";
-
-  // 根据视频源类型选择插件
-  const plugins: Plugin[] = [DanmakuPlugin()];
-
-  if (/\.m3u8(\?|$)/i.test(src) || /hls/i.test(src)) {
-    plugins.unshift(createHlsPlugin({ autoplay: false }));
-  } else if (/\.mpd(\?|$)/i.test(src) || /dash/i.test(src)) {
-    plugins.unshift(createDashPlugin({ autoplay: false }));
-  }
-
-  try {
-    const config: PlayerConfig = {
-      src,
-      playback: {
-        autoplay: false,
-        muted: true,
-        volume: 0.8,
-      },
-      interaction: {
-        keyboard: true,
-      },
-      plugins: {
-        list: plugins,
-      },
-      advanced: {
-        debug: false,
-      },
-    };
-
-    const newPlayer = new VideoPlayer(config);
-    setPlayerInstance(newPlayer);
-    newPlayer.mount(wrapper);
-
-    // 监听关键事件
-    const events = ["ready", "play", "pause", "ended", "error", "destroy"];
-    events.forEach((evt) => {
-      try {
-        (newPlayer as unknown as {
-          on: (e: string, cb: (...args: unknown[]) => void) => void;
-        }).on(evt, (...args: unknown[]) => {
-          appEventBus.emit("ACTION_LOG", {
-            action: "Player:" + evt + (args.length ? " " + JSON.stringify(args[0]).slice(0, 80) : ""),
-            timestamp: Date.now(),
-          });
-        });
-      } catch {
-        // 忽略
-      }
-    });
-
-    (window as unknown as { player: VideoPlayer }).player = newPlayer;
-
-    appendHydrationItem({
-      id: "VideoPlayer:切换源",
-      pass: true,
-      detail: "src=" + src.slice(0, 60),
-      timestamp: Date.now(),
-    });
-
-    appEventBus.emit("ACTION_LOG", {
-      action: "VideoPlayer 切换源: " + src.slice(0, 60),
-      timestamp: Date.now(),
-    });
-  } catch (e) {
-    appendHydrationItem({
-      id: "VideoPlayer:切换源",
-      pass: false,
-      detail: e instanceof Error ? e.message : String(e),
-      timestamp: Date.now(),
-    });
-    console.error("[VideoPlayer Switch Error]", e);
-  }
-}
-
-/**
- * 销毁当前播放器实例
  */
 function destroyCurrentPlayer(): void {
   if (playerInstance) {
@@ -430,11 +331,6 @@ function destroyCurrentPlayer(): void {
 }
 
 // 绑定按钮事件
-const btnSwitchSource = document.getElementById("btn-switch-source");
-if (btnSwitchSource) {
-  btnSwitchSource.addEventListener("click", switchPlayerSource);
-}
-
 const btnDestroyPlayer = document.getElementById("btn-destroy-player");
 if (btnDestroyPlayer) {
   btnDestroyPlayer.addEventListener("click", destroyCurrentPlayer);
@@ -442,16 +338,6 @@ if (btnDestroyPlayer) {
 
 const MEDIA_LIST: MediaItem[] = [];
 const OBJECT_URLS: string[] = [];
-
-if (playerInstance) {
-  SAMPLE_SOURCES.forEach((src) => MEDIA_LIST.push({ src, title: src.slice(0, 64) }));
-  if (MEDIA_LIST.length === 0) {
-    const initialConfig = playerInstance.getConfig();
-    if (initialConfig.src) {
-      MEDIA_LIST.push({ src: initialConfig.src });
-    }
-  }
-}
 
 function collectPlugins(): Plugin[] {
   return [

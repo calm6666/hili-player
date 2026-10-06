@@ -46,7 +46,6 @@ import {
   createTypedEventBus,
   useState,
 } from "@/core";
-import type { PlayerConfig } from "@/types";
 import { VideoPlayer } from "@/hili-player/player";
 
 // SVG 图标组件（替代 Unicode emoji）
@@ -1107,12 +1106,6 @@ const HydrationPanel = defineComponent((_props, _lifecycle) => {
 // ============================================
 
 /**
- * 默认视频源（MP4，原生 HTML5 支持，无需流媒体插件）
- * 用于 SSR 阶段直接渲染播放器 UI
- */
-const DEFAULT_PLAYER_SRC = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-
-/**
  * VideoPlayer 实例持有者
  * - SSR 阶段：createSSRPlayer 创建实例，render() 返回 VNode 用于 renderToString
  * - 客户端水合后：同一实例的 onMounted 回调自动绑定事件到已有 DOM
@@ -1142,42 +1135,6 @@ export function setPlayerInstance(p: VideoPlayer | null): void {
  * - 与框架的 SSR/Hydrate 流程完全一致
  */
 const PlayerSection = defineComponent(() => {
-  /**
-   * 创建 VideoPlayer 实例
-   * 构造函数内部 SSR 安全：
-   * - detectCapability() 检查 typeof window === "undefined"
-   * - createPlayerStore 使用 safeCall 包装 localStorage 访问
-   * - registerPlugins() 只保存引用，不执行 DOM 操作
-   */
-  const playerConfig: PlayerConfig = {
-    src: DEFAULT_PLAYER_SRC,
-    playback: {
-      autoplay: true,
-      muted: true,
-      volume: 0.8,
-    },
-    interaction: {
-      keyboard: true,
-    },
-    advanced: {
-      debug: false,
-    },
-  };
-
-  const player = new VideoPlayer(playerConfig);
-  playerInstance = player;
-
-  /**
-   * 获取播放器的渲染 VNode
-   * player.render() 返回 h(PlayerDocker, {...}) VNode
-   * 该 VNode 包含完整的播放器 UI 结构（video 标签、控制栏、弹幕层等）
-   *
-   * PlayerDocker 的 onMounted 回调在水合时自动执行：
-   * - initVideo(): 初始化 video 元素（设置 src、事件绑定）
-   * - initEvent(): 绑定控制栏交互事件
-   * - emit("mounted"): 通知 VideoPlayer 实例获取 DOM 引用
-   */
-  const playerVNode = player.render();
 
   return h(
     "div",
@@ -1194,22 +1151,13 @@ const PlayerSection = defineComponent(() => {
         id: "player-wrapper",
         class: "player-wrapper",
       },
-      playerVNode,
+      h("div", { class: "player-empty" }, "请先添加视频来源"),
     ),
     h(
       "div",
       {
         class: "player-controls",
       },
-      h(
-        "button",
-        {
-          id: "btn-switch-source",
-          class: "btn-accent",
-        },
-        h(IconRefresh, { size: 14 }),
-        "切换视频源",
-      ),
       h(
         "button",
         {

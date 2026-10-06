@@ -44,7 +44,7 @@ export interface EpisodesMenuEvents {
 }
 
 /** 列表区域最小高度，与参考实现的 min-height: 480px 对齐（普通模式盖掉，由 scss 控制） */
-const MENU_MIN_HEIGHT = '480px';
+const MENU_MIN_HEIGHT = '180px';
 
 /** 当前集「播放中」三段竖条图标（参考 DOM：viewBox 0 0 12 13 + 3 个 rect） */
 const PLAYING_ICON_SVG =

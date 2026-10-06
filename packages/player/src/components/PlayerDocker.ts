@@ -478,10 +478,13 @@ export const PlayerDocker = defineComponent<
    * 仅搬移已有的 `.player-sending-bar` 节点，不改变任何类名与内部结构
    * @param mode - 目标显示模式（full 为浏览器全屏，不属于 DisplayMode，仅内部使用）
    */
+  let sendingBarHome: HTMLElement | null = null;
+  let sendingBarNext: Node | null = null;
+
   const moveSendBar = (
     mode: DisplayMode | 'full',
   ): void => {
-    const bar = playerSendingAreaRef.value?.querySelector<HTMLElement>(
+    const bar = playerContainerRef.value?.querySelector<HTMLElement>(
       '.player-sending-bar',
     );
     if (!bar) return;
@@ -489,17 +492,23 @@ export const PlayerDocker = defineComponent<
       '.player-control-bottom-center',
     );
     if (mode === 'wide' || mode === 'web' || mode === 'full') {
-      // 与既有实现 handleFullscreenChange:477 一致：进入全屏时仅在
-      // 底部中央为空的情况下搬移，避免重复插入
       if (mode === 'full' && center && center.children.length > 0) return;
+      if (!sendingBarHome && bar.parentElement) {
+        sendingBarHome = bar.parentElement;
+        sendingBarNext = bar.nextSibling;
+      }
       if (center && bar.parentElement !== center) {
+        bar.remove();
         center.appendChild(bar);
       }
-    } else if (
-      playerSendingAreaRef.value &&
-      bar.parentElement !== playerSendingAreaRef.value
-    ) {
-      playerSendingAreaRef.value.appendChild(bar);
+    } else {
+      const home = sendingBarHome ?? playerSendingAreaRef.value;
+      if (home && bar.parentElement !== home) {
+        bar.remove();
+        const anchor =
+          sendingBarNext && sendingBarNext.parentNode === home ? sendingBarNext : null;
+        home.insertBefore(bar, anchor);
+      }
     }
   };
 
