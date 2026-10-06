@@ -220,7 +220,7 @@ input {
     box-sizing: border-box;
     color: inherit;
     font-size: 12px;
-    font-size: var(--bpx-ui-font-size, 12px);
+    font-size: var(--player-ui-font-size, 12px);
     justify-content: center;
     min-width: 68px;
     outline: none;
@@ -1298,7 +1298,7 @@ img {
                         -ms-flex-pack: center;
                         align-items: center;
                         background-color: #00a1d6;
-                        background-color: var(--bpx-primary-color, #00a1d6);
+                        background-color: var(--player-primary-color, #00a1d6);
                         border-radius: 2px;
                         cursor: pointer;
                         display: -webkit-inline-box;
@@ -2930,7 +2930,7 @@ img {
 
                     .player-ctrl-playbackrate-menu-item.player-state-active {
                       color: #00a1d6;
-                      color: var(--bpx-primary-color, #00a1d6);
+                      color: var(--player-primary-color, #00a1d6);
                     }
                   }
                 }
