@@ -49,6 +49,7 @@ import { createConfigStore, ConfigStoreContext } from "@/store/configStore";
 import type { ConfigStore } from "@/store/configStore";
 import type { PlayerPlaylistItem } from "@/store/runtimeState";
 import { PluginManager } from "@/hili-player/core/pluginManager";
+import { teardownComponentTree } from "@/hili-player/core/componentUnmount";
 import { createPlayerStore } from "@/hili-player/store";
 import type { PlayerStore } from "@/hili-player/store";
 import { createLogger, loggerManager, LogLevel } from "@/utils";
@@ -58,6 +59,7 @@ import { isBrowser } from "@/utils";
 import type { DanmakuItem } from "@/types/danmaku";
 import { PlayerDocker } from "@/hili-player/components/PlayerDocker";
 import { StreamMiddleware, PlayerMode } from "../utils/media/streamMiddleware";
+import { detectManifestProtocol } from "../utils/media/manifestProtocol";
 import { StreamFormatEnum } from "@/types/streamPlugin";
 import type {
   StreamPlugin,
@@ -221,6 +223,14 @@ export class VideoPlayer
 
   /** 视频源列表（由 props.src 映射） */
   private sources: ProgressiveVariant[] = [];
+
+  /**
+   * 当前生效的清单对象（对象注入模式）
+   *
+   * props.src 为自定义扁平 JSON 清单对象时，sources 为空数组，
+   * 清单本身保存在这里：协议判定（detectManifestProtocol）与加载目标解析都以它为准。
+   */
+  private manifestSource: MediaManifestSource | null = null;
 
   /** 当前播放的视频源索引 */
   private currentSourceIndex = 0;
@@ -798,8 +808,10 @@ export class VideoPlayer
     const src = this.props.src;
 
     if (typeof src === "string") {
+      this.manifestSource = null;
       this.sources = [{ url: src, label: "默认" }];
     } else if (Array.isArray(src) && src.length > 0) {
+      this.manifestSource = null;
       if (typeof src[0] === "string") {
         const urlArray = src.filter(
           (item): item is string => typeof item === "string",
@@ -825,6 +837,8 @@ export class VideoPlayer
       }
     } else {
       this.sources = [];
+      this.manifestSource =
+        src !== null && typeof src === "object" ? src : null;
     }
   }
 
@@ -1008,14 +1022,16 @@ export class VideoPlayer
         });
 
         // 流媒体模式：通过中间件加载源
+        // 清单对象（sources 为空数组）也必须在此处完成首帧加载，
+        // 否则对象注入模式下首屏只会出现空壳 DOM。
         if (
           this.streamMiddleware &&
-          this.streamMiddleware.getMode() !== PlayerMode.NATIVE
+          this.streamMiddleware.getMode() !== PlayerMode.NATIVE &&
+          this.props.src
         ) {
-          const sourceUrl = this.getCurrentSourceUrl();
-          if (sourceUrl) {
-            const format = this.detectStreamFormat(sourceUrl);
-            this.streamMiddleware.load({ url: sourceUrl, format });
+          const target = this.resolveLoadTarget(this.props.src);
+          if (target.url) {
+            this.streamMiddleware.load({ url: target.url, format: target.format });
           }
         }
 
@@ -1328,6 +1344,10 @@ export class VideoPlayer
 
   /**
    * 解析换源目标（供中间件或原生 video 使用）
+   *
+   * 清单对象的协议由 detectManifestProtocol 按内容判定（mediaSourceType →
+   * mediaSequence → SegmentBase → 默认 DASH），判定结果直接决定中间件选哪个插件。
+   *
    * @param source - 视频源
    * @returns 中间件可消费的 url 与格式
    */
@@ -1343,8 +1363,29 @@ export class VideoPlayer
       const url = typeof first === "string" ? first : (first?.url ?? "");
       return { url, format: this.detectStreamFormat(url) };
     }
-    // MediaManifestSource 对象注入：格式交由插件判断，缺省按 DASH
-    return { url: source, format: StreamFormatEnum.DASH };
+    return { url: source, format: this.formatOfProtocol(detectManifestProtocol(source)) };
+  }
+
+  /** 清单协议 → 流媒体格式 */
+  private formatOfProtocol(protocol: "dash" | "hls"): StreamFormatEnum {
+    return protocol === "hls" ? StreamFormatEnum.HLS : StreamFormatEnum.DASH;
+  }
+
+  /**
+   * 当前源实际生效的流媒体格式
+   *
+   * 清单对象按内容判定协议；字符串源按 URL 推断。
+   * 清晰度能力判定（getQualityMode）与首帧加载共用同一结果，避免两处分叉。
+   *
+   * @returns 流媒体格式
+   */
+  private currentStreamFormat(): StreamFormatEnum {
+    if (this.manifestSource) {
+      return this.formatOfProtocol(detectManifestProtocol(this.manifestSource));
+    }
+    const url = this.getCurrentSourceUrl();
+    if (url) return this.detectStreamFormat(url);
+    return StreamFormatEnum.MP4;
   }
 
   /**
@@ -2255,7 +2296,7 @@ export class VideoPlayer
       this.streamMiddleware &&
       this.streamMiddleware.getMode() !== PlayerMode.NATIVE
     ) {
-      const format = this.detectStreamFormat(this.getCurrentSourceUrl());
+      const format = this.currentStreamFormat();
       if (format === StreamFormatEnum.FLV) return "none";
       return format === StreamFormatEnum.HLS || format === StreamFormatEnum.DASH
         ? "adaptive"
@@ -2930,13 +2971,23 @@ export class VideoPlayer
   // ============================================
 
   /**
-   * 销毁播放器：暂停、清理监听/中间件/订阅/竞态，emit DESTROY
+   * 销毁播放器
+   *
+   * 卸载顺序按 Vue 的组件树卸载语义编排：
+   * 1. 暂停 + 取消换源竞态 / 定时器 + 复位运行时状态；
+   * 2. 从最深子组件逐层向上到根，执行各组件的统一卸载入口（DOM 调用 / 事件 /
+   *    定时器 / ResizeObserver / IntersectionObserver / 模板 ref），此时 DOM 仍在；
+   * 3. 销毁流媒体中间件（含 dash.js / hls.js 实例）；
+   * 4. 销毁插件管理器（卸载其余插件）；
+   * 5. 取消清晰度与事件桥接订阅；
+   * 6. 解绑根级监听（video 监听 / document 监听）并安全断开媒体（pause → 清 src → load，
+   *    放在插件销毁之后，避免 dash.js 的 SourceBuffer 已被摘除后仍被轮询）；
+   * 7. 广播 DESTROY，最后移除根节点（destroy(vnode) 由子到父移除 DOM）。
    */
   destroy(): void {
-    // 暂停播放
+    // ── 1. 暂停并取消竞态 ──
     this.pause();
 
-    // 取消换源竞态与清理清晰度切换定时器
     this.loadToken++;
     this.clearPendingLoad();
     this.pendingSeek = null;
@@ -2952,27 +3003,39 @@ export class VideoPlayer
     this.store.setLoading(false);
     this.store.setWaiting(false);
 
-    // 摘除全部 video 监听器
-    this.removeVideoListeners();
+    // ── 2. 组件树：最深子组件 → 根 ──
+    if (this.vnode) {
+      teardownComponentTree(this.vnode);
+    }
 
-    // 销毁流媒体中间件（含 activePlugin.destroy）
+    // ── 3. 流媒体中间件（含 activePlugin.destroy）──
     this.streamMiddleware?.destroy();
     this.streamMiddleware = null;
 
-    // 销毁插件管理器
+    // ── 4. 插件管理器 ──
     this.pluginManager?.destroy();
     this.pluginManager = null;
 
-    // 取消清晰度订阅
+    // ── 5. 取消清晰度 / 桥接订阅 ──
     this.unsubscribeQuality?.();
     this.unsubscribeQuality = null;
     this.unsubscribeStreamQuality?.();
     this.unsubscribeStreamQuality = null;
 
-    // 移除事件监听
+    // ── 6. 解绑根级监听并安全断开媒体 ──
+    this.removeVideoListeners();
+
+    // 媒体断开必须在流媒体插件销毁之后：先摘 src 会把 MediaSource 从 video 元素上摘除，
+    // 此时若 dash.js 仍在轮询 buffer ranges 就会抛
+    // 「SourceBuffer has been removed from the parent media source」。
+    if (this.videoEl) {
+      this.videoEl.pause();
+      this.videoEl.removeAttribute("src");
+      this.videoEl.load();
+    }
+
     this.emitter.removeAllListeners();
 
-    // 移除全屏变化监听
     if (this.fullscreenChangeHandler) {
       document.removeEventListener(
         "fullscreenchange",
@@ -2981,6 +3044,7 @@ export class VideoPlayer
       this.fullscreenChangeHandler = null;
     }
 
+    // ── 7. 广播销毁事件 + 移除根节点 ──
     // 广播销毁事件（桥接仍生效，destroy 会同步转发到 emitter）
     this.events.emit(PlayerEventEnum.DESTROY);
 
@@ -2990,7 +3054,7 @@ export class VideoPlayer
     }
     this.bridgeUnsubscribes = [];
 
-    // 销毁虚拟节点
+    // 销毁虚拟节点（由子到父移除 DOM，根节点最后移除）
     if (this.vnode) {
       destroy(this.vnode);
     }
@@ -3004,6 +3068,7 @@ export class VideoPlayer
     this.videoEl = null;
     this.containerEl = null;
     this.vnode = null;
+    this.manifestSource = null;
   }
 
   /**

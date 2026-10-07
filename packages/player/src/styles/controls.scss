@@ -940,135 +940,10 @@
     width: 100%;
   }
 
-  .player-shadow-progress-area {
-    bottom: 0;
-    height: 2px;
-    left: 0;
-    position: absolute;
-    right: 0;
-    -webkit-transition: opacity 0.4s ease-in;
-    transition: opacity 0.4s ease-in;
-  }
-
-  .player-shadow-progress-schedule-wrap {
-    height: 100%;
-    position: relative;
-    width: 100%;
-  }
-
-  .player-progress-schedule {
-    background-color: hsla(0, 0%, 100%, 0.2);
-    border-radius: 1.5px;
-    bottom: 0;
-    left: 0;
-    overflow: hidden;
-    position: absolute;
-    right: 0;
-    top: 0;
-  }
-
-  .player-progress-schedule-buffer,
-  .player-progress-schedule-current {
-    bottom: 0;
-    left: 0;
-    position: absolute;
-    right: 0;
-    top: 0;
-    -webkit-transform: scaleX(0);
-    transform: scaleX(0);
-    -webkit-transform-origin: 0 0;
-    transform-origin: 0 0;
-  }
-
-  .player-progress-schedule-buffer {
-    background-color: hsla(0, 0%, 100%, 0.3);
-  }
-
-  .player-progress-schedule-current {
-    background-color: #00a1d6;
-    background-color: var(--player-primary-color, #00a1d6);
-  }
-
-  .player-progress-schedule.player-progress-schedule-segment {
-    border-radius: 0;
-    -webkit-transition: -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-    transition: -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-    transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-    transition:
-      transform 0.1s cubic-bezier(0, 0, 0.2, 1),
-      -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  .player-shadow-progress-area.permanent {
-    height: 30px;
-
-    .player-progress-schedule-text {
-      background: none !important;
-      color: #fff;
-      display: block !important;
-      line-height: 30px;
-      overflow: hidden;
-      padding: 0 5px;
-      text-align: center;
-      text-overflow: ellipsis;
-      -webkit-transform: scaleX(1);
-      transform: scaleX(1);
-      white-space: nowrap;
-    }
-  }
-
-  .player-pbp {
-    bottom: 3px;
-    -webkit-box-sizing: border-box;
-    box-sizing: border-box;
-    cursor: pointer;
-    height: 28px;
-    left: -12px;
-    line-height: 28px;
-    opacity: 0;
-    padding: 0 12px;
-    position: absolute;
-    width: calc(100% + 24px);
-    z-index: -1;
-  }
-
-  .player-pbp-pin {
-    bottom: 8%;
-    line-height: 16px;
-    position: absolute;
-    right: 4px;
-  }
-
-  .player-pbp-pin-icon {
-    height: 16px;
-    -webkit-transform: rotate(45deg);
-    transform: rotate(45deg);
-    -webkit-transition: all 0.1s ease-in-out;
-    transition: all 0.1s ease-in-out;
-    width: 16px;
-  }
-
-  .player-pbp-pin-tip {
-    background-color: #000;
-    background-color: var(--player-tooltip-bgcolor, #000);
-    border-radius: 2px;
-    color: #fff;
-    color: var(--player-tooltip-color, #fff);
-    display: none;
-    font-size: 12px;
-    line-height: 1.5;
-    padding: 4px 8px;
-    position: absolute;
-    right: 0;
-    top: 0;
-    -webkit-transition: all 0.3s ease-in-out;
-    transition: all 0.3s ease-in-out;
-    white-space: nowrap;
-  }
-
   .player-control-wrap {
     .player-control-bottom {
       .player-dm-switch {
+        color: #fff;
         &:not(.disabled):hover {
           fill: #00a1d6;
           fill: var(--player-primary-color, #00a1d6);
@@ -1076,6 +951,7 @@
       }
 
       .player-dm-setting {
+        color: #fff;
         &:hover {
           fill: #00a1d6;
           fill: var(--player-primary-color, #00a1d6);
@@ -1121,20 +997,5 @@
         }
       }
     }
-
-    .player-pbp.show {
-      bottom: calc(100% + 7px);
-    }
-  }
-
-  .player-control-entity[data-shadow-show="false"] .player-shadow-progress-area,
-  .player-control-entity[data-shadow-show="true"] .player-control-top {
-    opacity: 0;
-    visibility: hidden;
-  }
-
-  .player-control-entity[data-shadow-show="false"] .player-control-top {
-    opacity: 1;
-    visibility: visible;
   }
 }

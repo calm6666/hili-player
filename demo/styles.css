@@ -660,6 +660,27 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
+.player-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;         /* 内容区按 16:9 */
+  box-sizing: content-box;      /* 让 aspect-ratio 只管内容高度 */
+  padding-block: 23px;          /* 总高额外 +46px */
+  position: relative;           /* 作为绝对定位包含块 */
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* 内部元素铺满整个 padding box（含那多出的 46px） */
+.player-wrapper > div {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;   /* video/iframe 可留，普通 div 可删 */
+}
+
 .player-controls {
   margin-top: 10px;
   display: flex;

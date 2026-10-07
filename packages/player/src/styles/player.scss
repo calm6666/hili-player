@@ -670,6 +670,16 @@ img {
         display: none;
       }
     }
+
+    .player-pbp.show {
+      bottom: calc(100% + 7px);
+    }
+
+    .player-shadow-progress-area.permanent {
+      .player-progress-schedule-text {
+        font-size: 16px;
+      }
+    }
   }
 
   .player-container[data-screen="mini"] {

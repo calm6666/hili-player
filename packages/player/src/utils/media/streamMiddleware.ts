@@ -15,13 +15,24 @@ import type {
   BufferInfo,
   QualityLevel,
 } from '@/types/streamPlugin';
+import { StreamFormatEnum, StreamPluginTypeEnum } from '@/types/streamPlugin';
 
 export enum PlayerMode { NATIVE = 'native', STREAMING = 'streaming' }
+
+/** 流媒体格式 → 插件类型（决定用哪个插件加载清单） */
+const FORMAT_TO_PLUGIN_TYPE: Partial<Record<StreamFormatEnum, StreamPluginTypeEnum>> = {
+  [StreamFormatEnum.HLS]: StreamPluginTypeEnum.HLS,
+  [StreamFormatEnum.DASH]: StreamPluginTypeEnum.DASH,
+  [StreamFormatEnum.FLV]: StreamPluginTypeEnum.FLV,
+};
 
 export class StreamMiddleware {
   private mode: PlayerMode = PlayerMode.NATIVE;
   private activePlugin: StreamPlugin | null = null;
   private video: HTMLVideoElement;
+
+  /** 已注册的流媒体插件（按类型索引，供按格式选择） */
+  private readonly plugins = new Map<StreamPluginTypeEnum, StreamPlugin>();
 
   /** 清晰度列表订阅者集合 */
   private qualitySubscribers = new Set<(list: QualityLevel[]) => void>();
@@ -35,14 +46,88 @@ export class StreamMiddleware {
 
   /** PluginManager 安装 StreamPlugin 时调用 */
   registerStreamPlugin(plugin: StreamPlugin): void {
-    // 先解绑上一个插件的桥接，避免残留订阅
-    this.pluginQualityUnsub?.();
-    this.pluginQualityUnsub = null;
+    this.plugins.set(plugin.type, plugin);
+    this.activatePlugin(plugin);
+  }
 
+  /**
+   * PluginManager 卸载 StreamPlugin 时调用
+   *
+   * 不传插件时按旧行为整体清空（保留旧调用点的兼容性）；传插件时只移除该插件。
+   *
+   * @param plugin - 被卸载的插件；缺省表示整体注销
+   */
+  unregisterStreamPlugin(plugin?: StreamPlugin): void {
+    if (plugin) {
+      this.plugins.delete(plugin.type);
+      if (this.activePlugin === plugin) {
+        this.detachActivePlugin();
+        this.activePlugin = this.pickFallbackPlugin();
+        if (this.activePlugin) this.attachActivePlugin(this.activePlugin);
+      }
+      return;
+    }
+
+    this.detachActivePlugin();
+    this.activePlugin = null;
+    this.plugins.clear();
+    this.mode = PlayerMode.NATIVE;
+  }
+
+  /**
+   * 按流媒体格式选择插件
+   *
+   * 清单协议由调用方（VideoPlayer.resolveLoadTarget）按内容判定后以 format 传入，
+   * 这里只做「格式 → 插件类型」的选择；找不到对应插件时保留当前生效插件。
+   *
+   * @param format - 已判定的流媒体格式
+   * @returns 选中的插件；未注册对应插件时返回 null
+   */
+  selectPlugin(format: StreamFormatEnum): StreamPlugin | null {
+    const type = FORMAT_TO_PLUGIN_TYPE[format];
+    if (!type) return null;
+
+    const plugin = this.plugins.get(type);
+    if (!plugin) return null;
+
+    if (plugin !== this.activePlugin) {
+      this.detachActivePlugin();
+      this.activePlugin = plugin;
+      this.attachActivePlugin(plugin);
+    }
+    return plugin;
+  }
+
+  /**
+   * 按类型取已注册插件
+   *
+   * @param type - 插件类型
+   * @returns 插件实例；未注册返回 undefined
+   */
+  getPlugin(type: StreamPluginTypeEnum): StreamPlugin | undefined {
+    return this.plugins.get(type);
+  }
+
+  /** 当前生效插件（无插件时为 null） */
+  getActivePlugin(): StreamPlugin | null {
+    return this.activePlugin;
+  }
+
+  /** 切换到新插件：接上清晰度桥接 */
+  private activatePlugin(plugin: StreamPlugin): void {
+    if (this.activePlugin === plugin) {
+      this.mode = PlayerMode.STREAMING;
+      return;
+    }
+    this.detachActivePlugin();
     this.activePlugin = plugin;
+    this.attachActivePlugin(plugin);
+  }
+
+  /** 绑定生效插件：进入流媒体模式 + 桥接清晰度推送 */
+  private attachActivePlugin(plugin: StreamPlugin): void {
     this.mode = PlayerMode.STREAMING;
 
-    // 桥接插件的清晰度推送（插件推送 → 通知所有中间件订阅者）
     if (plugin.onQualitiesChange) {
       this.pluginQualityUnsub = plugin.onQualitiesChange((list) => {
         this.emitQualities(list);
@@ -56,12 +141,23 @@ export class StreamMiddleware {
     }
   }
 
-  /** PluginManager 卸载 StreamPlugin 时调用 */
-  unregisterStreamPlugin(): void {
+  /** 解绑当前插件：断开清晰度桥接 */
+  private detachActivePlugin(): void {
     this.pluginQualityUnsub?.();
     this.pluginQualityUnsub = null;
-    this.activePlugin = null;
-    this.mode = PlayerMode.NATIVE;
+  }
+
+  /** 按当前注册表取一个兜底插件（按 HLS → DASH → FLV 顺序） */
+  private pickFallbackPlugin(): StreamPlugin | null {
+    for (const type of [
+      StreamPluginTypeEnum.HLS,
+      StreamPluginTypeEnum.DASH,
+      StreamPluginTypeEnum.FLV,
+    ]) {
+      const plugin = this.plugins.get(type);
+      if (plugin) return plugin;
+    }
+    return null;
   }
 
   /**
@@ -115,15 +211,18 @@ export class StreamMiddleware {
     }
   }
 
-  /** 加载流媒体配置 */
+  /** 加载流媒体配置（先按格式选择插件，再委托加载） */
   load(config: StreamConfig): void {
-    if (this.mode === PlayerMode.STREAMING && this.activePlugin) {
-      this.activePlugin.load(config);
-    } else {
-      const url = typeof config.url === 'string' ? config.url : '';
-      this.video.src = url;
-      this.video.load();
+    if (this.mode === PlayerMode.STREAMING) {
+      const selected = this.selectPlugin(config.format) ?? this.activePlugin;
+      if (selected) {
+        selected.load(config);
+        return;
+      }
     }
+    const url = typeof config.url === 'string' ? config.url : '';
+    this.video.src = url;
+    this.video.load();
   }
 
   /** 获取统计信息 */
@@ -195,13 +294,13 @@ export class StreamMiddleware {
 
   /** 销毁中间件，释放资源 */
   destroy(): void {
-    this.pluginQualityUnsub?.();
-    this.pluginQualityUnsub = null;
+    this.detachActivePlugin();
     this.qualitySubscribers.clear();
     if (this.activePlugin) {
       this.activePlugin.destroy();
     }
     this.activePlugin = null;
+    this.plugins.clear();
     this.mode = PlayerMode.NATIVE;
   }
 }

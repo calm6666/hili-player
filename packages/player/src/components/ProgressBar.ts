@@ -1,4 +1,5 @@
 import { h, defineComponent, useTemplateRef } from "@/core";
+import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
 import type { ProgressSegment } from "@/types";
 import { isBrowser } from "@/utils";
 import { formatTime } from "@/utils/formatTime";
@@ -65,6 +66,52 @@ type ProgressStrategy = (
   width: string;
   marginRight?: string;
 };
+
+/**
+ * 分段几何计算策略
+ *
+ * 与参考实现 `controls/index.ts` 的 strategies 一致：
+ * - first：left 固定 0%，右侧留 0.15% 缺口 + 0.3% 间隔
+ * - last：左侧让出 0.15% 缺口，右侧不留间隔
+ * - default：两侧各让出 0.15% 缺口，右侧留 0.3% 间隔
+ */
+const strategies: Record<"first" | "last" | "default", ProgressStrategy> = {
+  first: (vp, duration) => ({
+    left: "0%",
+    width: `${((vp.endTime - vp.startTime) / duration) * 100 - 0.15}%`,
+    marginRight: "0.3%",
+  }),
+  last: (vp, duration) => ({
+    left: `${(vp.startTime / duration) * 100 + 0.15}%`,
+    width: `${((vp.endTime - vp.startTime) / duration) * 100 - 0.15}%`,
+  }),
+  default: (vp, duration) => ({
+    left: `${(vp.startTime / duration) * 100 + 0.15}%`,
+    width: `${((vp.endTime - vp.startTime) / duration) * 100 - 0.3}%`,
+    marginRight: "0.3%",
+  }),
+};
+
+/**
+ * 计算单个分段的几何盒子（底部影子进度条与本进度条共用，保证两条完全对齐）
+ *
+ * @param segment - 分段数据
+ * @param index - 分段下标
+ * @param total - 分段总数
+ * @param duration - 视频总时长（秒）
+ * @returns left / width / marginRight 三个内联样式值
+ */
+export function computeSegmentBox(
+  segment: ProgressSegment,
+  index: number,
+  total: number,
+  duration: number,
+): { left: string; width: string; marginRight?: string } {
+  const strategy =
+    index === 0 ? "first" : index === total - 1 ? "last" : "default";
+  return strategies[strategy](segment, duration);
+}
+
 
 export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
   (props, lifecycle) => {
@@ -454,30 +501,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     };
 
     /**
-     * 计算基础样式与偏移量的策略
-     */
-    const strategies: Record<"first" | "last" | "default", ProgressStrategy> = {
-      first: (vp, duration) => ({
-        left: "0%",
-        width: `${((vp.endTime - vp.startTime) / duration) * 100 - 0.15}%`,
-        marginRight: "0.3%",
-      }),
-      last: (vp, duration) => ({
-        left: `${(vp.startTime / duration) * 100 + 0.15}%`,
-        width: `${((vp.endTime - vp.startTime) / duration) * 100 - 0.15}%`,
-      }),
-      default: (vp, duration) => ({
-        left: `${(vp.startTime / duration) * 100 + 0.15}%`,
-        width: `${((vp.endTime - vp.startTime) / duration) * 100 - 0.3}%`,
-        marginRight: "0.3%",
-      }),
-    };
-
-    /**
      * 为视点分配进度条元素
      * @param bufferElement 缓冲进度条元素
      * @param currentElement 当前进度条元素
-     * @param textElement 文本元素
      * @param index 视点索引
      * @param isNew 是否为新创建的元素
      * @param viewPoint 视点对象
@@ -537,10 +563,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     };
 
     /**
-     * 应用进度条样式
+     * 应用进度条样式（几何计算与底部影子进度条共用 computeSegmentBox）
      * @param element 进度条元素
-     * @param shadowElement 阴影进度条元素
-     * @param viewPoint 视点对象
+     * @param progressSegment 视点对象
      * @param index 视点索引
      * @param total 视点总数
      * @param duration 视频总时长
@@ -552,11 +577,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       total: number,
       duration: number,
     ): void => {
-      const strategy =
-        index === 0 ? "first" : index === total - 1 ? "last" : "default";
-
-      const { left, width, marginRight } = strategies[strategy](
+      const { left, width, marginRight } = computeSegmentBox(
         progressSegment,
+        index,
+        total,
         duration,
       );
 
@@ -716,9 +740,15 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
 
     /**
      * 组件销毁前，移除 document 级别的事件监听并重置拖拽状态
+     *
+     * 幂等：既是统一卸载入口（最深子组件 → 根），也是契约钩子。
      */
-    lifecycle.onBeforeDestroy = (): void => {
+    const teardown = (): void => {
       isDragging = false;
+      if (hoverTimer !== null) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
       if (dragMouseMove) {
         document.removeEventListener("mousemove", dragMouseMove);
         dragMouseMove = null;
@@ -728,6 +758,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
         dragMouseUp = null;
       }
     };
+
+    useComponentUnmount(lifecycle, teardown);
+    lifecycle.onBeforeDestroy = teardown;
 
     // ============================================
     // 主渲染函数

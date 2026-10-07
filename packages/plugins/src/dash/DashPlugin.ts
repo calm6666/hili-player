@@ -27,7 +27,8 @@ import type { MediaPlayerClass, ErrorEvent, Representation } from 'dashjs';
 import type { MediaManifest } from '../vendor/types';
 import { manifestToDash } from '../vendor/manifest-to-dash';
 import type { VideoPlayer } from '@hili-player/player';
-import { StreamPluginTypeEnum, StreamPluginEventEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
+import { StreamPluginTypeEnum, StreamPluginEventEnum, StreamFormatEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
+import { detectManifestProtocol } from '@/hili-player/utils/media/manifestProtocol';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import { PlayerEventEnum } from '@/core/events';
@@ -357,6 +358,44 @@ export class DashPlugin implements StreamPlugin {
   }
 
   /**
+   * 把已解析的清单对象转交给其它流媒体插件
+   *
+   * JSON 清单的协议按内容判定（detectManifestProtocol）：当内容声明的协议不是本插件
+   * 负责的协议、且对应插件已注册到流媒体中间件时，交给它加载，避免用错误的转换器
+   * 解析清单（如把 HLS 清单转成 MPD）。
+   *
+   * @param manifest - 已解析的清单对象
+   * @param format - 内容声明的协议对应的流媒体格式
+   * @returns 是否已转交
+   */
+  private forwardToStreamPlugin(
+    manifest: MediaManifest,
+    format: StreamFormatEnum,
+  ): boolean {
+    const middleware = this.player?.streamMiddleware;
+    if (!middleware) return false;
+
+    const target = middleware.getPlugin(
+      format === StreamFormatEnum.HLS
+        ? StreamPluginTypeEnum.HLS
+        : StreamPluginTypeEnum.DASH,
+    );
+    if (!target || target === (this as unknown as typeof target)) return false;
+
+    // 本插件已创建的 dash.js 实例必须先行释放，避免残留实例继续占用 video 元素
+    this.removeFirstFrameTracking();
+    if (this.dashPlayer) {
+      this.dashPlayer.reset();
+      this.dashPlayer.destroy();
+      this.dashPlayer = null;
+    }
+    this.config = null;
+
+    middleware.load({ url: manifest, format });
+    return true;
+  }
+
+  /**
    * 加载 JSON Manifest 文件
    * 先 fetch JSON，解析为 MediaManifest 对象，再转换为 dash.js 清单注入
    *
@@ -373,6 +412,14 @@ export class DashPlugin implements StreamPlugin {
 
       if (!isMediaManifest(manifest)) {
         throw new Error('JSON 格式不是有效的 MediaManifest（缺少 duration 或 video 字段）');
+      }
+
+      // 按内容判定协议：不是 DASH 时转交给对应插件（已注册才转交）
+      if (
+        detectManifestProtocol(manifest) === 'hls' &&
+        this.forwardToStreamPlugin(manifest, StreamFormatEnum.HLS)
+      ) {
+        return;
       }
 
       // 转换为 dash.js 清单对象

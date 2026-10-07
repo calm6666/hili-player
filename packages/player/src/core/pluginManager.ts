@@ -139,9 +139,9 @@ export class PluginManager {
     const plugin = this.plugins.get(name);
     if (!plugin) return;
 
-    // StreamPlugin 检测：卸载前从流媒体中间件注销
+    // StreamPlugin 检测：卸载前从流媒体中间件注销（只注销该插件，保留其它流媒体插件）
     if (this.isStreamPlugin(plugin)) {
-      this.player.streamMiddleware?.unregisterStreamPlugin();
+      this.player.streamMiddleware?.unregisterStreamPlugin(plugin);
     }
 
     if (plugin.uninstall) {

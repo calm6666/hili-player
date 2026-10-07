@@ -290,20 +290,57 @@ if (root) {
 // ============================================
 
 /**
- * 示例视频源列表（轮播切换）
- * 包含 HLS / DASH / MP4 三种格式
+ * 渲染「播放器已销毁」占位内容
+ *
+ * 全部用 DOM API 构建，不再用 innerHTML 清空 / 覆盖容器：
+ * 容器清理由 VideoPlayer.destroy() 移除自己的根节点完成。
+ * @param wrapper - 播放器容器
  */
+function renderDestroyedPlaceholder(wrapper: HTMLElement): void {
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const box = document.createElement("div");
+  box.className = "player-destroyed-placeholder";
+  box.setAttribute(
+    "style",
+    "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.4);font-size:13px;",
+  );
+
+  const icon = document.createElementNS(SVG_NS, "svg");
+  icon.setAttribute("width", "48");
+  icon.setAttribute("height", "48");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("fill", "none");
+  icon.setAttribute("stroke", "rgba(255,255,255,0.3)");
+  icon.setAttribute("stroke-width", "2");
+  icon.setAttribute("stroke-linecap", "round");
+  icon.setAttribute("stroke-linejoin", "round");
+
+  const polygon = document.createElementNS(SVG_NS, "polygon");
+  polygon.setAttribute("points", "23 7 16 12 23 17 23 7");
+  const rect = document.createElementNS(SVG_NS, "rect");
+  rect.setAttribute("x", "1");
+  rect.setAttribute("y", "5");
+  rect.setAttribute("width", "15");
+  rect.setAttribute("height", "14");
+  rect.setAttribute("rx", "2");
+  rect.setAttribute("ry", "2");
+  icon.appendChild(polygon);
+  icon.appendChild(rect);
+
+  const text = document.createElement("span");
+  text.textContent = "播放器已销毁";
+
+  box.appendChild(icon);
+  box.appendChild(text);
+  wrapper.appendChild(box);
+}
 
 /**
- * 切换视频源（客户端重新创建播放器实例）
+ * 销毁当前播放器实例
  *
- * 由于 VideoPlayer 没有 setSrc API，切换源需要：
- * 1. 销毁当前播放器实例
- * 2. 清空容器
- * 3. 创建新播放器实例（带对应流媒体插件）
- * 4. 挂载到容器
- *
- * 注意：这是客户端操作，不影响 SSR 已渲染的内容
+ * 只调用播放器公开的销毁 API（`VideoPlayer.destroy()`）：组件树卸载、
+ * 插件与流中间件销毁、媒体断开、根节点移除全部由播放器内部按序完成，
+ * demo 侧不再直接操作播放器 DOM。
  */
 function destroyCurrentPlayer(): void {
   if (playerInstance) {
@@ -316,11 +353,11 @@ function destroyCurrentPlayer(): void {
 
     const wrapper = document.getElementById("player-wrapper");
     if (wrapper) {
-      wrapper.innerHTML =
-        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.4);font-size:13px;">' +
-        '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>' +
-        "<span>播放器已销毁</span>" +
-        "</div>";
+      // destroy() 已移除播放器根节点；这里只兜底清掉残余子节点（SSR 首屏内容）
+      while (wrapper.firstChild) {
+        wrapper.removeChild(wrapper.firstChild);
+      }
+      renderDestroyedPlaceholder(wrapper);
     }
 
     appEventBus.emit("ACTION_LOG", {
@@ -470,20 +507,28 @@ function renderSourceList(): void {
   });
 }
 
+/**
+ * 重建播放器（切换源 / 列表变化时）
+ *
+ * 销毁与清理由播放器公开的 destroy API 负责：
+ * - 组件卸载顺序为「最深子组件 → 根」；
+ * - 媒体断开（pause → 清 src → load）由 VideoPlayer.destroy 在流媒体插件销毁之后执行，
+ *   不再需要 demo 侧提前摘 src（提前摘会把 MediaSource 从 video 元素上摘掉，
+ *   使仍在运行的 dash.js 抛 SourceBuffer 已移除的异常）。
+ *
+ * @param targetIndex - 目标源下标
+ */
 function rebuildPlayer(targetIndex: number): void {
   const wrapper = document.getElementById("player-wrapper");
-  const oldVideo = wrapper ? wrapper.querySelector("video") : null;
-  if (oldVideo) {
-    oldVideo.pause();
-    oldVideo.removeAttribute("src");
-    oldVideo.load();
-  }
 
   destroyCurrentPlayer();
 
   if (!wrapper) return;
 
-  wrapper.innerHTML = "";
+  // 清掉销毁占位（destroy 已移除播放器根节点，这里只移除占位节点，不再用 innerHTML）
+  wrapper
+    .querySelectorAll(".player-destroyed-placeholder")
+    .forEach((node) => node.remove());
 
   const current = MEDIA_LIST[targetIndex];
   const config: PlayerConfig = {

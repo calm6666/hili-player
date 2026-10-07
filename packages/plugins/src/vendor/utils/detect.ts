@@ -7,6 +7,7 @@
 
 import { StreamType } from '../types/index';
 import type { MediaManifest } from '../types/index';
+import { detectManifestProtocol } from '@/hili-player/utils/media/manifestProtocol';
 
 /**
  * 从 URL 字符串自动检测流类型
@@ -32,9 +33,8 @@ export function detectStreamTypeFromUrl(url: string): StreamType {
 /**
  * 从源对象自动检测流类型
  *
- * 通过检查 manifest 对象的内部字段判断协议类型：
- * - 含有 isMasterPlaylist=true 字段 → HLS
- * - 其他情况 → DASH
+ * 判定顺序与播放器完全一致（共用 detectManifestProtocol，唯一实现）：
+ * 顶层 mediaSourceType → segmentInfo.mediaSequence → SegmentBase → 默认 DASH。
  *
  * @param source - DASH 或 HLS 源对象
  * @returns 检测到的流类型
@@ -42,13 +42,7 @@ export function detectStreamTypeFromUrl(url: string): StreamType {
 export function detectStreamTypeFromObject(
   source: MediaManifest,
 ): StreamType {
-  // 检查 manifest 对象的内部字段判断协议类型
-  // 含有 isMasterPlaylist=true 字段 → HLS
-  if ('isMasterPlaylist' in source && (source as Record<string, unknown>).isMasterPlaylist === true) {
-    return StreamType.HLS;
-  }
-  // 其他情况默认返回 DASH
-  return StreamType.DASH;
+  return detectManifestProtocol(source) === 'hls' ? StreamType.HLS : StreamType.DASH;
 }
 
 /**

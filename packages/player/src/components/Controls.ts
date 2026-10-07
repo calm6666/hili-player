@@ -12,6 +12,7 @@ import type {
   Tooltip,
   ControlsConfig,
 } from "@/hili-player/types";
+import type { ProgressSegment } from "@/types";
 import { ConfigContext } from "@/store/runtimeState";
 import { formatTime } from "@/utils/formatTime";
 import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
@@ -21,6 +22,8 @@ import { LeftControls } from "./LeftControls";
 import { RightControls } from "./RightControls";
 import { TopControls } from "./TopControls";
 import { PbpControls } from "./PbpControls";
+import { ShadowProgressArea } from "./ShadowProgressArea";
+import type { ShadowProgressAreaApi } from "./ShadowProgressArea";
 import type { ProgressBarApi } from "./ProgressBar";
 
 /**
@@ -141,6 +144,10 @@ export interface ControlsAPI {
   updateCurrent: (current: number) => void;
   /** 初始化时长显示 */
   initDuration: () => void;
+  /** 更新总时长（底部影子进度条与进度条分段共用） */
+  setDuration: (duration: number) => void;
+  /** 重建底部影子进度条分段（progress.segments 运行时变化时调用） */
+  setProgressSegments: (segments?: ProgressSegment[]) => void;
 }
 
 /**
@@ -152,8 +159,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // 状态数据
     // ============================================
 
-    /** 视频总时长（秒） */
-    const duration = props.duration;
+    /** 视频总时长（秒），元数据加载后由 setDuration 更新 */
+    let duration = props.duration;
     /** 当前音量，范围 0-1 */
     let volume = props.volume;
     /** 当前播放倍速 */
@@ -162,6 +169,26 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     /** 控制条配置（浅拷贝，避免修改原始 props） */
     const config: ControlsConfig = {
       ...configCtx,
+    };
+
+    /** 底部影子进度条 API（由 ShadowProgressArea 挂载后填充） */
+    let shadowApi: ShadowProgressAreaApi | null = null;
+
+    /**
+     * 高能进度条常驻态
+     * 参考实现的触发条件是 `isEdit && progressViewPoints.length > 1`；
+     * 之后由 `.player-pbp-pin` 点击切换（提示文案「打开《高能进度条》常驻」）。
+     */
+    let permanent =
+      props.isEdit === true && (config.progressSegments?.length ?? 0) > 1;
+
+    /**
+     * 应用常驻态到影子进度条
+     * @param next - 目标常驻态
+     */
+    const applyPermanent = (next: boolean): void => {
+      permanent = next;
+      shadowApi?.setPermanent(next);
     };
 
     /** 视频进度数据 */
@@ -280,8 +307,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     );
     /** 倍速菜单项元素列表 */
     const backrateMenuItems: HTMLLIElement[] = [];
-    /** PBP（逐行预览）面板元素 */
-    const pbpRef = useTemplateRef<HTMLDivElement>(lifecycle, "pbpRef");
+    /** 高能进度条 API（由 PbpControls 挂载后填充） */
+    let pbpApi: { setShow: (show: boolean) => void } | null = null;
 
     // ============================================
     // 工具函数
@@ -403,6 +430,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       videoProgress.currentTime = current;
       updateMainProgress(current);
       updateThumbPosition(current);
+      // 底部影子进度条与顶部进度条同源：控制栏隐藏时显示的就是它
+      shadowApi?.updateProgress(current);
     };
 
     /**
@@ -458,6 +487,27 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       }
     };
 
+    /**
+     * 更新总时长，并同步到底部影子进度条
+     * @param value - 视频总时长（秒）
+     */
+    const setDuration = (value: number): void => {
+      duration = value;
+      shadowApi?.setDuration(value);
+      initDuration();
+    };
+
+    /**
+     * 重建底部影子进度条分段（顶部进度条由上层经 ProgressBarApi 重建）
+     * @param next - 最新分段数据
+     */
+    const setProgressSegments = (next?: ProgressSegment[]): void => {
+      shadowApi?.rebuildSegments(next);
+      applyPermanent(
+        props.isEdit === true && (next?.length ?? 0) > 1,
+      );
+    };
+
     // ============================================
     // 生命周期钩子
     // ============================================
@@ -510,22 +560,26 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
           if (controlEntityRef.value) {
             controlEntityRef.value.setAttribute("data-shadow-show", "false");
           }
-          pbpRef.value?.classList.add("show");
+          // 控制栏展开：高能进度条抬到控制栏之上（reference: .player-pbp.show）
+          pbpApi?.setShow(true);
         },
         hideControl: () => {
           if (controlEntityRef.value) {
             controlEntityRef.value.setAttribute("data-shadow-show", "true");
           }
-          pbpRef.value?.classList.remove("show");
+          pbpApi?.setShow(false);
         },
         updateMute: (isMuted: boolean) => {
           volumeProgress.isMuted = isMuted;
         },
         updateBuffer: (buffer: number) => {
           updateMainProgress(buffer);
+          shadowApi?.updateBuffer(buffer);
         },
         updateCurrent,
         initDuration,
+        setDuration,
+        setProgressSegments,
       });
     };
 
@@ -682,19 +736,26 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
             onMoreSettingClick: () => lifecycle.emit?.("moreSettingClick"),
           }),
         ),
-        h(
-          "div",
-          {
-            class: "player-shadow-progress-area",
+        // 底部影子进度条（控制栏隐藏时常驻下沿，与顶部进度条同几何同数据源）
+        h(ShadowProgressArea, {
+          duration,
+          progressSegments: config.progressSegments,
+          permanent,
+          onShadowProgressAreaMounted: (api: ShadowProgressAreaApi) => {
+            shadowApi = api;
+            api.setPermanent(permanent);
           },
-          h("div", {
-            class: "player-shadow-progress-schedule-wrap",
-          }),
-        ),
+        }),
+        // 高能进度条（常驻 DOM，控制栏展开时由 setShow(true) 抬到控制栏之上）
         h(PbpControls, {
-          ref: "pbpRef",
+          onPbpControlsMounted: (api: { setShow: (show: boolean) => void }) => {
+            pbpApi = api;
+          },
           onPbpClick: () => {},
-          onPbpPinClick: () => {},
+          // 图钉：切换《高能进度条》常驻（与提示文案语义一致）
+          onPbpPinClick: () => {
+            applyPermanent(!permanent);
+          },
         }),
       ),
     );

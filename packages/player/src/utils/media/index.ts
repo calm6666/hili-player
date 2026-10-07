@@ -27,6 +27,22 @@ export type {
   FlvPlayer,
 } from './types';
 
+// 清单协议判定导出（播放器与流媒体插件共用的唯一判定入口）
+export {
+  normalizeManifestProtocol,
+  normalizeSegmentMode,
+  resolveManifestProtocolProfile,
+  detectManifestProtocol,
+  isSegmentBaseManifest,
+  isMediaManifestLike,
+} from './manifestProtocol';
+
+export type {
+  ManifestProtocol,
+  ManifestSegmentMode,
+  ManifestProtocolProfile,
+} from './manifestProtocol';
+
 // 监控器导出
 export { MediaPlayerMonitor } from './monitor';
 

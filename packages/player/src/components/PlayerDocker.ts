@@ -15,6 +15,7 @@ import {
 } from "@/core";
 import type { TypedStateManager } from "@/core";
 import type { PlayerEventBus } from "@/core/events";
+import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
 import {
   createHotkeyHandlers,
   type HotkeyContext,
@@ -605,6 +606,8 @@ export const PlayerDocker = defineComponent<
     controlsApi.initDuration?.();
     // 将总时长回传给进度条（进度条挂载时 props.duration 仍为 0）
     progressBarApi.setDuration?.(duration);
+    // 底部影子进度条共用同一份总时长
+    controlsApi.setDuration?.(duration);
     controlsApi.updateVolumeDisplay?.(readVolume());
     if (readMuted()) {
       controlsApi.updateMute?.(true);
@@ -730,6 +733,7 @@ export const PlayerDocker = defineComponent<
     stateMgr?.set(PlayerStateKeyEnum.DURATION, duration);
     controlsApi.initDuration?.();
     progressBarApi.setDuration?.(duration);
+    controlsApi.setDuration?.(duration);
     lifecycle.emit?.("durationChange", { duration });
   };
 
@@ -831,6 +835,10 @@ export const PlayerDocker = defineComponent<
     updateCurrent?: (current: number) => void;
     /** 初始化时长显示 */
     initDuration?: () => void;
+    /** 更新总时长（顶部进度条与底部影子进度条共用） */
+    setDuration?: (duration: number) => void;
+    /** 重建底部影子进度条分段 */
+    setProgressSegments?: (segments?: ProgressSegment[]) => void;
   } = {};
 
   /** 顶部进度条 API，由 ProgressBar（经 TopControls / Controls）挂载后填充 */
@@ -1419,11 +1427,11 @@ export const PlayerDocker = defineComponent<
   const setupConfigSubscriptions = (): void => {
     if (!configStore) return;
 
-    // progress.segments 变化 → 重建进度条分段
+    // progress.segments 变化 → 重建进度条分段（顶部进度条与底部影子进度条同一份数据）
     const offSegments = configStore.subscribePath('progress.segments', (value) => {
-      progressBarApi.rebuildSegments?.(
-        (value as ProgressSegment[] | undefined) ?? [],
-      );
+      const next = (value as ProgressSegment[] | undefined) ?? [];
+      progressBarApi.rebuildSegments?.(next);
+      controlsApi.setProgressSegments?.(next);
     });
 
     // interaction.keyboard 变化 → 启停键盘监听
@@ -2143,7 +2151,19 @@ export const PlayerDocker = defineComponent<
     lifecycle.emit?.("playerLoaded");
   };
 
-  lifecycle.onBeforeDestroy = (): void => {
+  /** 组件卸载是否已执行（统一入口与 onBeforeDestroy 各会调用一次） */
+  let tornDown = false;
+
+  /**
+   * 组件统一卸载：释放本组件申请的 DOM 调用 / 事件监听 / 定时器 / 观察器 / 懒挂载面板
+   *
+   * 幂等：播放器 destroy 先从最深子组件逐层调用本入口，core 的 destroy(vnode)
+   * 随后还会触发一次 onBeforeDestroy，两次都安全。
+   */
+  const teardown = (): void => {
+    if (tornDown) return;
+    tornDown = true;
+
     // 清理自动隐藏定时器
     if (autoHideTimer !== null) {
       clearTimeout(autoHideTimer);
@@ -2210,7 +2230,18 @@ export const PlayerDocker = defineComponent<
       miniPlayerObserver.disconnect();
       miniPlayerObserver = null;
     }
+
+    // 卸载迷你窗口上的拖拽监听
+    if (miniWarpEl) {
+      miniWarpEl.removeEventListener("mousedown", handleMiniDragDown);
+      miniWarpEl = null;
+    }
   };
+
+  // 统一卸载入口（最深子组件 → 根，由 VideoPlayer.destroy 在插件销毁之前调用）
+  useComponentUnmount(lifecycle, teardown);
+  // 契约钩子保持不变：直接 destroy(vnode) 的路径（如懒挂载面板）仍然有效
+  lifecycle.onBeforeDestroy = teardown;
 
   // ============================================
   // 渲染输出

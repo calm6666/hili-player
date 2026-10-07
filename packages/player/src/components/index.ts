@@ -139,6 +139,11 @@ export { ProgressBar } from './ProgressBar';
 /** 进度条组件 Props 类型 */
 export type { ProgressBarProps } from './ProgressBar';
 
+/** 底部影子进度条组件 */
+export { ShadowProgressArea } from './ShadowProgressArea';
+/** 底部影子进度条组件 Props 及挂载后 API 类型 */
+export type { ShadowProgressAreaProps, ShadowProgressAreaApi } from './ShadowProgressArea';
+
 /** 音量滑块组件 */
 export { VolumeSlider } from './VolumeSlider';
 /** 音量滑块组件 Props 类型 */

@@ -30,7 +30,8 @@ import type { ManifestVariant, ManifestAudioGroup, ManifestParsedData, ErrorData
 import type { MediaManifest } from '../vendor/types';
 import { manifestToHls } from '../vendor/manifest-to-hls';
 import type { VideoPlayer } from '@hili-player/player';
-import { StreamPluginTypeEnum, StreamPluginEventEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
+import { StreamPluginTypeEnum, StreamPluginEventEnum, StreamFormatEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
+import { detectManifestProtocol } from '@/hili-player/utils/media/manifestProtocol';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import { PlayerEventEnum } from '@/core/events';
@@ -471,6 +472,42 @@ export class HlsPlugin implements StreamPlugin {
   }
 
   /**
+   * 把已解析的清单对象转交给其它流媒体插件
+   *
+   * JSON 清单的协议按内容判定（detectManifestProtocol）：内容声明为 DASH 且 DASH 插件
+   * 已注册时交给它处理，避免用 HLS 转换器解析 DASH 清单。
+   *
+   * @param manifest - 已解析的清单对象
+   * @param format - 内容声明的协议对应的流媒体格式
+   * @returns 是否已转交
+   */
+  private forwardToStreamPlugin(
+    manifest: MediaManifest,
+    format: StreamFormatEnum,
+  ): boolean {
+    const middleware = this.player?.streamMiddleware;
+    if (!middleware) return false;
+
+    const target = middleware.getPlugin(
+      format === StreamFormatEnum.DASH
+        ? StreamPluginTypeEnum.DASH
+        : StreamPluginTypeEnum.HLS,
+    );
+    if (!target || target === (this as unknown as typeof target)) return false;
+
+    this.removeFirstFrameTracking();
+    if (this.hlsPlayer) {
+      this.hlsPlayer.stopLoad();
+      this.hlsPlayer.destroy();
+      this.hlsPlayer = null;
+    }
+    this.config = null;
+
+    middleware.load({ url: manifest, format });
+    return true;
+  }
+
+  /**
    * 加载 JSON Manifest 文件
    * 先 fetch JSON，解析为 MediaManifest 对象，再转换为 hls.js 清单注入
    *
@@ -487,6 +524,14 @@ export class HlsPlugin implements StreamPlugin {
 
       if (!isMediaManifest(manifest)) {
         throw new Error('JSON 格式不是有效的 MediaManifest（缺少 duration 或 video 字段）');
+      }
+
+      // 按内容判定协议：不是 HLS 时转交给对应插件（已注册才转交）
+      if (
+        detectManifestProtocol(manifest) === 'dash' &&
+        this.forwardToStreamPlugin(manifest, StreamFormatEnum.DASH)
+      ) {
+        return;
       }
 
       // 创建 Hls 实例（autoStartLoad 必须设为 false）

@@ -2,7 +2,12 @@
  * ============================================
  * 高能进度条组件 (PbpControls)
  * ============================================
- * 独立的函数组件，拥有自己的生命周期
+ * 独立的函数组件，拥有自己的生命周期。
+ *
+ * 与参考实现 `controls/index.ts` 一致：
+ * - `.player-pbp` 常驻在控制条实体中（CSS 里 opacity: 0 / z-index: -1）
+ * - 控制栏显示时由父组件调用 setShow(true) 加上 `show` 类，
+ *   CSS `.player-pbp.show { bottom: calc(100% + 7px) }` 把它抬到控制栏之上
  */
 
 import { h, defineComponent, useTemplateRef } from '@/core';
@@ -14,7 +19,7 @@ export interface PbpControlsProps {
 export type PbpControlsEvents = {
   pbpClick: undefined;
   pbpPinClick: undefined;
-  pbpControlsMounted: { show: () => void; hide: () => void };
+  pbpControlsMounted: { setShow: (show: boolean) => void };
 };
 
 export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>((props, lifecycle) => {
@@ -30,21 +35,11 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
   // ============================================
 
   /**
-   * 显示高能进度条组件
+   * 设置高能进度条的展开态（与参考实现 showControl / hideControl 的 `show` 类一致）
+   * @param show - 是否展开
    */
-  const show = (): void => {
-    if (pbpRef.value) {
-      pbpRef.value.style.display = '';
-    }
-  };
-
-  /**
-   * 隐藏高能进度条组件
-   */
-  const hide = (): void => {
-    if (pbpRef.value) {
-      pbpRef.value.style.display = 'none';
-    }
+  const setShow = (show: boolean): void => {
+    pbpRef.value?.classList.toggle('show', show);
   };
 
   // ============================================
@@ -61,7 +56,8 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
   /**
    * 处理高能进度条固定按钮点击事件
    */
-  const handlePinClick = (): void => {
+  const handlePinClick = (event: MouseEvent): void => {
+    event.stopPropagation();
     lifecycle.emit?.('pbpPinClick');
   };
 
@@ -73,19 +69,15 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
    * 组件挂载后，向上层暴露显示和隐藏方法
    */
   lifecycle.onMounted = (): void => {
-    lifecycle.emit?.('pbpControlsMounted', { show, hide });
-  };
-
-  /**
-   * 组件销毁前，清空 DOM 引用
-   */
-  lifecycle.onBeforeDestroy = (): void => {
+    setShow(props.visible === true);
+    lifecycle.emit?.('pbpControlsMounted', { setShow });
   };
 
   // ============================================
   // 主渲染函数
   // ============================================
-  return h('div', { class: 'player-pbp', ref: 'pbpRef', onClick: handlePbpClick, style: { display: props.visible ? '' : 'none' } },
+
+  return h('div', { class: 'player-pbp', ref: 'pbpRef', onClick: handlePbpClick },
     h('span', { class: 'common-svg-icon' }),
     h('div', { class: 'player-pbp-pin', onClick: handlePinClick },
       h('div', { class: 'player-pbp-pin-icon' },
