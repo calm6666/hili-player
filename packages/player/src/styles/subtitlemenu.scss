@@ -1,11 +1,12 @@
 .player-docker .player-control-bottom-right .player-ctrl-subtitle {
   font-size: 14px;
-  margin: 0 5px;
-  width: auto;
+  // margin: 0 5px;
+  width: 50px;
 
   .player-ctrl-subtitle-result-wrap {
     display: flex;
     flex-direction: row;
+    justify-content: center;
   }
 
   .player-ctrl-subtitle-result {
@@ -937,31 +938,5 @@
 
   &.state-show .player-ctrl-subtitle-box {
     display: block;
-  }
-}
-
-@media screen and (min-width: 750px) {
-  .player-docker
-    .player-container[data-screen="web"]
-    .player-control-bottom-right
-    .player-ctrl-subtitle,
-  .player-docker
-    .player-container[data-screen="full"]
-    .player-control-bottom-right
-    .player-ctrl-subtitle {
-    width: auto;
-
-    .player-ctrl-subtitle-result {
-      font-size: 16px;
-      width: auto;
-    }
-
-    .player-ctrl-subtitle-box {
-      bottom: 74px;
-
-      &:after {
-        height: 32px;
-      }
-    }
   }
 }

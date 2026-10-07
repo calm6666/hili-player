@@ -471,9 +471,16 @@ function renderSourceList(): void {
 }
 
 function rebuildPlayer(targetIndex: number): void {
+  const wrapper = document.getElementById("player-wrapper");
+  const oldVideo = wrapper ? wrapper.querySelector("video") : null;
+  if (oldVideo) {
+    oldVideo.pause();
+    oldVideo.removeAttribute("src");
+    oldVideo.load();
+  }
+
   destroyCurrentPlayer();
 
-  const wrapper = document.getElementById("player-wrapper");
   if (!wrapper) return;
 
   wrapper.innerHTML = "";

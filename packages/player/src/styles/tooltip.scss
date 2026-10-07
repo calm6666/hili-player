@@ -23,9 +23,15 @@
   width: fit-content;
   word-break: break-all;
   z-index: 12000;
-  -webkit-transition: transform 0.3s, opacity 0.3s linear;
-  -moz-transition: transform 0.3s, opacity 0.3s linear;
-  transition: transform 0.3s, opacity 0.3s linear;
+  -webkit-transition:
+    transform 0.3s,
+    opacity 0.3s linear;
+  -moz-transition:
+    transform 0.3s,
+    opacity 0.3s linear;
+  transition:
+    transform 0.3s,
+    opacity 0.3s linear;
 }
 
 .top-in {

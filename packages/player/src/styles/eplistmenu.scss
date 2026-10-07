@@ -1,66 +1,34 @@
-// ============================================
-// 选集面板样式 (EpisodesMenu)
-// ============================================
-// 对应组件：packages/player/src/components/EpisodesMenu.ts
-//
-// 内容分三块：
-//   1. 可见性（本任务重点）：普通模式隐藏 / 网页全屏与浏览器全屏可见
-//   2. 面板与列表（结构、选中态、播放中图标、省略号）
-//   3. 滚动容器（自写细滚动条，未复用组件 —— 项目里没有可用的 ScrollView 实现）
-//
-// 约定：
-//   - 类名统一 player- 前缀，选中态统一 player-state-active
-//   - 主题色只用 var(--player-primary-color) / var(--player-fn-color)
-//   - 显隐一律 visibility / width，禁止 display（父层 RightControls.ts:100
-//     会写内联 el.style.display，内联优先级最高会打架）
-
-/** 列表区最大高度与滚动条宽度（两处联动，抽出变量避免写歪） */
 $eplist-list-max-height: 520px;
 $eplist-scrollbar-width: 6px;
 
-// ============================================
-// 1. 可见性
-// ============================================
-
-// 基态：不可见且不占位（与参考实现 .bpx-player-ctrl-eplist{visibility:hidden;width:0} 一致）
 .player-ctrl-btn.player-ctrl-eplist {
   visibility: hidden;
   width: 0;
 }
 
-// 网页全屏 / 浏览器全屏时可见。
-// 祖先链依据（已核对）：
-//   .player-docker.mode-webscreen —— PlayerDocker.ts:1507 加类，index.scss:5161 定义
-//   .player-container[data-screen="web"] —— PlayerDocker.ts:450 / VideoPlayer.ts:1945 写属性
-//   .player-container[data-screen="full"] —— PlayerDocker.ts:1749 写属性
-.player-docker.mode-webscreen .player-ctrl-btn.player-ctrl-eplist.player-has-playlist,
-.player-container[data-screen="web"] .player-ctrl-btn.player-ctrl-eplist.player-has-playlist,
-.player-container[data-screen="full"] .player-ctrl-btn.player-ctrl-eplist.player-has-playlist {
+.player-docker.mode-webscreen
+  .player-ctrl-btn.player-ctrl-eplist.player-has-playlist,
+.player-container[data-screen="web"]
+  .player-ctrl-btn.player-ctrl-eplist.player-has-playlist,
+.player-container[data-screen="full"]
+  .player-ctrl-btn.player-ctrl-eplist.player-has-playlist {
   visibility: visible;
   width: auto;
 }
 
 // 全屏 / 网页全屏下面板更高（控制栏 73px，与既有面板 bottom:74px 对齐：
-// 见 index.scss:5023 quality、index.scss:5031 eplist、index.scss:5054 setting）
 .player-container[data-screen="web"] .player-ctrl-eplist-menu-wrap,
 .player-container[data-screen="full"] .player-ctrl-eplist-menu-wrap {
   bottom: 74px;
 }
 
-// 面板显隐沿用项目统一机制：祖先按钮加 state-show 后展开
-// （编译后为 .player-ctrl-btn.player-ctrl-eplist.state-show .player-ctrl-eplist-menu-wrap，
-//   与 styles/controls.scss:551-576 的 .state-show 规则同族，此处显式再声明一次以保证
-//   只引入本文件时也成立；显隐用 opacity/visibility，不用 display）
-.player-ctrl-btn.player-ctrl-eplist.state-show {
-  .player-ctrl-eplist-menu-wrap {
-    opacity: 1;
-    visibility: visible;
-  }
-}
-
-// ============================================
-// 2. 面板
-// ============================================
+// // 面板显隐沿用项目统一机制：祖先按钮加 state-show 后展开
+// .player-ctrl-btn.player-ctrl-eplist.state-show {
+//   .player-ctrl-eplist-menu-wrap {
+//     opacity: 1;
+//     visibility: visible;
+//   }
+// }
 
 .player-ctrl-eplist {
   font-size: 14px;
@@ -178,10 +146,6 @@ $eplist-scrollbar-width: 6px;
     }
   }
 }
-
-// ============================================
-// 3. 滚动条（自写细滚动条，不引入第三方库）
-// ============================================
 
 .player-ctrl-eplist .player-ctrl-eplist-section-content {
   // Chromium / WebKit

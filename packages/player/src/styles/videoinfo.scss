@@ -1,69 +1,71 @@
-.player-info-container {
-  -webkit-font-smoothing: antialiased;
-  background-color: rgba(33, 33, 33, 0.9);
-  border-radius: 4px;
-  color: #fff;
-  left: 10px;
-  line-height: 18px;
-  padding-bottom: 15px;
-  position: absolute;
-  text-align: center;
-  text-align: left;
-  top: 10px;
-  z-index: 80;
-  display: none;
-
-  span {
-    display: inline-block;
-    font-weight: 400;
-  }
-
-  .player-info-title {
-    border-bottom: 1px solid hsla(0, 0%, 100%, 0.1);
-    font-size: 16px;
-    line-height: 40px;
+.player-container {
+  .player-info-container {
+    -webkit-font-smoothing: antialiased;
+    background-color: rgba(33, 33, 33, 0.9);
+    border-radius: 4px;
+    color: #fff;
+    left: 10px;
+    line-height: 18px;
+    padding-bottom: 15px;
+    position: absolute;
     text-align: center;
+    text-align: left;
+    top: 10px;
+    z-index: 80;
+    display: none;
 
-    .player-info-close {
-      fill: #fff;
-      color: #fff;
-      cursor: pointer;
-      height: 22px;
-      line-height: 22px;
-      position: absolute;
-      right: 10px;
-      top: 10px;
-      width: 22px;
+    span {
+      display: inline-block;
+      font-weight: 400;
     }
-  }
 
-  .player-info-panel {
-    padding: 15px 26px 0;
-    position: relative;
+    .player-info-title {
+      border-bottom: 1px solid hsla(0, 0%, 100%, 0.1);
+      font-size: 16px;
+      line-height: 40px;
+      text-align: center;
 
-    .info-line {
-      min-width: 290px;
-      // max-width: 600px;
-
-      .info-title {
-        font-size: 12px;
-        font-weight: 500;
-        margin-right: 10px;
-        text-align: right;
-        text-indent: -99em;
-        width: 100px;
+      .player-info-close {
+        fill: #fff;
+        color: #fff;
+        cursor: pointer;
+        height: 22px;
+        line-height: 22px;
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        width: 22px;
       }
+    }
 
-      .info-data {
-        color: #999;
-        font-size: 12px;
-        font-weight: 400;
-        margin-right: 6px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 470px;
-        vertical-align: middle;
+    .player-info-panel {
+      padding: 15px 26px 0;
+      position: relative;
+
+      .info-line {
+        min-width: 290px;
+        // max-width: 600px;
+
+        .info-title {
+          font-size: 12px;
+          font-weight: 500;
+          margin-right: 10px;
+          text-align: right;
+          text-indent: -99em;
+          width: 100px;
+        }
+
+        .info-data {
+          color: #999;
+          font-size: 12px;
+          font-weight: 400;
+          margin-right: 6px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 470px;
+          vertical-align: middle;
+        }
       }
     }
   }

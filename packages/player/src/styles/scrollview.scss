@@ -46,7 +46,9 @@
     border-radius: 3px;
     cursor: pointer;
     pointer-events: auto;
-    transition: background 0.2s ease, transform 0.1s ease;
+    transition:
+      background 0.2s ease,
+      transform 0.1s ease;
     will-change: transform;
 
     &:hover {
