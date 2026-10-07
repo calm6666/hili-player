@@ -82,10 +82,24 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
   };
 
   const handleMoreClick = (): void => {
-    menuAreaRef.value
-      ?.querySelector('.ui-area')
-      ?.classList.add('state-show-right');
-    menuRightRef.value?.classList.add('player-ctrl-seting-more-area');
+    const root = menuAreaRef.value;
+    if (root) {
+      const items = root.querySelectorAll<HTMLElement>('.ui-panel-item');
+      items.forEach((item, index) => {
+        item.classList.toggle('ui-panel-item-active', index === 1);
+      });
+      const wrap = root.querySelector<HTMLElement>('.ui-panel-wrap');
+      const move = root.querySelector<HTMLElement>('.ui-panel-move');
+      const second = items[1];
+      if (wrap && second) {
+        wrap.style.width = `${second.offsetWidth}px`;
+        wrap.style.height = `${second.offsetHeight}px`;
+      }
+      const shift = items[0]?.offsetWidth ?? 132;
+      if (move) {
+        move.style.transform = `translateX(-${shift}px)`;
+      }
+    }
     lifecycle.emit?.('moreSettingClick');
   };
 

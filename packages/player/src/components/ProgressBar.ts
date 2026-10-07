@@ -651,6 +651,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       total: number,
       duration: number,
     ): void => {
+      // 总时长未知（挂载时 props.duration 仍为 0）时不写几何：否则会写进
+      // NaN% / Infinity%，被浏览器丢弃后所有分段都退回 left:0;right:0 → 全部重叠。
+      if (!(duration > 0)) return;
+
       const { left, width, marginRight } = computeSegmentBox(
         progressSegment,
         index,
@@ -665,6 +669,28 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       } else {
         element.style.removeProperty("margin-right");
       }
+    };
+
+    /**
+     * 按当前 segments 与 duration 重算所有分段的 left/width
+     *
+     * 元数据加载完成（setDuration）或分段数据变化后必须调用一次，
+     * 否则挂载期算出的几何会一直是「时长未知」的那一份。
+     */
+    const applySegmentGeometry = (): void => {
+      if (!(duration > 0)) return;
+      const list = getScheduleElements();
+      list.forEach((schedule, index) => {
+        const segment = segments.length > 1 ? segments[index] : segments[0];
+        if (!segment) return;
+        applyProgressStyle(
+          schedule,
+          segment,
+          index,
+          Math.max(list.length, 1),
+          duration,
+        );
+      });
     };
 
     /**
@@ -752,6 +778,8 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
         segment.currentElement = undefined;
       });
       setupProgressElements();
+      // 重建后按当前时长重新落一次几何（重建发生在挂载期时 duration 可能仍为 0）
+      applySegmentGeometry();
     };
 
     /**
@@ -792,6 +820,8 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      */
     const setDuration = (value: number): void => {
       duration = value;
+      // 时长到手后立刻重算分段几何（挂载期算过的那一份是「时长未知」的）
+      applySegmentGeometry();
     };
 
     // ============================================

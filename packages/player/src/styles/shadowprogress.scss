@@ -2,11 +2,15 @@
   .player-shadow-progress-area {
     bottom: 0;
     height: 2px;
-    left: 0;
+    left: 12px;
     position: absolute;
-    right: 0;
+    right: 12px;
     -webkit-transition: opacity 0.4s ease-in;
     transition: opacity 0.4s ease-in;
+
+    .player-progress-schedule-text {
+      display: none;
+    }
 
     .player-shadow-progress-schedule-wrap {
       height: 100%;
@@ -61,6 +65,10 @@
   .player-shadow-progress-area.permanent {
     height: 30px;
 
+    .player-shadow-progress-schedule-wrap {
+      background: rgba(35, 167, 255, 0.35);
+    }
+
     .player-progress-schedule-text {
       background: none;
       color: #fff;
@@ -82,12 +90,12 @@
     box-sizing: border-box;
     cursor: pointer;
     height: 28px;
-    left: -12px;
+    left: 0;
     line-height: 28px;
     opacity: 0;
     padding: 0 12px;
     position: absolute;
-    width: calc(100% + 24px);
+    width: 100%;
     z-index: -1;
 
     .player-pbp-curve-svg {
@@ -116,6 +124,8 @@
     }
 
     &.player-pbp-permanent {
+      opacity: 1;
+
       .player-pbp-pin-icon-off {
         display: none;
       }
@@ -126,7 +136,10 @@
     }
 
     &.show {
+      bottom: 100%;
+      left: 0;
       opacity: 1;
+      width: 100%;
     }
 
     .player-pbp-pin {
@@ -143,12 +156,6 @@
         -webkit-transition: all 0.1s ease-in-out;
         transition: all 0.1s ease-in-out;
         width: 16px;
-
-        &:hover {
-          .player-pbp-pin-tip {
-            display: block;
-          }
-        }
 
         svg {
           height: 100%;
@@ -172,6 +179,18 @@
         -webkit-transition: all 0.3s ease-in-out;
         transition: all 0.3s ease-in-out;
         white-space: nowrap;
+      }
+
+      &:hover {
+        .player-pbp-pin-icon {
+          -webkit-transform: rotate(60deg) scale(1.2);
+          transform: rotate(60deg) scale(1.2);
+        }
+
+        .player-pbp-pin-tip {
+          display: block;
+          top: -30px;
+        }
       }
     }
   }

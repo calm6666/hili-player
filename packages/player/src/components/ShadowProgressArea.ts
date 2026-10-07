@@ -105,6 +105,44 @@ export const ShadowProgressArea = defineComponent<
     });
   };
 
+  /**
+   * 落一个分段的几何：时长未知时跳过，避免写进 NaN% / Infinity%
+   * @param schedule - 分段元素
+   * @param segment - 分段数据
+   * @param index - 分段下标
+   * @param total - 分段总数
+   */
+  const applySegmentBox = (
+    schedule: HTMLDivElement,
+    segment: ProgressSegment,
+    index: number,
+    total: number,
+  ): void => {
+    if (!(duration > 0)) return;
+    const { left, width, marginRight } = computeSegmentBox(
+      segment,
+      index,
+      total,
+      duration,
+    );
+    schedule.style.left = left;
+    schedule.style.width = width;
+    if (marginRight) {
+      schedule.style.marginRight = marginRight;
+    }
+  };
+
+  /** 按当前 segments 与 duration 重算所有影子分段的几何 */
+  const applySegmentGeometry = (): void => {
+    if (!(duration > 0)) return;
+    const list = getScheduleElements();
+    list.forEach((schedule, index) => {
+      const segment = segments.length > 1 ? segments[index] : segments[0];
+      if (!segment) return;
+      applySegmentBox(schedule, segment, index, Math.max(list.length, 1));
+    });
+  };
+
   /** 创建影子分段元素（与参考实现的 createViewPointElement 一致：buffer + current + text） */
   const createSegmentElement = (
     hasSegments: boolean,
@@ -135,17 +173,7 @@ export const ShadowProgressArea = defineComponent<
     schedule.appendChild(text);
 
     if (segment && typeof index === 'number') {
-      const { left, width, marginRight } = computeSegmentBox(
-        segment,
-        index,
-        segments.length,
-        duration,
-      );
-      schedule.style.left = left;
-      schedule.style.width = width;
-      if (marginRight) {
-        schedule.style.marginRight = marginRight;
-      }
+      applySegmentBox(schedule, segment, index, segments.length);
       segment.shadowElement = schedule;
       segment.shadowBufferElement = buffer;
       segment.shadowCurrentElement = current;
@@ -210,12 +238,14 @@ export const ShadowProgressArea = defineComponent<
   /** 更新视频总时长 */
   const setDuration = (value: number): void => {
     duration = value;
+    applySegmentGeometry();
   };
 
   /** 重建分段 */
   const rebuildSegments = (nextSegments?: ProgressSegment[]): void => {
     if (nextSegments) segments = nextSegments;
     build();
+    applySegmentGeometry();
   };
 
   lifecycle.onMounted = (): void => {
