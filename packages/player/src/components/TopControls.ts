@@ -8,6 +8,7 @@
 import { h, defineComponent } from "@/core";
 import { ProgressBar, type ProgressBarApi } from "./ProgressBar";
 import type { ProgressSegment } from "@/types";
+import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
 
 /**
  * TopControls 组件 Props 接口
@@ -17,6 +18,8 @@ export interface TopControlsProps {
   duration?: number;
   /** 进度条分段信息 */
   progressSegments?: ProgressSegment[];
+  /** 预览数据提供者（雪碧图或逐帧，透传给 ProgressBar） */
+  getPreviewFrames?: () => ProgressPreviewSource | string[] | null;
 }
 
 export type TopControlsEvents = {
@@ -32,6 +35,7 @@ export const TopControls = defineComponent<TopControlsProps, TopControlsEvents>(
   const {
     duration = 0,
     progressSegments,
+    getPreviewFrames,
   } = props;
    /**
    * 组件挂载后，通知上层组件
@@ -48,6 +52,7 @@ export const TopControls = defineComponent<TopControlsProps, TopControlsEvents>(
     h(ProgressBar, {
       duration,
       progressSegments,
+      getPreviewSource: getPreviewFrames,
       onSeek: (time) => lifecycle.emit?.('seek', time),
       onSeekStart: () => lifecycle.emit?.('seekStart'),
       onSeekEnd: () => lifecycle.emit?.('seekEnd'),

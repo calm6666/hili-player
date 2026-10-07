@@ -29,6 +29,8 @@ export type SwitchSize = 'small' | 'middle' | 'large';
 export interface SwitchProps {
   /** 开关尺寸，默认 middle */
   size?: SwitchSize;
+  /** 开关文字（传入后渲染为 label 内嵌文字，对应参考的 bui-switch-name） */
+  name?: string;
   /** 是否选中，默认 false */
   checked?: boolean;
   /** 是否禁用，默认 false */
@@ -180,6 +182,31 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
   // ============================================
   // 组件渲染（DOM 结构与既有实现一致）
   // ============================================
+
+  // 带文字形态：与参考 bui-switch 一致（input + label > name + body > dot），
+  // 面板 scss 通过 .ui-switch-labeled 覆盖基础尺寸，不影响无文字形态
+  if (props.name !== undefined) {
+    return h('div', {
+      class: `ui-switch ui-switch-labeled switch-${props.size ?? 'middle'}`,
+      ref: 'switchRef',
+    },
+      h('input', {
+        type: 'checkbox',
+        class: 'ui-switch-input',
+        'aria-label': props.name,
+        ref: 'inputRef',
+        onChange: handleChange,
+      }),
+      h('div', { class: 'ui-switch-label' },
+        h('span', { class: 'ui-switch-name' }, props.name),
+        h('div', { class: 'ui-switch-body' },
+          h('span', { class: 'ui-switch-dot' },
+            h('span', { ref: 'circleRef' }),
+          ),
+        ),
+      ),
+    );
+  }
 
   return h('div', {
     class: `ui-switch switch-${props.size ?? 'middle'}`,

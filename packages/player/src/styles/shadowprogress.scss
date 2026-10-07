@@ -90,6 +90,45 @@
     width: calc(100% + 24px);
     z-index: -1;
 
+    .player-pbp-curve-svg {
+      display: block;
+      height: 100%;
+      left: 0;
+      pointer-events: none;
+      position: absolute;
+      top: 0;
+      width: 100%;
+    }
+
+    .player-pbp-curve {
+      fill: hsla(0, 0%, 100%, 0.2);
+      stroke: none;
+    }
+
+    .player-pbp-played {
+      fill: #00a1d6;
+      fill: var(--player-primary-color, #00a1d6);
+      stroke: none;
+    }
+
+    .player-pbp-pin-icon-on {
+      display: none;
+    }
+
+    &.player-pbp-permanent {
+      .player-pbp-pin-icon-off {
+        display: none;
+      }
+
+      .player-pbp-pin-icon-on {
+        display: block;
+      }
+    }
+
+    &.show {
+      opacity: 1;
+    }
+
     .player-pbp-pin {
       bottom: 8%;
       line-height: 16px;
@@ -97,12 +136,24 @@
       right: 4px;
 
       .player-pbp-pin-icon {
+        cursor: pointer;
         height: 16px;
         -webkit-transform: rotate(45deg);
         transform: rotate(45deg);
         -webkit-transition: all 0.1s ease-in-out;
         transition: all 0.1s ease-in-out;
         width: 16px;
+
+        &:hover {
+          .player-pbp-pin-tip {
+            display: block;
+          }
+        }
+
+        svg {
+          height: 100%;
+          width: 100%;
+        }
       }
 
       .player-pbp-pin-tip {
@@ -134,5 +185,11 @@
   .player-control-entity[data-shadow-show="false"] .player-control-top {
     opacity: 1;
     visibility: visible;
+  }
+
+  .player-control-entity[data-shadow-show="true"]
+    .player-pbp.player-pbp-permanent {
+    bottom: 30px;
+    opacity: 1;
   }
 }

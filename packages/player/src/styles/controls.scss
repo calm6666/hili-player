@@ -436,30 +436,6 @@
             padding: 20px;
             box-sizing: border-box;
 
-            .bui-radio-wrap-button {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              .radio-button {
-                height: 20px;
-                width: 90px;
-                border-radius: 2px;
-                line-height: 20px;
-                color: #ffffff;
-                display: flex;
-                justify-content: center;
-                cursor: pointer;
-                background: rgba(255, 255, 255, 0.1);
-                span {
-                  font-size: 12px;
-                }
-
-                &.active {
-                  background: var(--player-fn-color, #00aeec);
-                }
-              }
-            }
-
             .player-ctrl-setting-aspect-conent {
               .radio-button {
                 width: 60px;

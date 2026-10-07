@@ -13,7 +13,14 @@ import type {
   ControlsConfig,
 } from "@/hili-player/types";
 import type { ProgressSegment } from "@/types";
+import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
+import type { EnergyProgressData } from "@/hili-player/utils/media/energyProgress";
 import { ConfigContext } from "@/store/runtimeState";
+import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
+import {
+  publishPermanent,
+  observePermanent,
+} from "@/hili-player/store/permanentState";
 import { formatTime } from "@/utils/formatTime";
 import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
 import type { AnimationFrameID } from "@/utils/rafTimeout";
@@ -123,7 +130,10 @@ export interface ControlsProps {
   duration: number;
   volume: number;
   backrate: number;
-  isEdit?: boolean;
+  /** 预览数据提供者（雪碧图或逐帧，透传给顶部进度条） */
+  getPreviewFrames?: () => ProgressPreviewSource | string[] | null;
+  /** 高能进度条数据提供者（/x/player/pbp 采样点，透传给 PbpControls） */
+  getEnergyProgress?: () => EnergyProgressData | null;
 }
 
 /**
@@ -174,21 +184,26 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     /** 底部影子进度条 API（由 ShadowProgressArea 挂载后填充） */
     let shadowApi: ShadowProgressAreaApi | null = null;
 
-    /**
-     * 高能进度条常驻态
-     * 参考实现的触发条件是 `isEdit && progressViewPoints.length > 1`；
-     * 之后由 `.player-pbp-pin` 点击切换（提示文案「打开《高能进度条》常驻」）。
-     */
-    let permanent =
-      props.isEdit === true && (config.progressSegments?.length ?? 0) > 1;
+    /** 常驻态订阅的取消函数 */
+    let permanentUnsub: (() => void) | null = null;
+
+    /** 高能进度条常驻态：存在多个分段即常驻，之后由 `.player-pbp-pin` 或设置面板切换 */
+    let permanent = (config.progressSegments?.length ?? 0) > 1;
+
+    // 把初值发布出去，保证设置面板渲染时读到的是真实状态
+    publishPermanent(permanent);
 
     /**
-     * 应用常驻态到影子进度条
+     * 应用常驻态到影子进度条与高能进度条，并广播给设置面板（双向同步）
      * @param next - 目标常驻态
      */
     const applyPermanent = (next: boolean): void => {
+      // 只有真正变化才广播，避免订阅回调再次进入本函数造成递归
+      const changed = permanent !== next;
       permanent = next;
       shadowApi?.setPermanent(next);
+      pbpApi?.setPermanent(next);
+      if (changed) publishPermanent(next);
     };
 
     /** 视频进度数据 */
@@ -307,8 +322,14 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     );
     /** 倍速菜单项元素列表 */
     const backrateMenuItems: HTMLLIElement[] = [];
-    /** 高能进度条 API（由 PbpControls 挂载后填充） */
-    let pbpApi: { setShow: (show: boolean) => void } | null = null;
+    // 高能进度条 API（由 PbpControls 挂载后填充）
+    let pbpApi: {
+      setShow: (show: boolean) => void;
+      setPermanent: (permanent: boolean) => void;
+      setEnergy: (data: EnergyProgressData | null) => void;
+      setProgress: (time: number) => void;
+      setDuration: (duration: number) => void;
+    } | null = null;
 
     // ============================================
     // 工具函数
@@ -432,6 +453,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       updateThumbPosition(current);
       // 底部影子进度条与顶部进度条同源：控制栏隐藏时显示的就是它
       shadowApi?.updateProgress(current);
+      // 高能进度条按同一进度重绘已播放面积
+      pbpApi?.setProgress(current);
     };
 
     /**
@@ -494,6 +517,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     const setDuration = (value: number): void => {
       duration = value;
       shadowApi?.setDuration(value);
+      // 高能进度条需要总时长把播放进度换算成采样点下标
+      pbpApi?.setDuration(value);
       initDuration();
     };
 
@@ -503,18 +528,58 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      */
     const setProgressSegments = (next?: ProgressSegment[]): void => {
       shadowApi?.rebuildSegments(next);
-      applyPermanent(
-        props.isEdit === true && (next?.length ?? 0) > 1,
-      );
+      applyPermanent((next?.length ?? 0) > 1);
     };
 
     // ============================================
     // 生命周期钩子
     // ============================================
 
+    let shadowShow = true;
+    let shadowObserver: MutationObserver | null = null;
+
+    const applyShadowShow = (show: boolean): void => {
+      shadowShow = show;
+      controlEntityRef.value?.setAttribute(
+        "data-shadow-show",
+        show ? "true" : "false",
+      );
+      pbpApi?.setShow(!show);
+    };
+
+    const shadowObserve = (): void => {
+      controlEntityRef.value?.setAttribute(
+        "data-shadow-show",
+        shadowShow ? "true" : "false",
+      );
+      const container = controlEntityRef.value?.closest(".player-container");
+      if (!container || typeof MutationObserver === "undefined") return;
+      shadowObserver?.disconnect();
+      shadowObserver = new MutationObserver(() => {
+        controlEntityRef.value?.setAttribute(
+          "data-shadow-show",
+          shadowShow ? "true" : "false",
+        );
+      });
+      shadowObserver.observe(container, {
+        attributeFilter: ["data-screen"],
+        attributes: true,
+      });
+    };
+
     lifecycle.onMounted = (): void => {
       initDuration();
       initBackrate();
+
+      // 常驻态订阅：设置面板勾选 / 图钉点击任一处变更都会同步到影子条与高能条
+      permanentUnsub = observePermanent((value) => {
+        applyPermanent(value);
+      });
+      applyPermanent(permanent);
+      useComponentUnmount(lifecycle, () => {
+        permanentUnsub?.();
+        permanentUnsub = null;
+      });
 
       // 填充菜单配置：子组件（LeftControls / RightControls）先于父组件挂载，
       // 此处控制条主体 DOM 已就绪，可直接在实体容器内检索各菜单挂载点
@@ -553,21 +618,16 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         initTooltip();
       }
 
+      shadowObserve();
+
       // 暴露控制栏 API 给父组件
       lifecycle.emit?.("controlsMounted", {
         updateVolumeDisplay,
         showControl: () => {
-          if (controlEntityRef.value) {
-            controlEntityRef.value.setAttribute("data-shadow-show", "false");
-          }
-          // 控制栏展开：高能进度条抬到控制栏之上（reference: .player-pbp.show）
-          pbpApi?.setShow(true);
+          applyShadowShow(false);
         },
         hideControl: () => {
-          if (controlEntityRef.value) {
-            controlEntityRef.value.setAttribute("data-shadow-show", "true");
-          }
-          pbpApi?.setShow(false);
+          applyShadowShow(true);
         },
         updateMute: (isMuted: boolean) => {
           volumeProgress.isMuted = isMuted;
@@ -657,6 +717,10 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       key: string;
       value: boolean | string | number;
     }): void => {
+      // 「高能进度条」常驻开关：先落到真实状态（影子条常驻形态 + 图钉图标），再向上转发
+      if (payload.key === "highenergy") {
+        applyPermanent(payload.value === true);
+      }
       lifecycle.emit?.("settingChange", payload);
     };
 
@@ -688,6 +752,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         },
         h(TopControls, {
           progressSegments: config.progressSegments,
+          getPreviewFrames: props.getPreviewFrames,
           onSeek: (time) => {
             updateCurrent(time);
             lifecycle.emit?.("seek", time);
@@ -748,8 +813,19 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         }),
         // 高能进度条（常驻 DOM，控制栏展开时由 setShow(true) 抬到控制栏之上）
         h(PbpControls, {
-          onPbpControlsMounted: (api: { setShow: (show: boolean) => void }) => {
+          onPbpControlsMounted: (api: {
+            setShow: (show: boolean) => void;
+            setPermanent: (permanent: boolean) => void;
+            setEnergy: (data: EnergyProgressData | null) => void;
+            setProgress: (time: number) => void;
+            setDuration: (duration: number) => void;
+          }) => {
             pbpApi = api;
+            // 数据与常驻态可能早于组件挂载到达：挂载时补一次
+            api.setDuration(duration);
+            api.setPermanent(permanent);
+            api.setEnergy(props.getEnergyProgress?.() ?? null);
+            api.setProgress(videoProgress.currentTime);
           },
           onPbpClick: () => {},
           // 图钉：切换《高能进度条》常驻（与提示文案语义一致）

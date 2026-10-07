@@ -1,0 +1,280 @@
+.player-docker {
+  .player-control-bottom {
+    .player-ctrl-setting-box {
+      .ui-panel-wrap {
+        width: 132px;
+        height: 140px;
+      }
+
+      .player-ctrl-setting-menu {
+        .ui-panel-move {
+          display: flex;
+          -webkit-transition: -webkit-transform 0.3s ease-in-out;
+          transition: transform 0.3s ease-in-out;
+        }
+
+        .ui-panel-item {
+          -webkit-box-sizing: border-box;
+          box-sizing: border-box;
+          flex-shrink: 0;
+        }
+
+        .player-ctrl-seting-menu-left {
+          .ui-switch-labeled {
+            background: none;
+            border-radius: 0;
+            height: 32px;
+            min-width: 0;
+            width: 100%;
+            line-height: 32px;
+            font-size: 12px;
+            color: #ffffff;
+
+            .ui-switch-input {
+              cursor: pointer;
+              height: 100%;
+              left: 0;
+              margin: 0;
+              opacity: 0;
+              position: absolute;
+              top: 0;
+              width: 100%;
+              z-index: 2;
+            }
+
+            .ui-switch-label {
+              -webkit-box-align: center;
+              -ms-flex-align: center;
+              align-items: center;
+              cursor: pointer;
+              display: -webkit-box;
+              display: -ms-flexbox;
+              display: flex;
+              height: 32px;
+              -webkit-box-pack: justify;
+              -ms-flex-pack: justify;
+              justify-content: space-between;
+              width: 100%;
+            }
+
+            .ui-switch-name {
+              color: #ffffff;
+              font-size: 12px;
+              line-height: 32px;
+            }
+
+            .ui-switch-body {
+              background-color: hsla(0, 0%, 100%, 0.2);
+              border-radius: 9px;
+              -webkit-box-sizing: border-box;
+              box-sizing: border-box;
+              height: 18px;
+              position: relative;
+              -webkit-transition: background-color 0.2s ease-in-out;
+              transition: background-color 0.2s ease-in-out;
+              width: 36px;
+            }
+
+            .ui-switch-dot {
+              background-color: #ffffff;
+              border-radius: 50%;
+              height: 14px;
+              left: 2px;
+              position: absolute;
+              top: 2px;
+              -webkit-transition: -webkit-transform 0.2s ease-in-out;
+              transition: transform 0.2s ease-in-out;
+              width: 14px;
+            }
+
+            &.switch-checked {
+              .ui-switch-body {
+                background-color: #00a1d6;
+                background-color: var(--player-primary-color, #00a1d6);
+              }
+
+              .ui-switch-dot {
+                -webkit-transform: translateX(18px);
+                transform: translateX(18px);
+              }
+            }
+          }
+
+          .player-ctrl-setting-oped {
+            display: none;
+          }
+
+          .player-ctrl-setting-more {
+            -webkit-box-align: center;
+            -ms-flex-align: center;
+            align-items: center;
+            display: -webkit-box;
+            display: -ms-flexbox;
+            display: flex;
+            height: 32px;
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
+            justify-content: center;
+            width: 100%;
+
+            .player-ctrl-setting-more-text {
+              color: #ffffff;
+              font-size: 12px;
+              line-height: 32px;
+            }
+
+            .player-ctrl-setting-more-arrow {
+              display: -webkit-inline-box;
+              display: -ms-inline-flexbox;
+              display: inline-flex;
+              height: 16px;
+              margin-left: 4px;
+              width: 16px;
+
+              svg {
+                fill: currentColor;
+                height: 100%;
+                width: 100%;
+              }
+            }
+
+            &:hover {
+              .player-ctrl-setting-more-text,
+              .player-ctrl-setting-more-arrow {
+                color: #00a1d6;
+                color: var(--player-primary-color, #00a1d6);
+                fill: #00a1d6;
+                fill: var(--player-primary-color, #00a1d6);
+              }
+            }
+          }
+        }
+
+        .player-ctrl-seting-menu-right {
+          height: 276px;
+          width: 286px;
+
+          .player-ctrl-seting-menu-right-area {
+            height: 276px;
+            width: 286px;
+            padding: 12px 20px;
+
+            .player-radio-wrap-button {
+              -webkit-box-align: center;
+              -ms-flex-align: center;
+              align-items: center;
+              display: -webkit-box;
+              display: -ms-flexbox;
+              display: flex;
+
+              .radio-button {
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 2px;
+                color: #ffffff;
+                cursor: pointer;
+                display: -webkit-box;
+                display: -ms-flexbox;
+                display: flex;
+                height: 20px;
+                -webkit-box-pack: center;
+                -ms-flex-pack: center;
+                justify-content: center;
+                line-height: 20px;
+                margin-right: 6px;
+                width: 90px;
+
+                span {
+                  font-size: 12px;
+                }
+
+                &:last-child {
+                  margin-right: 0;
+                }
+
+                &.active {
+                  background-color: #00a1d6;
+                  background-color: var(--player-primary-color, #00a1d6);
+                }
+              }
+            }
+
+            .player-ctrl-setting-aspect-conent {
+              .radio-button {
+                width: 60px;
+              }
+            }
+
+            .player-ctrl-setting-codec-conent {
+              .radio-button {
+                width: 45px;
+              }
+            }
+
+            .player-ctrl-setting-loudness-conent {
+              .radio-button {
+                width: 70px;
+              }
+            }
+
+            .player-ctrl-setting-loudness {
+              color: #ffffff;
+              margin-bottom: 8px;
+              width: 100%;
+
+              .player-ctrl-setting-loudness-title {
+                font-size: 12px;
+                height: 16px;
+                line-height: 16px;
+                margin-bottom: 8px;
+              }
+
+              .player-ctrl-setting-loudness-content {
+                height: 20px;
+                width: 100%;
+              }
+            }
+
+            .player-ctrl-setting-others {
+              .player-ctrl-setting-others-content {
+                -webkit-box-align: center;
+                -ms-flex-align: center;
+                align-items: center;
+                display: -webkit-box;
+                display: -ms-flexbox;
+                display: flex;
+                -ms-flex-wrap: wrap;
+                flex-wrap: wrap;
+
+                .player-ctrl-setting-checkbox {
+                  -webkit-box-align: center;
+                  -ms-flex-align: center;
+                  align-items: center;
+                  display: -webkit-box;
+                  display: -ms-flexbox;
+                  display: flex;
+                  margin: 0 12px 4px 0;
+
+                  .u-checkbox {
+                    color: #ffffff;
+                    font-size: 12px;
+                  }
+
+                  .checkbox-label {
+                    font-size: 12px;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        .player-ctrl-seting-more-area {
+          -webkit-animation: none;
+          animation: none;
+          height: 276px;
+          width: 286px;
+        }
+      }
+    }
+  }
+}

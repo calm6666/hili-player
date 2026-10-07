@@ -98,6 +98,8 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
    * 组件挂载后的回调，向外暴露设置选中状态的方法
    */
   lifecycle.onMounted = (): void => {
+    // 挂载时按初始 checked 落一次选中样式（否则 checked:true 的框看起来是未选中）
+    setChecked(checked);
     lifecycle.emit?.('checkboxMounted', { setChecked });
   };
 

@@ -1,5 +1,7 @@
 import { h, defineComponent, useTemplateRef } from "@/core";
 import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
+import { resolveProgressPreviewSlice } from "@/hili-player/utils/media/progressPreview";
+import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
 import type { ProgressSegment } from "@/types";
 import { isBrowser } from "@/utils";
 import { formatTime } from "@/utils/formatTime";
@@ -35,6 +37,11 @@ export const computeSegmentRatio = (
 export interface ProgressBarProps {
   duration: number;
   progressSegments?: Array<ProgressSegment>;
+  /**
+   * 预览数据提供者（懒取值，供无 diff 框架下后到的数据使用）
+   * 兼容两种形态：逐帧 data URL 数组（preview.bin）或雪碧图参数（sprite）
+   */
+  getPreviewSource?: () => ProgressPreviewSource | string[] | null;
 }
 
 /**
@@ -153,6 +160,15 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       lifecycle,
       "previewTimeRef",
     );
+
+    /** 预览图元素引用（分段预览帧） */
+    const previewImageRef = useTemplateRef<HTMLImageElement>(
+      lifecycle,
+      "previewImageRef",
+    );
+
+    /** 分段名称文本元素引用（预览弹窗左下角） */
+    const hotspotRef = useTemplateRef<HTMLDivElement>(lifecycle, "hotspotRef");
 
     /** 移动指示器元素引用 */
     const moveIndicatorRef = useTemplateRef<HTMLDivElement>(
@@ -356,6 +372,64 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
         left = indicatorLeft - 80;
       }
       popupRef.value.style.left = `${left}px`;
+
+      // 分段预览：按悬停时间取对应预览帧，并在弹窗内显示所在分段的名称
+      updatePreviewFrame(hoverTime);
+      updateHotspotLabel(hoverTime);
+    };
+
+    /**
+     * 更新预览图（兼容雪碧图与逐帧两种数据源）
+     * @param time - 悬停时间（秒）
+     */
+    const updatePreviewFrame = (time: number): void => {
+      const image = previewImageRef.value;
+      if (!image) return;
+
+      const slice = resolveProgressPreviewSlice(
+        props.getPreviewSource?.() ?? null,
+        time,
+        duration,
+      );
+
+      if (!slice) {
+        image.removeAttribute("src");
+        image.removeAttribute("style");
+        return;
+      }
+
+      if (image.getAttribute("src") !== slice.url) {
+        image.setAttribute("src", slice.url);
+      }
+
+      if (slice.sprite) {
+        image.style.width = slice.sprite.width;
+        image.style.height = slice.sprite.height;
+        image.style.objectFit = slice.sprite.objectFit;
+        image.style.objectPosition = slice.sprite.objectPosition;
+        return;
+      }
+
+      image.style.width = "";
+      image.style.height = "";
+      image.style.objectFit = "";
+      image.style.objectPosition = "";
+    };
+
+    /**
+     * 更新预览弹窗内的分段名称（命中 [startTime, endTime) 的分段）
+     * @param time - 悬停时间（秒）
+     */
+    const updateHotspotLabel = (time: number): void => {
+      const hotspot = hotspotRef.value;
+      if (!hotspot) return;
+      const hit = segments.find(
+        (segment) => time >= segment.startTime && time < segment.endTime,
+      );
+      const text = segments.length > 1 && hit ? hit.label : "";
+      if (hotspot.textContent !== text) {
+        hotspot.textContent = text;
+      }
     };
 
     /**
@@ -827,13 +901,14 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
               { class: "player-progress-preview" },
               h("img", {
                 class: "player-progress-preview-image",
+                ref: "previewImageRef",
               }),
               h("div", {
                 class: "player-progress-preview-time",
                 ref: "previewTimeRef",
               }),
             ),
-            h("div", { class: "player-progress-hotspot" }),
+            h("div", { class: "player-progress-hotspot", ref: "hotspotRef" }),
           ),
           // 拉拽指示器
           h(

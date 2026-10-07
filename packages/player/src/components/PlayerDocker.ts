@@ -16,6 +16,8 @@ import {
 import type { TypedStateManager } from "@/core";
 import type { PlayerEventBus } from "@/core/events";
 import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
+import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
+import type { EnergyProgressData } from "@/hili-player/utils/media/energyProgress";
 import {
   createHotkeyHandlers,
   type HotkeyContext,
@@ -370,6 +372,22 @@ export interface PlayerDockerProps {
    * 此时 PlayerDocker 会回退到原生 Resource Timing 采样。
    */
   getStreamDownloadSpeed?: () => number;
+
+  /**
+   * 分段预览数据提供者（雪碧图参数或逐帧 data URL）
+   *
+   * 由 VideoPlayer 注入（其持有 setProgressPreview() 写入的数据），
+   * 顶部进度条在悬停时懒取值，两种形态都兼容。
+   */
+  getProgressPreviewFrames?: () => ProgressPreviewSource | string[] | null;
+
+  /**
+   * 高能进度条数据提供者（/x/player/pbp 的采样点）
+   *
+   * 由 VideoPlayer 注入；PbpControls 在数据到达后绘制曲线，
+   * 未提供数据时该层不渲染（保持不可见）。
+   */
+  getEnergyProgress?: () => EnergyProgressData | null;
 }
 
 // ============================================
@@ -2480,6 +2498,8 @@ export const PlayerDocker = defineComponent<
             duration: readDuration(),
             volume: readVolume(),
             backrate: readBackrate(),
+            getPreviewFrames: props.getProgressPreviewFrames,
+            getEnergyProgress: props.getEnergyProgress,
             // ===== 控件条交互接线（设计文档阶段 J）=====
             // 控制栏挂载完成：持有其操作 API（时间/音量/缓冲等显示更新的入口）
             onControlsMounted: (api: ControlsAPI) => {

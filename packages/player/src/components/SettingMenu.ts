@@ -2,115 +2,85 @@
  * ============================================
  * 设置面板组件 (SettingMenu)
  * ============================================
- * 设置面板组件，包含左侧菜单项（镜像/循环/自动开播/画面比例/编码策略）
- * 和右侧面板内容切换，设置按钮使用 LottieIcon
+ * 结构与 `CicadaPlayerNext/platform/ctrl-setting.txt` 逐条对应
+ * （bpx-player-* → player-*，bui-* → ui-*）：
+ *   .player-ctrl-setting-box
+ *     .player-ctrl-setting-menu.ui.ui-panel.ui-dark > .ui-area
+ *       .ui-panel-wrap > .ui-panel-move
+ *         .ui-panel-item.ui-panel-item-active > .player-ctrl-setting-menu-left
+ *           镜像画面 / 单集循环 / 自动开播 三个开关 + oped 占位 + 更多播放设置
+ *         .ui-panel-item > .player-ctrl-setting-menu-right
+ *           播放方式 / 视频比例 / 播放策略 / 音量均衡 / 其他设置
+ * 仅「隐藏黑边」一项按约定不落地（bpx-player-ctrl-setting-blackgap）。
  */
 
 import { h, defineComponent, useTemplateRef } from '@/core';
+import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
+import {
+  publishPermanent,
+  readPermanent,
+  observePermanent,
+} from '@/hili-player/store/permanentState';
+import type { VNode } from '@/types';
 import { LottieIcon, LottieIconApi } from './LottieIcon';
 import { Switch } from '@/hili-player/components/Switch';
+import { Checkbox } from '@/hili-player/components/Checkbox';
 import { ArrowRight } from './icons';
 import settingHoverAnimationData from '../assets/lottie-icon/settings-animation.json';
 
-/**
- * SettingMenu 组件 Props 接口
- */
 export interface SettingMenuProps {
+  /** 高能进度条常驻当前状态（面板显示真实状态用） */
+  permanent?: boolean;
 }
 
 export type SettingMenuEvents = {
   settingChange: { key: string; value: boolean | string | number };
   menuAnimation: { type: 'setting'; action: 'show' | 'hide' };
   moreSettingClick: undefined;
-  settingMenuMounted: undefined;
+  settingMenuMounted: { setPermanentChecked: (checked: boolean) => void };
 };
 
-/**
- * SettingMenu 组件 - 使用 defineComponent 创建独立组件
- * 渲染设置面板，支持左侧菜单和右侧详情面板切换
- */
+/** 单选项定义 */
+interface RadioOption {
+  label: string;
+  value: boolean | string | number;
+  checked?: boolean;
+}
+
 export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>((_props, lifecycle) => {
-
-  // ============================================
-  // DOM 引用
-  // ============================================
-
-  /** 菜单区域容器元素引用 */
   const menuAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'menuAreaRef');
-
-  /** 右侧面板容器元素引用 */
   const menuRightRef = useTemplateRef<HTMLDivElement>(lifecycle, 'menuRightRef');
-
-  /** 播放方式单选按钮组元素引用 */
-  const handoffRadioRef = useTemplateRef<HTMLDivElement>(lifecycle, 'handoffRadioRef');
-
-  /** 视频比例单选按钮组元素引用 */
-  const aspectRadioRef = useTemplateRef<HTMLDivElement>(lifecycle, 'aspectRadioRef');
-
-  /** 播放策略单选按钮组元素引用 */
-  const codecRadioRef = useTemplateRef<HTMLDivElement>(lifecycle, 'codecRadioRef');
-  /** 设置按钮 API 引用 */
   const settingIconRef = useTemplateRef<LottieIconApi>(lifecycle, 'settingIconRef');
 
-  // ============================================
-  // 状态
-  // ============================================
-
-  // 开关状态由 Switch 子组件持有并通过 onChange 回调上报，本地不再保存副本
-
-  // ============================================
-  // 事件处理函数
-  // ============================================
-
-  /**
-   * 鼠标进入设置按钮时触发的回调
-   */
   const handleMouseEnter = (): void => {
     settingIconRef.value?.play();
     lifecycle.emit?.('menuAnimation', { type: 'setting', action: 'show' });
   };
 
-  /**
-   * 鼠标离开设置按钮时触发的回调
-   */
   const handleMouseLeave = (): void => {
     lifecycle.emit?.('menuAnimation', { type: 'setting', action: 'hide' });
   };
 
-  /**
-   * 镜像画面开关变化（与既有实现一致：菜单子项内嵌 ui-switch 开关）
-   * @param checked - 是否开启
-   */
   const handleMirrorChange = (checked: boolean): void => {
     lifecycle.emit?.('settingChange', { key: 'mirror', value: checked });
   };
 
-  /**
-   * 洗脑循环开关变化
-   * @param checked - 是否开启
-   */
   const handleLoopChange = (checked: boolean): void => {
     lifecycle.emit?.('settingChange', { key: 'loop', value: checked });
   };
 
-  /**
-   * 自动开播开关变化
-   * @param checked - 是否开启
-   */
   const handleAutostartChange = (checked: boolean): void => {
     lifecycle.emit?.('settingChange', { key: 'autostart', value: checked });
   };
 
-  /**
-   * 点击更多设置菜单项，展开右侧面板
-   *
-   * 与既有实现一致：
-   * - state-show-right 加在 .ui-area 元素上（Controls.handleMenuAnimation 的
-   *   extraElements[0] 同样指向 .ui-area，hover 离开 300ms 后由其统一移除，
-   *   若加在 .player-ctrl-setting-menu 上则 Controls 无法清掉，导致下次
-   *   hover 时左右面板类残留、布局错乱）
-   * - player-ctrl-seting-more-area 加在 .player-ctrl-seting-menu-right 上
-   */
+  const handleLightoffChange = (checked: boolean): void => {
+    lifecycle.emit?.('settingChange', { key: 'lightoff', value: checked });
+  };
+
+  const handlePipChange = (checked: boolean): void => {
+    lifecycle.emit?.('settingChange', { key: 'pip', value: checked });
+  };
+
   const handleMoreClick = (): void => {
     menuAreaRef.value
       ?.querySelector('.ui-area')
@@ -121,10 +91,6 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
 
   /**
    * 统一应用单选选中态（框架无 diff，必须手动互斥）
-   *
-   * 修复：旧实现只 `forEach(btn => remove('active'))` 清空本组，**从不给被点项加回 active**，
-   * 导致点击后整组没有任何高亮。现在「先清空本组、再给被点项加上」。
-   *
    * @param group - 该单选组的根元素
    * @param event - 点击事件（取其 currentTarget 作为被选项）
    */
@@ -140,58 +106,79 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
   };
 
   /**
-   * 播放方式选项切换处理
-   * @param value - 选中的播放方式值
-   * @param event - 点击事件
+   * 渲染一组单选按钮（对应参考的 bui-radio-button：横排胶囊按钮）
+   * @param refKey - 模板引用 key
+   * @param options - 选项列表
+   * @param key - settingChange 的配置键
+   * @returns 单选组虚拟节点
    */
-  const handleHandoffChange = (value: string, event?: MouseEvent): void => {
-    applyRadioActive(handoffRadioRef.value, event);
-    lifecycle.emit?.('settingChange', { key: 'handoff', value: value });
-  };
+  const renderRadioGroup = (
+    refKey: string,
+    options: RadioOption[],
+    key: string,
+  ): VNode =>
+    h(
+      'div',
+      { class: 'player-radio-wrap-button', ref: refKey },
+      ...options.map((option) =>
+        h(
+          'div',
+          {
+            class: option.checked ? 'radio-button active' : 'radio-button',
+            onClick: (event: MouseEvent) => {
+              const target = event.currentTarget;
+              applyRadioActive(
+                target instanceof HTMLElement ? target.parentElement : null,
+                event,
+              );
+              lifecycle.emit?.('settingChange', { key, value: option.value });
+            },
+          },
+          h('span', {}, option.label),
+        ),
+      ),
+    );
 
-  /**
-   * 视频比例选项切换处理
-   * @param value - 选中的视频比例值
-   */
-  const handleAspectChange = (value: string, event?: MouseEvent): void => {
-    applyRadioActive(aspectRadioRef.value, event);
-    lifecycle.emit?.('settingChange', { key: 'aspect', value: value });
-  };
+  /** 左侧菜单的三个开关项（对应参考的 bui-switch 组） */
+  const switches: Array<{
+    cls: string;
+    name: string;
+    checked?: boolean;
+    onChange: (checked: boolean) => void;
+  }> = [
+    { cls: 'player-ctrl-setting-mirror', name: '镜像画面', onChange: handleMirrorChange },
+    { cls: 'player-ctrl-setting-loop', name: '单集循环', onChange: handleLoopChange },
+    {
+      cls: 'player-ctrl-setting-autoplay',
+      name: '自动开播',
+      checked: true,
+      onChange: handleAutostartChange,
+    },
+  ];
 
-  /**
-   * 播放策略选项切换处理
-   * @param value - 选中的播放策略值
-   */
-  const handleCodecChange = (value: string, event?: MouseEvent): void => {
-    applyRadioActive(codecRadioRef.value, event);
-    lifecycle.emit?.('settingChange', { key: 'codec', value: value });
-  };
+  /** 高能进度条复选框 API（供常驻态双向同步） */
+  let highenergyApi: { setChecked: (value: boolean) => void } | null = null;
 
-  // ============================================
-  // 生命周期钩子
-  // ============================================
-
-  /**
-   * 组件挂载后的回调，通知外部设置菜单已就绪
-   */
   lifecycle.onMounted = (): void => {
-    lifecycle.emit?.('settingMenuMounted');
+    // 图钉 / 影子条常驻态变化时回写本面板勾选
+    const unsub = observePermanent((value) => {
+      highenergyApi?.setChecked(value);
+    });
+    useComponentUnmount(lifecycle, unsub);
+    lifecycle.emit?.('settingMenuMounted', {
+      setPermanentChecked: (checked: boolean): void => {
+        highenergyApi?.setChecked(checked);
+      },
+    });
   };
 
-  /**
-   * 组件销毁前的回调，重置右侧面板状态
-   */
   lifecycle.onBeforeDestroy = (): void => {
-    // 重置右侧面板状态（与 handleMoreClick 的目标元素保持一致：.ui-area）
     menuAreaRef.value
       ?.querySelector('.ui-area')
       ?.classList.remove('state-show-right');
     menuRightRef.value?.classList.remove('player-ctrl-seting-more-area');
   };
 
-  // ============================================
-  // 主渲染函数
-  // ============================================
   return h('div', {
     class: 'player-ctrl-btn player-ctrl-setting',
     role: 'button',
@@ -200,7 +187,6 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
     onMouseLeave: handleMouseLeave,
   },
     h('div', { class: 'player-ctrl-btn-icon' },
-      // 设置按钮图标（使用 LottieIcon）
       h(LottieIcon, {
         name: 'setting',
         animationData: settingHoverAnimationData,
@@ -209,110 +195,112 @@ export const SettingMenu = defineComponent<SettingMenuProps, SettingMenuEvents>(
         ref: 'settingIconRef',
       }),
     ),
-    // 设置面板
     h('div', { class: 'player-ctrl-setting-box' },
       h('div', { class: 'player-ctrl-setting-menu ui ui-panel ui-dark', ref: 'menuAreaRef' },
         h('div', { class: 'ui-area' },
-          // 左侧菜单
-          h('div', { class: 'player-ctrl-seting-menu-left' },
-            // 镜像画面（子项内嵌 ui-switch 开关，与既有实现 initCtrlSetting 一致）
-            h('div', { class: 'player-ctrl-seting-menu-left-item' },
-              h('span', {}, '镜像画面'),
-              h(Switch, { size: 'small', onChange: handleMirrorChange }),
+          h('div', { class: 'ui-panel-wrap', style: { width: '132px', height: '140px' } },
+            h('div', { class: 'ui-panel-move', style: { width: '418px', transform: 'translateX(0px)' } },
+              h('div', {
+                class: 'ui-panel-item ui-panel-item-active',
+                style: { width: '132px', height: '140px' },
+              },
+                h('div', { class: 'player-ctrl-setting-menu-left' },
+                  ...switches.map((item) =>
+                    h('div', { class: `${item.cls} ui ui-switch` },
+                      h(Switch, {
+                        size: 'small',
+                        name: item.name,
+                        checked: item.checked,
+                        onChange: item.onChange,
+                      }),
+                    ),
+                  ),
+                  h('div', { class: 'player-ctrl-setting-oped', style: { display: 'none' } }),
+                  h('div', { class: 'player-ctrl-setting-more', onClick: handleMoreClick },
+                    h('span', { class: 'player-ctrl-setting-more-text' }, '更多播放设置'),
+                    h('span', { class: 'player-ctrl-setting-more-arrow', innerHTML: ArrowRight }),
+                  ),
+                ),
+              ),
+              h('div', { class: 'ui-panel-item', style: { width: '286px' } },
+                h('div', { class: 'player-ctrl-setting-menu-right', ref: 'menuRightRef' },
+                  h('div', { class: 'player-ctrl-seting-menu-right-area' },
+                    h('div', { class: 'player-ctrl-setting-handoff' },
+                      h('div', { class: 'player-ctrl-setting-handoff-title' }, '播放方式'),
+                      h('div', { class: 'player-ctrl-setting-handoff-conent ui ui-radio ui-dark' },
+                        renderRadioGroup('handoffRadioRef', [
+                          { label: '自动切集', value: 0 },
+                          { label: '播完暂停', value: 2, checked: true },
+                        ], 'handoff'),
+                      ),
+                    ),
+                    h('div', { class: 'player-ctrl-setting-aspect' },
+                      h('div', { class: 'player-ctrl-setting-aspect-title' }, '视频比例'),
+                      h('div', { class: 'player-ctrl-setting-aspect-conent ui ui-radio ui-dark' },
+                        renderRadioGroup('aspectRadioRef', [
+                          { label: '自动', value: '0:0', checked: true },
+                          { label: '4:3', value: '4:3' },
+                          { label: '16:9', value: '16:9' },
+                        ], 'aspect'),
+                      ),
+                    ),
+                    h('div', { class: 'player-ctrl-setting-codec' },
+                      h('div', { class: 'player-ctrl-setting-codec-title' }, '播放策略'),
+                      h('div', { class: 'player-ctrl-setting-codec-conent ui ui-radio ui-dark' },
+                        renderRadioGroup('codecRadioRef', [
+                          { label: '默认', value: 0, checked: true },
+                          { label: 'AV1', value: 3 },
+                          { label: 'HEVC', value: 1 },
+                          { label: 'AVC', value: 2 },
+                        ], 'codec'),
+                      ),
+                    ),
+                    h('div', { class: 'player-ctrl-setting-loudness' },
+                      h('div', { class: 'player-ctrl-setting-loudness-title' }, '音量均衡'),
+                      h('div', { class: 'player-ctrl-setting-loudness-content ui ui-radio ui-dark' },
+                        renderRadioGroup('loudnessRadioRef', [
+                          { label: '标准', value: 1 },
+                          { label: '高动态', value: 2 },
+                          { label: '关闭', value: 0, checked: true },
+                        ], 'loudness'),
+                      ),
+                    ),
+                    h('div', { class: 'player-ctrl-setting-others' },
+                      h('div', { class: 'player-ctrl-setting-others-title' }, '其他设置'),
+                      h('div', { class: 'player-ctrl-setting-others-content' },
+                        h('div', { class: 'player-ctrl-setting-checkbox player-ctrl-setting-lightoff' },
+                          h(Checkbox, { label: '关灯模式', onChange: handleLightoffChange }),
+                        ),
+                        h('div', { class: 'player-ctrl-setting-checkbox player-ctrl-setting-widesave', style: { display: 'none' } }),
+                        h('div', { class: 'player-ctrl-setting-checkbox player-ctrl-setting-panoram', style: { display: 'none' } }),
+                        h('div', { class: 'player-ctrl-setting-checkbox player-ctrl-setting-highenergy' },
+                          h(Checkbox, {
+                            label: '高能进度条',
+                            checked: readPermanent(),
+                            onChange: (checked: boolean) => {
+                              publishPermanent(checked);
+                              lifecycle.emit?.('settingChange', {
+                                key: 'highenergy',
+                                value: checked,
+                              });
+                            },
+                            onCheckboxMounted: (api: { setChecked: (value: boolean) => void }) => {
+                              highenergyApi = api;
+                            },
+                          }),
+                        ),
+                        h('div', { class: 'player-ctrl-setting-checkbox player-ctrl-setting-pip' },
+                          h(Checkbox, { label: '原生画中画', onChange: handlePipChange }),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            // 洗脑循环
-            h('div', { class: 'player-ctrl-seting-menu-left-item' },
-              h('span', {}, '洗脑循环'),
-              h(Switch, { size: 'small', onChange: handleLoopChange }),
-            ),
-            // 自动开播
-            h('div', { class: 'player-ctrl-seting-menu-left-item' },
-              h('span', {}, '自动开播'),
-              h(Switch, { size: 'small', onChange: handleAutostartChange }),
-            ),
-            // 更多播放设置（箭头图标使用既有实现 icons 的 ArrowRight SVG；
-            // 既有实现直接内联 16×16 SVG，
-            // 不包 .common-svg-icon——该类会将 SVG 拉伸为 100% 尺寸导致图标过大、挤压菜单布局）
-            h('div', {
-              class: 'player-ctrl-seting-menu-left-item setting-more',
-              onClick: handleMoreClick,
-            },
-              h('span', {}, '更多播放设置'),
-              h('span', { innerHTML: ArrowRight })
-            )
           ),
-          // 右侧面板
-          h('div', { class: 'player-ctrl-seting-menu-right', ref: 'menuRightRef' },
-            h('div', { class: 'player-ctrl-seting-menu-right-area' },
-              // 播放方式
-              h('div', { class: 'player-ctrl-setting-handoff' },
-                h('div', { class: 'player-ctrl-setting-handoff-title' }, '播放方式'),
-                h('div', { class: 'player-ctrl-setting-handoff-conent' },
-                  h('div', { class: 'bui-radio-wrap-button', ref: 'handoffRadioRef' },
-                    h('div', {
-                      class: 'radio-button active',
-                      onClick: (e: MouseEvent) => handleHandoffChange('自动切集', e),
-                    }, h('span', {}, '自动切集')),
-                    h('div', {
-                      class: 'radio-button',
-                      onClick: (e: MouseEvent) => handleHandoffChange('播完暂停', e),
-                    }, h('span', {}, '播完暂停'))
-                  )
-                )
-              ),
-              // 视频比例
-              h('div', { class: 'player-ctrl-setting-aspect' },
-                h('div', { class: 'player-ctrl-setting-aspect-title' }, '视频比例'),
-                h('div', { class: 'player-ctrl-setting-aspect-conent' },
-                  h('div', { class: 'bui-radio-wrap-button', ref: 'aspectRadioRef' },
-                    h('div', {
-                      class: 'radio-button active',
-                      onClick: (e: MouseEvent) => handleAspectChange('自动', e),
-                    }, h('span', {}, '自动')),
-                    h('div', {
-                      class: 'radio-button',
-                      onClick: (e: MouseEvent) => handleAspectChange('4:3', e),
-                    }, h('span', {}, '4:3')),
-                    h('div', {
-                      class: 'radio-button',
-                      onClick: (e: MouseEvent) => handleAspectChange('16:9', e),
-                    }, h('span', {}, '16:9'))
-                  )
-                )
-              ),
-              // 播放策略
-              h('div', { class: 'player-ctrl-setting-codec' },
-                h('div', { class: 'player-ctrl-setting-codec-title' }, '播放策略'),
-                h('div', { class: 'player-ctrl-setting-codec-conent' },
-                  h('div', { class: 'bui-radio-wrap-button', ref: 'codecRadioRef' },
-                    h('div', {
-                      class: 'radio-button active',
-                      onClick: (e: MouseEvent) => handleCodecChange('默认', e),
-                    }, h('span', {}, '默认')),
-                    h('div', {
-                      class: 'radio-button',
-                      onClick: (e: MouseEvent) => handleCodecChange('AV1', e),
-                    }, h('span', {}, 'AV1')),
-                    h('div', {
-                      class: 'radio-button',
-                      onClick: (e: MouseEvent) => handleCodecChange('HEVC', e),
-                    }, h('span', {}, 'HEVC')),
-                    h('div', {
-                      class: 'radio-button',
-                      onClick: (e: MouseEvent) => handleCodecChange('AVC', e),
-                    }, h('span', {}, 'AVC'))
-                  )
-                )
-              ),
-              // 其他设置
-              h('div', { class: 'player-ctrl-setting-others' },
-                h('div', { class: 'player-ctrl-setting-others-title' }, '其他设置'),
-                h('div', { class: 'player-ctrl-setting-others-content' })
-              )
-            )
-          )
-        )
-      )
-    )
+        ),
+      ),
+    ),
   );
 });

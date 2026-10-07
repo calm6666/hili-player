@@ -60,6 +60,14 @@ import type { DanmakuItem } from "@/types/danmaku";
 import { PlayerDocker } from "@/hili-player/components/PlayerDocker";
 import { StreamMiddleware, PlayerMode } from "../utils/media/streamMiddleware";
 import { detectManifestProtocol } from "../utils/media/manifestProtocol";
+import {
+  normalizeProgressPreview,
+  type ProgressPreviewSource,
+} from "../utils/media/progressPreview";
+import {
+  normalizeEnergyProgress,
+  type EnergyProgressData,
+} from "../utils/media/energyProgress";
 import { StreamFormatEnum } from "@/types/streamPlugin";
 import type {
   StreamPlugin,
@@ -231,6 +239,12 @@ export class VideoPlayer
    * 清单本身保存在这里：协议判定（detectManifestProtocol）与加载目标解析都以它为准。
    */
   private manifestSource: MediaManifestSource | null = null;
+
+  /** 分段预览数据（雪碧图参数或逐帧 data URL，两形态兼容） */
+  private progressPreviewSource: ProgressPreviewSource | null = null;
+
+  /** 高能进度条数据（/x/player/pbp 采样点） */
+  private energyProgressData: EnergyProgressData | null = null;
 
   /** 当前播放的视频源索引 */
   private currentSourceIndex = 0;
@@ -801,6 +815,35 @@ export class VideoPlayer
   }
 
   /**
+   * 设置进度条分段预览数据（两种形态都支持）
+   *
+   * - 逐帧：`string[]`（mock-server `/videoshot/preview.bin`，`\u001f` 分隔的 data URL）；
+   * - 雪碧图：`{ imgUrl, imgXLen, imgYLen, imgXSize, imgYSize, sliceCount? }`
+   *   （mock-server `/videoshot/sprite.jpg` + `/videoshot/index.json` 的 pvdata）。
+   *
+   * 进度条悬停时按「悬停时间 / 总时长」换算切片下标，无需重建 DOM。
+   *
+   * @param source - 预览数据；null 清除
+   */
+  setProgressPreview(
+    source: ProgressPreviewSource | string[] | null,
+  ): void {
+    this.progressPreviewSource = normalizeProgressPreview(source);
+  }
+
+  /**
+   * 设置高能进度条数据
+   *
+   * 数据源为 mock-server `/x/player/pbp` 的 `{ step_sec, data[] }`
+   * （data[i] 为第 i 个采样点的热度，0-1）。
+   *
+   * @param value - 高能数据；null 清除曲线
+   */
+  setEnergyProgress(value: unknown): void {
+    this.energyProgressData = normalizeEnergyProgress(value);
+  }
+
+  /**
    * 处理视频源配置
    * 支持字符串 URL、URL 数组（备用源）或渐进式多清晰度变体数组
    */
@@ -870,6 +913,10 @@ export class VideoPlayer
       events: this.events,
       /** 缓冲速度数据源（字节/秒）：流媒体插件统计优先，原生由 PlayerDocker 回退采样 */
       getStreamDownloadSpeed: () => this.getStreamDownloadSpeed(),
+      /** 分段预览帧数据源（进度条悬停时懒取值，雪碧图/逐帧均可） */
+      getProgressPreviewFrames: () => this.progressPreviewSource,
+      /** 高能进度条数据源 */
+      getEnergyProgress: () => this.energyProgressData,
       onQualityChange: (quality: string) => {
         void this.setQuality(quality);
       },

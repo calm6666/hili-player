@@ -680,6 +680,27 @@ img {
         font-size: 16px;
       }
     }
+
+    .player-ctrl-setting-box {
+      .player-ctrl-setting-handoff-title,
+      .player-ctrl-setting-aspect-title,
+      .player-ctrl-setting-codec-title,
+      .player-ctrl-setting-loudness-title,
+      .player-ctrl-setting-others-title,
+      .player-ctrl-setting-more-text,
+      .player-ctrl-seting-menu-left .ui-switch-name {
+        font-size: 16px;
+      }
+    }
+
+    .player-dm-setting-wrap {
+      .player-dm-setting-box {
+        .player-dm-setting-left,
+        .player-dm-setting-right {
+          font-size: 16px;
+        }
+      }
+    }
   }
 
   .player-container[data-screen="mini"] {

@@ -43,8 +43,149 @@ import { VideoPlayer } from "@/hili-player/player";
 import { createHlsPlugin } from "@/hili-player/plugins/hls";
 import { createDashPlugin } from "@/hili-player/plugins/dash";
 import { DanmakuPlugin } from "@/hili-player/plugins/danmaku";
-import type { MediaItem, PlayerConfig, PlayerSource } from "@/types";
+import type { MediaItem, PlayerConfig, PlayerSource, ProgressSegment } from "@/types";
 import type { Plugin } from "@/hili-player/core/plugin";
+import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
+import {
+  normalizeEnergyProgress,
+  type EnergyProgressData,
+} from "@/hili-player/utils/media/energyProgress";
+
+/**
+ * mock-server 基地址（默认端口 9101；响应带 Access-Control-Allow-Origin: *，
+ * 开发时 demo 页面可直接跨端口请求，无需额外代理）
+ */
+const MOCK_SERVER_BASE = "http://127.0.0.1:9101";
+
+/** mock-server 的进度条节点响应 */
+interface MockViewPoint {
+  from: number;
+  to: number;
+  content: string;
+}
+
+/**
+ * 拉取分段点（进度条章节）
+ *
+ * 接口：GET http://127.0.0.1:9101/x/player/v2
+ * 响应：{ code, message, data: { view_points: [{ from, to, content, ... }] } }
+ * from/to 单位为秒，直接映射为 ProgressSegment 的 startTime/endTime。
+ *
+ * @returns 分段列表；请求失败返回空数组
+ */
+async function fetchProgressSegments(): Promise<ProgressSegment[]> {
+  try {
+    const response = await fetch(`${MOCK_SERVER_BASE}/x/player/v2`);
+    if (!response.ok) return [];
+    const payload = (await response.json()) as {
+      data?: { view_points?: MockViewPoint[] };
+    };
+    const points = payload.data?.view_points;
+    if (!Array.isArray(points)) return [];
+    return points.map((point) => ({
+      startTime: Number(point.from) || 0,
+      endTime: Number(point.to) || 0,
+      label: String(point.content ?? ""),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 拉取逐帧预览图
+ *
+ * 接口：GET http://127.0.0.1:9101/videoshot/preview.bin
+ * 响应：UTF-8 文本，逐帧 data URL，以 \u001f 分隔。
+ *
+ * @returns 预览帧数组；请求失败返回空数组
+ */
+async function fetchPreviewFrames(): Promise<string[]> {
+  try {
+    const response = await fetch(`${MOCK_SERVER_BASE}/videoshot/preview.bin`);
+    if (!response.ok) return [];
+    const text = await response.text();
+    return text
+      .split("\u001f")
+      .map((frame) => frame.trim())
+      .filter((frame) => frame.startsWith("data:"));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 拉取预览数据源（雪碧图与逐帧两种都兼容）
+ *
+ * 接口：GET http://127.0.0.1:9101/videoshot/index.json
+ * 优先用雪碧图（pvdata 的 img_url + img_x_len/img_y_len/img_x_size/img_y_size，B 站形状）；
+ * 拿不到雪碧图参数时回退到逐帧 preview.bin。
+ * URL 带 `?preview=frames` 可强制走逐帧，便于对比两条路径。
+ *
+ * @returns setProgressPreview() 可直接消费的数据源
+ */
+async function fetchProgressPreview(): Promise<
+  ProgressPreviewSource | string[] | null
+> {
+  const forceFrames =
+    new URLSearchParams(location.search).get("preview") === "frames";
+
+  let spriteSource: ProgressPreviewSource | null = null;
+  try {
+    const response = await fetch(`${MOCK_SERVER_BASE}/videoshot/index.json`);
+    if (response.ok) {
+      const payload = (await response.json()) as {
+        data?: {
+          pvdata?: {
+            img_url?: string;
+            img_x_len?: number;
+            img_y_len?: number;
+            img_x_size?: number;
+            img_y_size?: number;
+          };
+          index?: number[];
+        };
+      };
+      const pv = payload.data?.pvdata;
+      if (pv?.img_url && pv.img_x_len && pv.img_y_len) {
+        spriteSource = {
+          imgUrl: `${MOCK_SERVER_BASE}${pv.img_url}`,
+          imgXLen: pv.img_x_len,
+          imgYLen: pv.img_y_len,
+          imgXSize: pv.img_x_size,
+          imgYSize: pv.img_y_size,
+          sliceCount: payload.data?.index?.length,
+        };
+      }
+    }
+  } catch {
+    spriteSource = null;
+  }
+
+  if (spriteSource && !forceFrames) return spriteSource;
+
+  const frames = await fetchPreviewFrames();
+  return frames.length > 0 ? frames : spriteSource;
+}
+
+/**
+ * 拉取高能进度条数据
+ *
+ * 接口：GET http://127.0.0.1:9101/x/player/pbp
+ * 响应：{ code, message, data: { step_sec, data: number[], count, duration } }
+ *
+ * @returns 归一后的高能数据；请求失败返回 null
+ */
+async function fetchEnergyProgress(): Promise<EnergyProgressData | null> {
+  try {
+    const response = await fetch(`${MOCK_SERVER_BASE}/x/player/pbp`);
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { data?: unknown };
+    return normalizeEnergyProgress(payload.data);
+  } catch {
+    return null;
+  }
+}
 
 // ============================================
 // 步骤1：水合前记录时间戳（用于显示水合耗时）
@@ -442,11 +583,11 @@ function removeSourceAt(index: number): void {
     return;
   }
   if (wasCurrent) {
-    rebuildPlayer(Math.min(index, MEDIA_LIST.length - 1));
+    void rebuildPlayer(Math.min(index, MEDIA_LIST.length - 1));
     return;
   }
   if (index < current) {
-    rebuildPlayer(current - 1);
+    void rebuildPlayer(current - 1);
     return;
   }
   renderSourceList();
@@ -518,7 +659,7 @@ function renderSourceList(): void {
  *
  * @param targetIndex - 目标源下标
  */
-function rebuildPlayer(targetIndex: number): void {
+async function rebuildPlayer(targetIndex: number): Promise<void> {
   const wrapper = document.getElementById("player-wrapper");
 
   destroyCurrentPlayer();
@@ -530,11 +671,21 @@ function rebuildPlayer(targetIndex: number): void {
     .querySelectorAll(".player-destroyed-placeholder")
     .forEach((node) => node.remove());
 
+  // 测试期每个视频默认加载：分段点 + 预览数据（雪碧图/逐帧）+ 高能进度条
+  const [segments, preview, energy] = await Promise.all([
+    fetchProgressSegments(),
+    fetchProgressPreview(),
+    fetchEnergyProgress(),
+  ]);
+
   const current = MEDIA_LIST[targetIndex];
   const config: PlayerConfig = {
     src: current ? current.src : undefined,
     playlist: MEDIA_LIST,
     playlistIndex: targetIndex,
+    progress: {
+      segments,
+    },
     playback: {
       autoplay: true,
       muted: true,
@@ -554,6 +705,8 @@ function rebuildPlayer(targetIndex: number): void {
   try {
     const next = new VideoPlayer(config);
     setPlayerInstance(next);
+    next.setProgressPreview(preview);
+    next.setEnergyProgress(energy);
     next.mount(wrapper);
     (window as unknown as { player: VideoPlayer }).player = next;
     if (targetIndex > 0) {
@@ -573,7 +726,7 @@ function rebuildPlayer(targetIndex: number): void {
 
 function addSource(source: PlayerSource, title: string): void {
   MEDIA_LIST.push({ src: source, title });
-  rebuildPlayer(MEDIA_LIST.length - 1);
+  void rebuildPlayer(MEDIA_LIST.length - 1);
 }
 
 function handleAddSource(): void {
