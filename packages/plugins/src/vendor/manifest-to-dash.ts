@@ -25,6 +25,7 @@ import type {
   DashAdaptationSet,
   DashRepresentation,
   DashSegmentTemplate,
+  DashSegmentTimelineEntry,
   DashSegmentList,
   DashSegmentUrl,
   DashSegmentBase,
@@ -192,11 +193,32 @@ function toSegmentTemplate(
 
   const template: DashSegmentTemplate = {
     timescale,
-    duration: segmentDuration,
     initialization: segInfo.initialization ? resolveUrl(baseUrl, segInfo.initialization) : undefined,
     media: resolveUrl(baseUrl, toDashMediaTemplate(pattern)),
     startNumber,
   };
+
+  /* 有精确时间线时用 SegmentTimeline，并且不能同时给 duration：
+   * dash.js 遇到 duration 会用它除以 timescale 当分片边界，忽略时间线里的精确时间戳，
+   * 平均时长与真实边界的一点差异会被 GapController 当成空洞并触发跳转（seek → 冲刷缓冲） */
+  const timeline = segInfo.segmentTimeline;
+  if (timeline && timeline.length > 0) {
+    template.SegmentTimeline = {
+      S: timeline.map((item, index) => {
+        const raw = item as { t?: number; d?: number; duration?: number; r?: number };
+        const entry: DashSegmentTimelineEntry = {
+          d: raw.d ?? raw.duration ?? 0,
+        };
+        if (index === 0) entry.t = 0;
+        else if (raw.t !== undefined) entry.t = raw.t;
+        if (raw.r !== undefined) entry.r = raw.r;
+        return entry;
+      }),
+    };
+    return template;
+  }
+
+  template.duration = segmentDuration;
 
   /* endNumber：最后一个分片的编号
    * dash.js 用此字段确定分片范围边界，防止快进到末尾时
@@ -451,29 +473,25 @@ export function manifestToDash(manifest: MediaManifest): DashManifestObject {
     ? buildClearKeyContentProtection(manifest.licenseServer)
     : undefined;
 
-  /* 视频 AdaptationSet：每个 Representation 单独一个 AdaptationSet
-   * 与 MPD 原始格式一致，避免 dash.js 内部处理差异。
-   * MPD 中每个 Representation 在独立的 AdaptationSet 中，
-   * 如果把多个 Representation 放在同一个 AdaptationSet 中，
-   * dash.js 的 processAdaptation 会按 bandwidth 排序 Representation，
-   * 可能导致 _getSegmentBase 查找 SegmentTemplate 时索引不匹配，
-   * 以及 BufferController 在 switchStream 时 timestampOffset 处理异常，
-   * 造成 0-4 秒画面重叠。*/
-  for (let i = 0; i < manifest.video.length; i++) {
-    const rep = manifest.video[i];
-    const adaptationSet: DashAdaptationSet = {
+  /* 视频 AdaptationSet：全部 Representation 放进同一个 AdaptationSet
+   * 与标准 MPD 同构，dash.js 的档位列表与按 index 切档都作用在该 set 的
+   * Representation 上；每个 Representation 自带完整分片描述。*/
+  if (manifest.video.length > 0) {
+    const videoAdaptationSet: DashAdaptationSet = {
       id: String(adaptationSets.length),
       contentType: 'video',
       mimeType: 'video/mp4',
-      startWithSAP: 1,
       segmentAlignment: true,
-      bitstreamSwitching: true,
-      Representation: [toDashRepresentation(rep, manifest.duration)],
+      subsegmentAlignment: true,
+      subsegmentStartsWithSAP: 1,
+      Representation: manifest.video.map((rep) =>
+        toDashRepresentation(rep, manifest.duration),
+      ),
     };
     if (contentProtection) {
-      adaptationSet.ContentProtection = contentProtection;
+      videoAdaptationSet.ContentProtection = contentProtection;
     }
-    adaptationSets.push(adaptationSet);
+    adaptationSets.push(videoAdaptationSet);
   }
 
   /* 音频 AdaptationSet */

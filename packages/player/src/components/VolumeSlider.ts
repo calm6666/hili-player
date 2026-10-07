@@ -7,6 +7,8 @@
  */
 
 import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from '@/utils/rafTimeout';
 import { isBrowser } from '@/utils';
 import { PlayerStateKeyEnum } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
@@ -24,11 +26,13 @@ import muteToVolumeAnimationData from '../assets/lottie-icon/mute-to-volume-anim
 export type VolumeSliderEvents = {
   volumeChange: number;
   muteToggle: undefined;
-  menuAnimation: { type: 'volume'; action: 'show' | 'hide' };
   volumeSliderMounted: { setVolume: (vol: number) => void; setMuted: (mutedState: boolean) => void };
 };
 
 export interface VolumeSliderProps {}
+
+const MENU_SHOW_DELAY = 120;
+const MENU_HIDE_DELAY = 220;
 
 /**
  * VolumeSlider 组件 - 使用 defineComponent 创建独立组件
@@ -58,6 +62,31 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   /** 垂直滑块拖拽手柄元素引用 */
   const sliderThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderThumbRef');
 
+  /** 音量按钮根元素引用（面板显隐的类名挂载点） */
+  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'volumeRootRef');
+
+  /** 展开定时器 */
+  let showTimer: AnimationFrameID | null = null;
+
+  /** 收起定时器 */
+  let hideTimer: AnimationFrameID | null = null;
+
+  /**
+   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * @param show - 是否展开
+   */
+  const setShown = (show: boolean): void => {
+    rootRef.value?.classList.toggle('state-show', show);
+  };
+
+  /** 取消两个方向的排队任务 */
+  const clearTimers = (): void => {
+    cancelRaf(showTimer!);
+    cancelRaf(hideTimer!);
+    showTimer = null;
+    hideTimer = null;
+  };
+
   // ============================================
   // 状态
   // ============================================
@@ -80,21 +109,31 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   // ============================================
 
   /**
-   * 音量按钮鼠标进入事件处理
-   * 通知父级展开音量滑杆（与既有实现 ctrlVolumeBtn mouseenter → menuAnimation("volume","show") 一致）
+   * 音量按钮鼠标进入：播放图标动画并延迟展开音量面板（面板显隐由本组件自己负责）
    */
   const mouseVolumeEnter = (): void => {
     volumeIconRef.value?.play();
-    lifecycle.emit?.('menuAnimation', { type: 'volume', action: 'show' });
+    cancelRaf(hideTimer!);
+    hideTimer = null;
+    if (showTimer !== null) return;
+    showTimer = rafTimeout(() => {
+      showTimer = null;
+      setShown(true);
+    }, MENU_SHOW_DELAY);
   };
 
 
   /**
-   * 音量按钮鼠标离开事件处理
-   * 通知父级收起音量滑杆（与既有实现 ctrlVolumeBtn mouseleave → menuAnimation("volume","hide") 一致）
+   * 音量按钮鼠标离开：延迟收起音量面板
    */
   const mouseVolumeLeave = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'volume', action: 'hide' });
+    cancelRaf(showTimer!);
+    showTimer = null;
+    if (hideTimer !== null) return;
+    hideTimer = rafTimeout(() => {
+      hideTimer = null;
+      setShown(false);
+    }, MENU_HIDE_DELAY);
   };
 
   /**
@@ -323,6 +362,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    * 组件销毁前，移除 document 级别的事件监听并重置拖拽状态
    */
   lifecycle.onBeforeDestroy = (): void => {
+    clearTimers();
     isDragging = false;
     if (dragMouseMove) {
       document.removeEventListener('mousemove', dragMouseMove);
@@ -341,9 +381,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     class: 'player-ctrl-btn player-ctrl-volume',
     role: 'button',
     'aria-label': '音量',
-    // 注意：静音切换**不能**挂在根节点上。音量面板 `.player-ctrl-volume-box` 是本按钮的
-    // 子元素，挂根节点时点击面板会冒泡到根节点 → 点音量面板会被误判为静音切换
-    // （旧版实现把切换只挂在图标上，这里保持一致）
+    ref: 'volumeRootRef',
     onMouseEnter: mouseVolumeEnter,
     onMouseLeave: mouseVolumeLeave,
   },

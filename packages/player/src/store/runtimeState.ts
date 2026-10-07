@@ -107,6 +107,10 @@ export enum PlayerStateKeyEnum {
   /** 弹幕随屏幕缩放（弹幕设置面板复选框） */
   DANMAKU_SCALE_WITH_SCREEN = "player.danmakuScaleWithScreen",
 
+  // 高能进度条
+  /** 高能进度条常驻（设置面板复选框 / 图钉 / 影子进度条共享同一状态源） */
+  PBP_PERMANENT = "player.pbpPermanent",
+
   // 字幕状态
   SUBTITLE_VISIBLE = "player.subtitleVisible",
   SUBTITLE_LANG = "player.subtitleLang",
@@ -193,6 +197,8 @@ export type PlayerStateMap = {
   "player.danmakuMode": number;
   /** 弹幕随屏幕缩放 */
   "player.danmakuScaleWithScreen": boolean;
+  /** 高能进度条常驻 */
+  "player.pbpPermanent": boolean;
   "player.subtitleVisible": boolean;
   "player.subtitleLang": string;
   browser: object;
@@ -276,6 +282,10 @@ export interface RuntimeState {
   /** 弹幕随屏幕缩放 */
   danmakuScaleWithScreen: boolean;
 
+  // 高能进度条
+  /** 高能进度条常驻 */
+  pbpPermanent: boolean;
+
   // 字幕状态
   subtitleVisible: boolean;
   subtitleLang: string;
@@ -323,6 +333,7 @@ export const defaultRuntimeState: RuntimeState = {
   danmakuColor: "#FFFFFF",
   danmakuMode: 1,
   danmakuScaleWithScreen: true,
+  pbpPermanent: false,
   subtitleVisible: true,
   subtitleLang: "zh-CN",
 };
@@ -432,6 +443,10 @@ export function createRuntimeStateManager(
     [PlayerStateKeyEnum.DANMAKU_SCALE_WITH_SCREEN]:
       initialState.danmakuScaleWithScreen ??
       defaultRuntimeState.danmakuScaleWithScreen,
+
+    // 高能进度条
+    [PlayerStateKeyEnum.PBP_PERMANENT]:
+      initialState.pbpPermanent ?? defaultRuntimeState.pbpPermanent,
 
     // 字幕状态
     [PlayerStateKeyEnum.SUBTITLE_VISIBLE]:

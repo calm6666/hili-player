@@ -3,6 +3,7 @@
  * 用于生成码率、缓冲区、帧率等数据的平滑曲线图
  */
 
+import { h, materialize } from '@/core';
 import type { BitrateDataPoint, ThroughputDataPoint, BufferDataPoint, FrameRateDataPoint } from './types';
 
 /** 图表配置 */
@@ -453,19 +454,26 @@ function generateEmptyChart(config: Required<ChartConfig>): string {
  * 创建图表容器
  * @param container 容器元素
  * @param title 图表标题
- * @returns 图表包装元素
+ * @returns 图表内容元素
  */
-export function createChartContainer(container: HTMLElement, title: string): HTMLElement {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'media-chart-wrapper';
-  wrapper.innerHTML = `
-    <div class="media-chart-title">${title}</div>
-    <div class="media-chart-content"></div>
-  `;
+export function createChartContainer(
+  container: HTMLElement,
+  title: string,
+): HTMLElement {
+  let content: HTMLElement | null = null;
+  const wrapper = materialize(
+    h(
+      'div',
+      { class: 'media-chart-wrapper' },
+      h('div', { class: 'media-chart-title' }, title),
+      h('div', {
+        class: 'media-chart-content',
+        ref: (el: Element) => {
+          content = el as HTMLElement;
+        },
+      }),
+    ),
+  ) as HTMLElement;
   container.appendChild(wrapper);
-  const content = wrapper.querySelector('.media-chart-content');
-  if (!(content instanceof HTMLElement)) {
-    throw new Error('Chart content element not found');
-  }
-  return content;
+  return content as unknown as HTMLElement;
 }

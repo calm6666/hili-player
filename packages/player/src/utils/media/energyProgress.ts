@@ -22,6 +22,12 @@ export interface EnergyProgressData {
 export const ENERGY_VIEW_WIDTH = 1000;
 export const ENERGY_VIEW_HEIGHT = 100;
 
+/** 两端收敛到基线的过渡段宽度（像素；像素宽度未知时退回按比例） */
+export const ENERGY_EDGE_FADE_PX = 2;
+
+/** 两端收敛到基线的过渡段占比（仅在未知像素宽度时使用） */
+export const ENERGY_EDGE_FADE_RATIO = 0.002;
+
 /**
  * 归一化高能进度条数据
  *
@@ -59,13 +65,17 @@ export function normalizeEnergyProgress(value: unknown): EnergyProgressData | nu
 /**
  * 把采样点换算为「面积路径」（从底边闭合成一块区域）
  *
+ * 首尾各 `ENERGY_EDGE_FADE_PX` 像素内收敛到基线（与采样密度无关）。
+ *
  * @param samples - 采样点（0-1），长度 >= 1
  * @param throughIndex - 只画到该下标（含）；缺省画满
+ * @param barWidthPx - 进度条实际像素宽度，用于把过渡段固定成约 2~3 像素
  * @returns SVG path 的 d 属性；无有效点返回空串
  */
 export function buildEnergyAreaPath(
   samples: number[],
   throughIndex?: number,
+  barWidthPx?: number,
 ): string {
   if (samples.length === 0) return '';
 
@@ -76,19 +86,63 @@ export function buildEnergyAreaPath(
   const visible = samples.slice(0, last + 1);
   const stepX = ENERGY_VIEW_WIDTH / Math.max(1, samples.length - 1);
 
-  const points = visible.map((value, index) => {
-    const x = index * stepX;
-    const y = ENERGY_VIEW_HEIGHT - value * ENERGY_VIEW_HEIGHT;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  });
+  // 三次贝塞尔平滑：每段用「水平切线的 S 曲线」（控制点取两点的中点 X、
+  // 分别取前后两点的 Y），与参考的 `C mid,y0 mid,y1 x1,y1` 写法一致
+  const yAt = (value: number): number =>
+    ENERGY_VIEW_HEIGHT - value * ENERGY_VIEW_HEIGHT;
+  const xAt = (index: number): number => index * stepX;
 
-  const lastX = (last * stepX).toFixed(2);
-  return [
-    `M0,${ENERGY_VIEW_HEIGHT}`,
-    ...points.map((point) => `L${point}`),
-    `L${lastX},${ENERGY_VIEW_HEIGHT}`,
-    'Z',
-  ].join(' ');
+  // 两端归零距离（视图单位）：由像素换算，最多半个采样间隔，避免盖过相邻采样点
+  const fadeUnits =
+    barWidthPx && barWidthPx > 0
+      ? Math.min(
+          (ENERGY_EDGE_FADE_PX * ENERGY_VIEW_WIDTH) / barWidthPx,
+          stepX,
+        )
+      : Math.min(ENERGY_VIEW_WIDTH * ENERGY_EDGE_FADE_RATIO, stepX);
+
+  const lastIsEnd = last === samples.length - 1;
+  const valueAt = (index: number): number => visible[index];
+
+  /* 两端各留 fadeUnits 的归零段：首/末采样点的 x 向内侧缩 fadeUnits，
+   * 与基线之间用一段贝塞尔接上，归零距离恒为约 2px，与采样密度无关 */
+  const xOf = (index: number): number => {
+    if (index === 0) return fadeUnits;
+    if (lastIsEnd && index === visible.length - 1) {
+      return Math.max(fadeUnits, xAt(index) - fadeUnits);
+    }
+    return xAt(index);
+  };
+
+  let path = `M0,${ENERGY_VIEW_HEIGHT}`;
+  if (visible.length === 1) {
+    const x1 = xOf(0);
+    const y1 = yAt(valueAt(0));
+    path += ` C${(fadeUnits / 2).toFixed(2)},${ENERGY_VIEW_HEIGHT} ${(fadeUnits / 2).toFixed(2)},${y1.toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)}`;
+    if (lastIsEnd) {
+      path += ` C${(x1 + fadeUnits / 2).toFixed(2)},${y1.toFixed(2)} ${(x1 + fadeUnits / 2).toFixed(2)},${ENERGY_VIEW_HEIGHT} ${ENERGY_VIEW_WIDTH},${ENERGY_VIEW_HEIGHT}`;
+    }
+    path += ' Z';
+    return path;
+  }
+
+  path += ` C${(fadeUnits / 2).toFixed(2)},${ENERGY_VIEW_HEIGHT} ${(fadeUnits / 2).toFixed(2)},${yAt(valueAt(0)).toFixed(2)} ${xOf(0).toFixed(2)},${yAt(valueAt(0)).toFixed(2)}`;
+  for (let i = 1; i < visible.length; i += 1) {
+    const x0 = xOf(i - 1);
+    const x1 = xOf(i);
+    const y0 = yAt(valueAt(i - 1));
+    const y1 = yAt(valueAt(i));
+    const midX = ((x0 + x1) / 2).toFixed(2);
+    path += ` C${midX},${y0.toFixed(2)} ${midX},${y1.toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)}`;
+  }
+  if (lastIsEnd) {
+    const xEnd = xOf(visible.length - 1);
+    const yEnd = yAt(valueAt(visible.length - 1));
+    path += ` C${(xEnd + fadeUnits / 2).toFixed(2)},${yEnd.toFixed(2)} ${(xEnd + fadeUnits / 2).toFixed(2)},${ENERGY_VIEW_HEIGHT} ${ENERGY_VIEW_WIDTH},${ENERGY_VIEW_HEIGHT} Z`;
+    return path;
+  }
+  path += ` L${xOf(visible.length - 1).toFixed(2)},${ENERGY_VIEW_HEIGHT} Z`;
+  return path;
 }
 
 /**

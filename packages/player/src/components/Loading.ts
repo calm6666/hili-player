@@ -78,7 +78,7 @@ export const Loading = defineComponent<LoadingProps>((props, lifecycle: Componen
       hide();
     }
     if (props.text && loadingTextRef.value) {
-      loadingTextRef.value.innerHTML = props.text;
+      loadingTextRef.value.textContent = props.text;
     }
 
     lifecycle.emit?.('loadingMounted', {

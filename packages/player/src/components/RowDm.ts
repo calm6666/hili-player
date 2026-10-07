@@ -5,7 +5,7 @@
  * 弹幕逻辑使用 src/utils/danmaku 中的 DanmakuManager
  */
 
-import { defineComponent, h, useTemplateRef } from '@/core';
+import { defineComponent, h, useTemplateRef, materialize } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 
 // ============================================
@@ -173,16 +173,11 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
   };
 
   /**
-   * 创建弹幕 DOM 元素并设置样式
+   * 创建弹幕元素并设置样式
    * @param danmaku - 弹幕数据
-   * @returns 设置好样式的弹幕 DOM 元素
+   * @returns 设置好样式的弹幕元素
    */
   const createDanmuElement = (danmaku: DanmakuItem): HTMLDivElement => {
-    /** 弹幕 DOM 元素 */
-    const element = document.createElement('div');
-    element.className = 'danmaku-x-dm danmaku-x-show';
-    element.textContent = danmaku.content;
-
     /** 弹幕透明度，默认 1 */
     const opacity = danmaku.opacity ?? 1;
     /** 弹幕字体大小（px），默认 25 */
@@ -194,13 +189,22 @@ export const RowDm = defineComponent<RowDmProps>((props, lifecycle: ComponentLif
     /** 弹幕文字颜色，默认白色 */
     const color = danmaku.color ?? '#FFFFFF';
 
-    element.style.setProperty('--opacity', String(opacity));
-    element.style.setProperty('--fontSize', `${fontSize}px`);
-    element.style.setProperty('--fontWeight', String(fontWeight));
-    element.style.setProperty('--textShadow', textShadow);
-    element.style.setProperty('--color', color);
-
-    return element;
+    return materialize(
+      h(
+        'div',
+        {
+          class: 'danmaku-x-dm danmaku-x-show',
+          style: {
+            '--opacity': String(opacity),
+            '--fontSize': `${fontSize}px`,
+            '--fontWeight': String(fontWeight),
+            '--textShadow': textShadow,
+            '--color': color,
+          },
+        },
+        danmaku.content,
+      ),
+    ) as HTMLDivElement;
   };
 
   /**

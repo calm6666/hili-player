@@ -260,8 +260,6 @@ export type PlayerDockerEvents = {
   showTooltip: Tooltip;
   /** 请求隐藏 tooltip */
   hideTooltip: Tooltip;
-  /** 菜单展开 / 收起动画 */
-  menuAnimation: { type: string; action: 'show' | 'hide' };
   /** 播放状态变化 */
   stateChange: unknown;
   /** 画面显示模式变化（普通 / 网页全屏 / 宽屏 / 迷你） */
@@ -642,6 +640,18 @@ export const PlayerDocker = defineComponent<
   const handleTimeUpdate = (): void => {
     if (!videoRef.value) return;
     const currentTime = videoRef.value.currentTime;
+    // 画面在推进就说明没卡住：DASH 换档取新分片会触发 seek/waiting，但画面仍在播
+    if (!videoRef.value.paused) {
+      cancelBuffIndicator();
+      stateApi.hideBuffering?.();
+    }
+    if (
+      !videoRef.value.paused &&
+      (stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false)
+    ) {
+      playerContainerRef.value?.classList.remove("state-buff");
+      stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
+    }
     stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
     controlsApi.updateCurrent?.(currentTime);
     // 将播放进度转发给顶部进度条（更新已播放条与滑块）
@@ -705,12 +715,48 @@ export const PlayerDocker = defineComponent<
     lifecycle.emit?.("ended");
   };
 
+  /** 缓冲指示的延迟句柄：短暂换档（画面未停）不显示，真正卡住才显示 */
+  let buffDelayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 取消尚未到期的缓冲指示 */
+  const cancelBuffIndicator = (): void => {
+    if (buffDelayTimer !== null) {
+      clearTimeout(buffDelayTimer);
+      buffDelayTimer = null;
+    }
+  };
+
+  /** 播放头是否还能继续播（有后续数据）：判断"是否真的在缓冲"的准确依据 */
+  const canContinuePlayback = (): boolean => {
+    const video = videoRef.value;
+    if (!video || video.paused) return true;
+    if (video.readyState >= 3) return true;
+    const ranges = video.buffered;
+    for (let i = 0; i < ranges.length; i += 1) {
+      if (
+        video.currentTime >= ranges.start(i) - 0.05 &&
+        video.currentTime < ranges.end(i) - 0.05
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   /**
-   * 视频缓冲等待时，添加缓冲状态样式
+   * 视频缓冲等待时，延迟添加缓冲状态样式
    */
   const handleWaiting = (): void => {
-    playerContainerRef.value?.classList.add("state-buff");
-    stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, true);
+    if (canContinuePlayback()) {
+      lifecycle.emit?.("waiting");
+      return;
+    }
+    if (buffDelayTimer !== null) return;
+    buffDelayTimer = setTimeout(() => {
+      buffDelayTimer = null;
+      playerContainerRef.value?.classList.add("state-buff");
+      stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, true);
+    }, 300);
     lifecycle.emit?.("waiting");
   };
 
@@ -718,6 +764,7 @@ export const PlayerDocker = defineComponent<
    * 视频缓冲完成可播放时，移除缓冲状态样式
    */
   const handleCanPlay = (): void => {
+    cancelBuffIndicator();
     playerContainerRef.value?.classList.remove("state-buff");
     stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
     lifecycle.emit?.("canplay");
@@ -757,16 +804,22 @@ export const PlayerDocker = defineComponent<
 
   /** playing：实际开始播放（缓冲结束后） */
   const handlePlaying = (): void => {
+    cancelBuffIndicator();
     playerContainerRef.value?.classList.remove("state-buff");
     stateMgr?.set(PlayerStateKeyEnum.IS_LOADING, false);
     lifecycle.emit?.("playing");
   };
 
+  /** 是否处于清晰度切换中（切档会引发 seek/waiting，但画面未停，不该算加载中） */
+  const isQualitySwitching = (): boolean =>
+    stateMgr?.get(PlayerStateKeyEnum.QUALITY_SWITCH_STATE) === "switching";
+
   /** seeking：跳转开始 */
   const handleSeeking = (): void => {
     playerContainerRef.value?.classList.add("state-buff");
-    // 跳转等待数据期间同步显示缓冲图标（与既有 .state-buff 样式意图一致）
-    stateApi.showBuffering?.();
+    if (!isQualitySwitching()) {
+      stateApi.showBuffering?.();
+    }
     lifecycle.emit?.("seeking", {
       currentTime: videoRef.value?.currentTime ?? 0,
     });
@@ -775,10 +828,7 @@ export const PlayerDocker = defineComponent<
   /** seeked：跳转完成 */
   const handleSeeked = (): void => {
     playerContainerRef.value?.classList.remove("state-buff");
-    // 仍在缓冲（waiting 已置 isLoading）时保持显示，由 canplay / playing 统一收起
-    if (!(stateMgr?.get(PlayerStateKeyEnum.IS_LOADING) ?? false)) {
-      stateApi.hideBuffering?.();
-    }
+    stateApi.hideBuffering?.();
     const currentTime = videoRef.value?.currentTime ?? 0;
     stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, currentTime);
     controlsApi.updateCurrent?.(currentTime);
@@ -2583,12 +2633,9 @@ export const PlayerDocker = defineComponent<
             onMoreSettingClick: () => {
               lifecycle.emit?.("moreSettingClick");
             },
-            // tooltip / 菜单动画 / 状态变化：接通 Tooltips 组件并向上转发
+            // tooltip / 状态变化：接通 Tooltips 组件并向上转发
             onShowTooltip: handleShowTooltip,
             onHideTooltip: handleHideTooltip,
-            onMenuAnimation: (payload: { type: string; action: "show" | "hide" }) => {
-              lifecycle.emit?.("menuAnimation", payload);
-            },
             onStateChange: (payload: unknown) => {
               lifecycle.emit?.("stateChange", payload);
             },

@@ -69,9 +69,9 @@ export const VolumeHint = defineComponent<VolumeHintProps>(
       }
       if (textRef.value) {
         if (volume === 0) {
-          textRef.value.innerHTML = "静音";
+          textRef.value.textContent = "静音";
         } else {
-          textRef.value.innerHTML = `${Math.floor(volume * 100)}%`;
+          textRef.value.textContent = `${Math.floor(volume * 100)}%`;
         }
       }
       if (iconRef.value) {
@@ -111,9 +111,9 @@ export const VolumeHint = defineComponent<VolumeHintProps>(
     const setVolume = (volume: number): void => {
       if (textRef.value) {
         if (volume === 0) {
-          textRef.value.innerHTML = "静音";
+          textRef.value.textContent = "静音";
         } else {
-          textRef.value.innerHTML = `${Math.floor(volume * 100)}%`;
+          textRef.value.textContent = `${Math.floor(volume * 100)}%`;
         }
       }
     };
@@ -169,8 +169,9 @@ export const VolumeHint = defineComponent<VolumeHintProps>(
           // 音量/静音图标：既有实现 icons 的 Volume、Mute SVG（禁止 unicode 字符当图标）；
           // 两个 SVG 均为 .player-volume-hint-icon 的直接子元素，供
           // .player-volume-muted 的 svg:nth-child(1)/(2) 规则切换显隐
-          innerHTML: Volume + Mute,
         },
+        Volume(),
+        Mute(),
       ),
       h(
         "span",

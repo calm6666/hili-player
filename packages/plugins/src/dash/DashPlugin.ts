@@ -40,6 +40,11 @@ import { createLogger } from '@/utils';
 
 const logger = createLogger('DashPlugin');
 
+/** 档位文案后缀（仅收录已确证的档位，其余档位只输出 `${height}P`） */
+const QUALITY_LABEL_SUFFIX: Record<number, string> = {
+  1080: ' 高清',
+};
+
 /**
  * 类型谓词：判断源是否为 MediaManifest 对象
  * MediaManifest 具有 duration 和 video 字段
@@ -715,10 +720,10 @@ export class DashPlugin implements StreamPlugin {
    * 获取可用画质列表
    * 从 dash.js 获取所有可用的视频码率/分辨率列表
    *
-   * 列表结构（自动档放在最前，即 index 0）：
-   * - 第 0 项（ABR 可用时才有）：自动档，id='auto' / isAuto=true；
-   *   width/height/bitrate/codec 取「当前生效的视频 representation」，供 UI 拼出「自动(1080P 高清)」
-   * - 其余项：真实档位，id 为 dash.js 的 representation.index 字符串，原有字段与顺序保持不变
+   * 列表结构（真实档位在前，自动档固定在最后）：
+   * - 自动档：id='auto' / isAuto=true；width/height/bitrate/codec 取「当前生效的视频 representation」，
+   *   供 UI 拼出「自动(1080P 高清)」
+   * - 真实档位：id 为 dash.js 的 representation.index 字符串，label 为 `${height}P`
    *
    * @returns 画质等级列表（QualityLevel[]）
    */
@@ -726,15 +731,13 @@ export class DashPlugin implements StreamPlugin {
     const dash = this.dashPlayer;
     if (!dash) return [];
 
-    // 依据 index.d.ts L2153 getRepresentationsByType(type, streamId?)：取全部视频 representation
     const representations = dash.getRepresentationsByType('video') ?? [];
 
-    // 真实档位：dash.js 的 Representation.codecs → 我们的 codec / codecString
     const list: QualityLevel[] = representations.map((rep) => {
       const { codec, codecString } = resolveVideoCodec(this.extractVideoCodecString(rep));
       return {
         id: String(rep.index),
-        label: `${rep.width}x${rep.height}`,
+        label: `${rep.height}P${QUALITY_LABEL_SUFFIX[rep.height] ?? ''}`,
         width: rep.width,
         height: rep.height,
         bitrate: rep.bandwidth,
@@ -744,15 +747,13 @@ export class DashPlugin implements StreamPlugin {
       };
     });
 
-    // 无 ABR 场景（单档，没有可自适应的码率）不产出自动档
-    if (representations.length <= 1) return list;
+    if (list.length <= 1) return list;
 
-    // 自动档当前实际生效的档位：
-    // index.d.ts L2119 `getCurrentRepresentationForType(type: MediaType): Representation | null`
-    // 返回当前渲染的视频 representation（ABR 自动切档后即为 ABR 选中的那一档）
     const current = dash.getCurrentRepresentationForType('video');
-    const autoCodec = resolveVideoCodec(current ? this.extractVideoCodecString(current) : undefined);
-    list.unshift({
+    const autoCodec = resolveVideoCodec(
+      current ? this.extractVideoCodecString(current) : undefined,
+    );
+    list.push({
       id: AUTO_QUALITY_ID,
       label: '自动',
       width: current?.width ?? 0,

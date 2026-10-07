@@ -11,13 +11,14 @@
  *   - 框架无响应式，DOM 更新必须手动完成（通过 useState 订阅 + updater 回调）
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext, mount } from '@/core';
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
 import { StateContext } from '@/store/runtimeState';
 import { ConfigStoreContext } from '@/store/configStore';
 import { PlayerState } from '@/types';
 import { formatTime } from '@/utils/formatTime';
+import { normalizeSegmentSpan } from '@/hili-player/utils/media/progressSegment';
 import { LottieIcon, type LottieIconApi } from './LottieIcon';
 import { ViewpointMenu, type ViewpointItem } from './ViewpointMenu';
 import pauseToPlayAnimationData from '../assets/lottie-icon/pause-to-play-animation.json';
@@ -37,10 +38,10 @@ export type LeftControlsEvents = {
   playPause: undefined;
   /** 进度跳转，参数为跳转目标时间（秒） */
   seek: number;
-  /** 菜单动画回调，参数为菜单类型和动作 */
-  menuAnimation: { type: string; action: 'show' | 'hide' };
   /** 组件挂载完成 */
   leftControlsMounted: undefined;
+  /** 章节面板挂载完成，回传其重建 API */
+  viewpointMenuMounted: { rebuildPoints: (next: ViewpointItem[]) => void };
 };
 
 /**
@@ -108,6 +109,10 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   /** 从状态管理器读取当前时长与当前时间，用于 onMounted 初始化显示 */
   const duration = state?.get(PlayerStateKeyEnum.DURATION) ?? 0;
   const currentTime = state?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
+
+  /** 章节面板的重建 API（时长到手后用它把章节点换到与进度条同轴的时间） */
+  let viewpointApi: { rebuildPoints: (next: ViewpointItem[]) => void } | null =
+    null;
 
   // ============================================
   // DOM 引用
@@ -206,7 +211,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   //   4. updater 在 queueMicrotask 中执行，瞬时通知且不阻塞主线程
   //
   // 框架无响应式：状态变化不会自动更新 DOM
-  // 必须在 updater 回调中手动操作 DOM（如 el.innerHTML = ...）
+  // 必须在 updater 回调中手动更新已持有的元素引用（如 el.textContent = ...）
   // 这是本框架的核心约束，与 Vue/React 的响应式系统根本不同
 
   if (state) {
@@ -234,7 +239,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
     /**
      * 监听当前播放时间变化
      * 当 timeupdate 触发时，手动更新时间显示 DOM
-     * 框架无响应式，必须手动操作 DOM：el.innerHTML = formatTime(newTime)
+     * 框架无响应式，必须手动更新已持有的元素引用：el.textContent = formatTime(newTime)
      * 例如：state.set(PlayerStateKeyEnum.CURRENT_TIME, 123.45)
      */
     useState(
@@ -242,7 +247,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       PlayerStateKeyEnum.CURRENT_TIME,
       (newTime) => {
         if (playerCtrlTimeCurrentRef.value) {
-          playerCtrlTimeCurrentRef.value.innerHTML = formatTime(newTime as number);
+          playerCtrlTimeCurrentRef.value.textContent = formatTime(newTime as number);
         }
       },
       lifecycle
@@ -258,7 +263,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       PlayerStateKeyEnum.DURATION,
       (newDuration) => {
         if (playerCtrlTimeDurationRef.value) {
-          playerCtrlTimeDurationRef.value.innerHTML = formatTime(newDuration as number);
+          playerCtrlTimeDurationRef.value.textContent = formatTime(newDuration as number);
         }
       },
       lifecycle
@@ -317,6 +322,9 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   // ============================================
   // 底部左侧按钮渲染器映射表
   // ============================================
+
+  /** 章节按钮是否已挂载（首帧渲染自带或运行时补挂都算） */
+  let viewpointMounted = false;
 
   /** 按钮类型到渲染函数的映射表，每个键对应一种控制按钮的渲染逻辑 */
   const bottomLeftRenderers: Record<string, () => VNode | null> = {
@@ -400,26 +408,79 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
      * 仅在开启看点且分段数大于 1 时渲染。
      */
     viewpoint: (): VNode | null => {
-      const segments = config.progressSegments;
-      if (!config.viewpoint || !segments || segments.length <= 1) {
-        return null;
-      }
-      const points: ViewpointItem[] = segments.map((segment) => ({
-        title: segment.label,
-        time: segment.startTime,
-      }));
-      return h(ViewpointMenu, {
-        points,
-        currentTime,
-        onSeek: (time: number) => lifecycle.emit?.('seek', time),
-        onMenuAnimation: (type: string, action: 'show' | 'hide') =>
-          lifecycle.emit?.('menuAnimation', { type, action }),
-      });
+      const vnode = buildViewpointVNode();
+      // 首帧渲染自带即视为已挂载，避免 onMounted 里再补挂一个
+      if (vnode) viewpointMounted = true;
+      return vnode;
     },
   };
 
   /** 底部左侧按钮的渲染顺序配置 */
   const bottomLeftOrder = ['prev', 'play', 'next', 'time', 'viewpoint'];
+
+  /**
+   * 章节按钮的渲染节点
+   *
+   * 首帧渲染时 `progress.segments` 可能还是空数组，此时按钮不会出现在初始
+   * 渲染结果里；框架没有响应式，配置后到必须在这里补挂一次，否则「章节菜单」
+   * 永远不出现（点击自然打不开）。
+   *
+   * @returns 章节按钮 VNode；分段不足 2 个时返回 null
+   */
+  const buildViewpointVNode = (): VNode | null => {
+    const segments = config.progressSegments;
+    if (!segments || segments.length <= 1) return null;
+    const mediaDuration = state?.get(PlayerStateKeyEnum.DURATION) ?? duration;
+    const points: ViewpointItem[] = normalizeSegmentSpan(
+      segments,
+      mediaDuration,
+    ).map((segment) => ({
+      title: segment.label,
+      time: segment.startTime,
+    }));
+    return h(ViewpointMenu, {
+      points,
+      currentTime,
+      onSeek: (time: number) => lifecycle.emit?.('seek', time),
+      onViewpointMenuMounted: (api: {
+        rebuildPoints: (next: ViewpointItem[]) => void;
+      }) => {
+        viewpointApi = api;
+        viewpointApi.rebuildPoints(
+          normalizeSegmentSpan(segments, mediaDuration).map((segment) => ({
+            title: segment.label,
+            time: segment.startTime,
+          })),
+        );
+      },
+    });
+  };
+
+  /**
+   * 确保章节按钮存在于底部左侧容器中（幂等）
+   * 配置晚到 / 分段数量变化时调用；已存在则只重建章节点。
+   */
+  const ensureViewpointButton = (): void => {
+    const container = bottomLeftRef.value;
+    if (!container) return;
+    // 是否已挂载只看本组件持有的状态，不再反查容器里的子元素
+    if (viewpointMounted) {
+      const mediaDuration = state?.get(PlayerStateKeyEnum.DURATION) ?? duration;
+      viewpointApi?.rebuildPoints(
+        normalizeSegmentSpan(config.progressSegments ?? [], mediaDuration).map(
+          (segment) => ({
+            title: segment.label,
+            time: segment.startTime,
+          }),
+        ),
+      );
+      return;
+    }
+    const vnode = buildViewpointVNode();
+    if (!vnode) return;
+    mount(vnode, container);
+    viewpointMounted = true;
+  };
 
   // ============================================
   // 生命周期钩子
@@ -427,7 +488,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
 
   /**
    * 组件挂载后，初始化当前时间与总时长显示
-   * 手动操作 DOM：el.innerHTML = formatTime(...)
+   * 手动更新 DOM：el.textContent = formatTime(...)
    * 框架无响应式，必须手动更新 DOM
    *
    * 说明：useState 的订阅在首帧不执行回调（core/state.ts subscribe 跳过初始运行），
@@ -435,12 +496,12 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    */
   lifecycle.onMounted = (): void => {
     if (playerCtrlTimeCurrentRef.value) {
-      playerCtrlTimeCurrentRef.value.innerHTML = formatTime(
+      playerCtrlTimeCurrentRef.value.textContent = formatTime(
         state?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0,
       );
     }
     if (playerCtrlTimeDurationRef.value) {
-      playerCtrlTimeDurationRef.value.innerHTML = formatTime(duration);
+      playerCtrlTimeDurationRef.value.textContent = formatTime(duration);
     }
 
     // prev / next 按钮：按当前配置初始化显隐，并订阅 ui.controls.* 实现设置即生效
@@ -462,6 +523,36 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
     }
 
     applyPlaylistControls();
+
+    // 章节按钮容错：首帧若因 progress.segments 未就绪而没有渲染，这里补挂
+    ensureViewpointButton();
+    if (configStore) {
+      configCleanups.push(
+        configStore.subscribePath('ui.controls.progressSegments', () => {
+          ensureViewpointButton();
+        }),
+      );
+      configCleanups.push(
+        configStore.subscribePath('progress.segments', () => {
+          ensureViewpointButton();
+        }),
+      );
+    }
+
+    // 时长到手后把章节点重建成与进度条同轴的时间（setup 期快照 duration 为 0，
+    // 归一化会原样返回，必须等 DURATION 状态变化时再重建一次）
+    state?.subscribe(PlayerStateKeyEnum.DURATION, () => {
+      const mediaDuration = state.get(PlayerStateKeyEnum.DURATION) ?? 0;
+      const next = normalizeSegmentSpan(
+        config.progressSegments ?? [],
+        mediaDuration,
+      ).map((segment) => ({
+        title: segment.label,
+        time: segment.startTime,
+      }));
+      viewpointApi?.rebuildPoints(next);
+      ensureViewpointButton();
+    });
 
     lifecycle.emit?.('leftControlsMounted');
   };

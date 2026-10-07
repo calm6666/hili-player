@@ -10,6 +10,7 @@ import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
 import type { AnimationFrameID } from '@/utils/rafTimeout';
 import type { ComponentLifecycle } from '@/types';
 import { DmSetting } from '@/hili-player/components/DmSetting';
+import type { DmSettingApi } from '@/hili-player/components/DmSetting';
 import { Selection } from '@/hili-player/components/Selection';
 import {
   DanmakuSwitchOn,
@@ -111,6 +112,9 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
     name: 'danmaku-switch',
     dataName: 'danmaku_switch',
   };
+
+  /** 弹幕设置面板 API（关闭面板时复位到第一页） */
+  let dmSettingApi: DmSettingApi | null = null;
 
   // ============================================
   // DOM 元素引用
@@ -234,6 +238,7 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
       case 'setting':
         cancelRaf(dmShowpanel.setting.showTimer!);
         dmShowpanel.setting.hideTimer = rafTimeout(() => {
+          dmSettingApi?.resetPage();
           settingWrapRef.value?.classList.remove('player-dm-setting-show');
         }, 300);
         break;
@@ -346,11 +351,11 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
           h('label', { class: 'danmaku-switch-label' },
             h('span', { class: 'danmaku-switch-on' },
               // 弹幕开关图标：既有实现 icons 的 DanmakuSwitchOn SVG
-              h('span', { class: 'common-svg-icon', innerHTML: DanmakuSwitchOn })
+              h('span', { class: 'common-svg-icon' }, DanmakuSwitchOn())
             ),
             h('span', { class: 'danmaku-switch-off' },
               // 弹幕开关图标：既有实现 icons 的 DanmakuSwitchOff SVG
-              h('span', { class: 'common-svg-icon', innerHTML: DanmakuSwitchOff })
+              h('span', { class: 'common-svg-icon' }, DanmakuSwitchOff())
             )
           )
         )
@@ -361,11 +366,15 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
         ref: 'settingIconRef',
       },
         // 弹幕设置图标：既有实现 icons 的 DanmakuSetting SVG
-        h('span', { class: 'common-svg-icon', innerHTML: DanmakuSetting }),
+        DanmakuSetting(),
         h('div', { class: 'player-dm-setting-wrap', ref: 'settingWrapRef' },
           h('div', { class: 'player-dm-setting-box ui ui-panel ui-dark' },
             // 弹幕设置面板（显示区域 / 不透明度 / 字号 / 速度，写入运行时状态）
-            h(DmSetting, {}),
+            h(DmSetting, {
+              onDmSettingMounted: (api: DmSettingApi) => {
+                dmSettingApi = api;
+              },
+            }),
           )
         )
       ),
@@ -379,7 +388,7 @@ export const SendBar = defineComponent<SendBarProps>((props, lifecycle: Componen
           },
             h('span', { class: 'player-iconfont player-iconfont-danmakutype' },
               // 弹幕类型图标：既有实现 icons 的 DanmakuTextSetting SVG
-              h('span', { class: 'common-svg-icon', innerHTML: DanmakuTextSetting })
+              h('span', { class: 'common-svg-icon' }, DanmakuTextSetting())
             ),
             h('div', { class: 'player-mode-selection-container', ref: 'selectionContainerRef' },
               // 弹幕类型选择面板（字号 / 模式 / 颜色，写入运行时状态）

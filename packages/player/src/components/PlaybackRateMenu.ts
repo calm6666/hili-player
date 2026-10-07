@@ -16,8 +16,14 @@
  */
 
 import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
+import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from '@/utils/rafTimeout';
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
+
+const MENU_SHOW_DELAY = 120;
+const MENU_HIDE_DELAY = 220;
 
 /**
  * PlaybackRateMenu 组件 Props 接口
@@ -29,7 +35,6 @@ export interface PlaybackRateMenuProps {
 
 export type PlaybackRateMenuEvents = {
   rateChange: number;
-  menuAnimation: { type: 'playbackrate'; action: 'show' | 'hide' };
   /** 挂载完成回传控制方法（供父层在倍速被外部改变时同步 UI） */
   playbackRateMenuMounted: { setRate: (rate: number) => void };
 };
@@ -54,6 +59,31 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
 
   /** 倍速下拉菜单列表元素引用 */
   const backrateMenuRef = useTemplateRef<HTMLUListElement>(lifecycle, 'backrateMenuRef');
+
+  /** 倍速按钮根元素引用（面板显隐的类名挂载点） */
+  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'backrateRootRef');
+
+  /** 展开定时器 */
+  let showTimer: AnimationFrameID | null = null;
+
+  /** 收起定时器 */
+  let hideTimer: AnimationFrameID | null = null;
+
+  /**
+   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * @param show - 是否展开
+   */
+  const setShown = (show: boolean): void => {
+    rootRef.value?.classList.toggle('state-show', show);
+  };
+
+  /** 取消两个方向的排队任务 */
+  const clearTimers = (): void => {
+    cancelRaf(showTimer!);
+    cancelRaf(hideTimer!);
+    showTimer = null;
+    hideTimer = null;
+  };
 
   // ============================================
   // 状态
@@ -113,17 +143,29 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   // ============================================
 
   /**
-   * 鼠标进入倍速按钮时触发的回调
+   * 鼠标进入倍速按钮：延迟展开面板（面板显隐由本组件自己负责）
    */
   const handleMouseEnter = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'playbackrate', action: 'show' });
+    cancelRaf(hideTimer!);
+    hideTimer = null;
+    if (showTimer !== null) return;
+    showTimer = rafTimeout(() => {
+      showTimer = null;
+      setShown(true);
+    }, MENU_SHOW_DELAY);
   };
 
   /**
-   * 鼠标离开倍速按钮时触发的回调
+   * 鼠标离开倍速按钮：延迟收起面板
    */
   const handleMouseLeave = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'playbackrate', action: 'hide' });
+    cancelRaf(showTimer!);
+    showTimer = null;
+    if (hideTimer !== null) return;
+    hideTimer = rafTimeout(() => {
+      hideTimer = null;
+      setShown(false);
+    }, MENU_HIDE_DELAY);
   };
 
   /**
@@ -193,6 +235,8 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
     lifecycle.emit?.('playbackRateMenuMounted', { setRate });
   };
 
+  useComponentUnmount(lifecycle, clearTimers);
+
   // ============================================
   // 主渲染函数
   // ============================================
@@ -201,6 +245,7 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
     class: 'player-ctrl-btn player-ctrl-playbackrate',
     role: 'button',
     'aria-label': '倍速',
+    ref: 'backrateRootRef',
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
   },

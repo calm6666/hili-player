@@ -296,6 +296,29 @@
     }
   }
 
+  .player-progress-scaleplate {
+    bottom: 0;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+
+    > div {
+      background: hsla(0, 0%, 100%, 0.35);
+      bottom: 0;
+      position: absolute;
+      width: 1px;
+    }
+
+    .player-progress-scaleplate-1m {
+      height: 50%;
+    }
+
+    .player-progress-scaleplate-2m {
+      height: 75%;
+    }
+  }
+
   .player-progress-pull-indicator {
     height: 18px;
     line-height: 18px;
@@ -348,155 +371,6 @@
 
       .player-ctrl-muted-icon {
         display: block;
-      }
-    }
-
-    .player-ctrl-setting-box {
-      bottom: 41px;
-      -webkit-box-sizing: border-box;
-      box-sizing: border-box;
-      color: #fff;
-      display: none;
-      font-size: 12px;
-      position: absolute;
-      text-align: left;
-      width: 132px;
-      height: 148px;
-      right: -48px;
-
-      .ui-panel-wrap {
-        width: 130px;
-        height: 148px;
-      }
-
-      .player-ctrl-setting-menu {
-        border-radius: 2px;
-        width: 100%;
-        height: 100%;
-
-        .ui-area {
-          justify-content: center;
-        }
-
-        .player-ctrl-seting-menu-left {
-          height: 100%;
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          padding: 10px 0;
-          box-sizing: border-box;
-          position: relative;
-          z-index: 1;
-          .player-ctrl-seting-menu-left-item {
-            height: 32px;
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ffffff;
-            font-size: 12px;
-            line-height: 32px;
-            cursor: pointer;
-            fill: #ffffff;
-            &:hover {
-              color: var(--player-fn-color, #00aeec);
-              fill: var(--player-fn-color, #00aeec);
-            }
-
-            span {
-              margin-right: 10px;
-              vertical-align: middle;
-            }
-          }
-
-          .setting-more {
-            span {
-              margin: 0;
-            }
-          }
-        }
-        .player-ctrl-seting-menu-right {
-          position: absolute;
-          right: 0;
-          bottom: 0;
-          width: 240px;
-          height: 276px;
-          background: hsla(0, 0%, 8%, 0.9);
-          border-radius: 2px;
-          z-index: 0;
-          overflow: hidden;
-          display: none;
-
-          .player-ctrl-seting-menu-right-area {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 240px;
-            height: 276px;
-            padding: 20px;
-            box-sizing: border-box;
-
-            .player-ctrl-setting-aspect-conent {
-              .radio-button {
-                width: 60px;
-              }
-            }
-
-            .player-ctrl-setting-codec-conent {
-              .radio-button {
-                width: 45px;
-              }
-            }
-
-            .player-ctrl-setting-others {
-              width: 100%;
-              color: #ffffff;
-              margin-bottom: 8px;
-
-              .player-ctrl-setting-others-title {
-                height: 16px;
-                line-height: 16px;
-                font-size: 12px;
-                margin-bottom: 8px;
-              }
-
-              .player-ctrl-setting-others-content {
-                display: -webkit-box;
-                display: -ms-flexbox;
-                display: flex;
-                -ms-flex-wrap: wrap;
-                flex-wrap: wrap;
-                width: 100%;
-              }
-            }
-          }
-        }
-        .player-ctrl-seting-more-area {
-          -webkit-animation: expandWidth 0.5s forwards;
-          animation: expandWidth 0.5s forwards;
-          height: 240px;
-          width: 240px;
-        }
-
-        // 宽度放大
-        @keyframes expandWidth {
-          0% {
-            width: 130px;
-          }
-          100% {
-            width: 240px;
-          }
-        }
-
-        .state-show-right {
-          .player-ctrl-seting-menu-left {
-            display: none;
-          }
-
-          .player-ctrl-seting-menu-right {
-            display: block;
-          }
-        }
       }
     }
 
@@ -598,91 +472,6 @@
         .player-ctrl-time-divide {
           padding: 0 2px;
         }
-      }
-    }
-
-    .player-ctrl-viewpoint {
-      -webkit-box-flex: 1;
-      -ms-flex-positive: 1;
-      -ms-flex-negative: 0;
-      cursor: default;
-      flex-grow: 1;
-      flex-shrink: 0;
-      margin: 0 10px;
-      max-width: 240px;
-      min-width: 45px;
-
-      .player-ctrl-viewpoint-content {
-        -webkit-box-align: center;
-        -ms-flex-align: center;
-        fill: hsla(0, 0%, 100%, 0.9);
-        align-items: center;
-        cursor: pointer;
-        font-size: 14px;
-        overflow: hidden;
-      }
-
-      .player-ctrl-viewpoint-content,
-      .player-ctrl-viewpoint-inner {
-        display: -webkit-box;
-        display: -ms-flexbox;
-        display: flex;
-      }
-
-      .player-ctrl-viewpoint-text {
-        overflow: hidden;
-        position: relative;
-        text-align: left;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: calc(100% - 12px);
-      }
-
-      .player-ctrl-viewpoint-icon {
-        -webkit-box-flex: 0;
-        -webkit-box-align: center;
-        -ms-flex-align: center;
-        align-items: center;
-        display: -webkit-inline-box;
-        display: -ms-inline-flexbox;
-        display: inline-flex;
-        -ms-flex: none;
-        flex: none;
-        height: 18px;
-        width: 18px;
-      }
-
-      .player-ctrl-viewpoint-menu-wrap {
-        background-color: hsla(0, 0%, 8%, 0.9);
-        border-radius: 2px;
-        bottom: 41px;
-        -webkit-box-sizing: border-box;
-        box-sizing: border-box;
-        left: -36px;
-        max-height: 320px;
-        opacity: 0;
-        overflow: hidden;
-        position: absolute;
-        text-align: left;
-        visibility: hidden;
-        width: 210px;
-      }
-
-      .player-ctrl-viewpoint-menu {
-        margin: 0;
-        padding: 0;
-      }
-
-      .player-ctrl-viewpoint-menu-item {
-        cursor: pointer;
-        font-size: 12px;
-        height: 30px;
-        line-height: 30px;
-        overflow: hidden;
-        padding: 0 20px;
-        position: relative;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
     }
   }
@@ -909,10 +698,10 @@
     margin-bottom: 8px;
   }
 
-  .player-ctrl-setting-handoff-conent,
-  .player-ctrl-setting-aspect-conent,
-  .player-ctrl-setting-codec-conent {
-    height: 20px;
+  .player-ctrl-setting-handoff-content,
+  .player-ctrl-setting-aspect-content,
+  .player-ctrl-setting-codec-content {
+    height: 24px;
     width: 100%;
   }
 

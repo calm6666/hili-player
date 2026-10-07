@@ -212,7 +212,7 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
             'span',
             { class: 'player-follow-icon' },
             // 关注图标：既有实现 icons 的 Plus SVG（禁止用 unicode 字符当图标）
-            h('span', { class: 'common-svg-icon', innerHTML: Plus })
+            h('span', { class: 'common-svg-icon' }, Plus())
           ),
           h('span', { class: 'player-follow-text' }, '关注')
         )
@@ -231,7 +231,7 @@ export const Top = defineComponent<TopProps>((props, lifecycle: ComponentLifecyc
           onClick: handleIssueClick,
         },
         // 问题反馈图标：既有实现 icons 的 Issue SVG（禁止用 unicode 字符当图标）
-        h('span', { class: 'common-svg-icon', innerHTML: Issue })
+        Issue()
       )
     )
   );

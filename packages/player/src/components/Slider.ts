@@ -87,7 +87,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
       progressBarRef.value.style.width = `${Math.floor(currentValue)}%`;
     }
     if (progressValRef.value) {
-      progressValRef.value.innerHTML = getDisplayValue();
+      progressValRef.value.textContent = getDisplayValue();
     }
   };
 

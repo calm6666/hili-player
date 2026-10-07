@@ -11,6 +11,9 @@
  */
 
 import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
+import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from '@/utils/rafTimeout';
 import type { VNode } from '@/types';
 import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
 
@@ -76,8 +79,6 @@ export interface SubtitleMenuEvents {
   subtitleStyleChange: (patch: SubtitleStylePatch) => void;
   /** 双语开关变化 */
   bilingualChange: (enabled: boolean) => void;
-  /** 面板 hover 显隐（父层用它统一切换 state-show） */
-  menuAnimation: (payload: { type: 'subtitle'; action: 'show' | 'hide' }) => void;
   /** 组件挂载完成（供父层获取命令式 API，可选） */
   subtitleMenuMounted?: SubtitleMenuApi;
 }
@@ -190,28 +191,97 @@ const SELECT_CLASS = {
 const THUMB_SIZE = 12;
 
 // ============================================
-// 图标（svg 字符串照抄参考 DOM，用 innerHTML 注入）
+// 图标（svg 照抄参考 DOM）
 // ============================================
 
 /** 字幕标记图标（参考 DOM:4 结果区 / :66 语言项） */
-const SUBTITLE_MARK_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 14 12"><rect width="13.5" height="11.5" x=".25" y=".25" stroke="#fff" stroke-opacity=".5" stroke-width=".5" rx="5.75"></rect><path fill="#fff" d="M5.248 2.788h.76L8.256 8.5h-.712l-.608-1.6H4.312l-.608 1.6H3l2.248-5.712Zm-.728 3.56h2.208l-1.08-2.856h-.032L4.52 6.348Zm4.362-3.56h.648V8.5h-.648V2.788Z"></path></svg>';
+const SubtitleMarkIcon = (): VNode =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      fill: 'none',
+      'data-pointer': 'none',
+      viewBox: '0 0 14 12',
+    },
+    h('rect', {
+      width: '13.5',
+      height: '11.5',
+      x: '.25',
+      y: '.25',
+      stroke: '#fff',
+      'stroke-opacity': '.5',
+      'stroke-width': '.5',
+      rx: '5.75',
+    }),
+    h('path', {
+      fill: '#fff',
+      d: 'M5.248 2.788h.76L8.256 8.5h-.712l-.608-1.6H4.312l-.608 1.6H3l2.248-5.712Zm-.728 3.56h2.208l-1.08-2.856h-.032L4.52 6.348Zm4.362-3.56h.648V8.5h-.648V2.788Z',
+    }),
+  );
 
 /** 假开关问号图标（参考 DOM:44） */
-const FAKE_SWITCH_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" fill="none" data-pointer="none" viewBox="0 0 12 12"><path fill="#61666D" d="M6 1.875a4.125 4.125 0 1 0 0 8.25 4.125 4.125 0 0 0 0-8.25ZM.875 6a5.125 5.125 0 1 1 10.25 0A5.125 5.125 0 0 1 .875 6Z"></path><path fill="#61666D" d="M6 3.5a.5.5 0 0 1 .5.5v2.25a.5.5 0 1 1-1 0V4a.5.5 0 0 1 .5-.5ZM6 7.25a.5.5 0 0 1 .5.5v.125a.5.5 0 1 1-1 0V7.75a.5.5 0 0 1 .5-.5Z"></path></svg>';
+const FakeSwitchIcon = (): VNode =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      fill: 'none',
+      'data-pointer': 'none',
+      viewBox: '0 0 12 12',
+    },
+    h('path', {
+      fill: '#61666D',
+      d: 'M6 1.875a4.125 4.125 0 1 0 0 8.25 4.125 4.125 0 0 0 0-8.25ZM.875 6a5.125 5.125 0 1 1 10.25 0A5.125 5.125 0 0 1 .875 6Z',
+    }),
+    h('path', {
+      fill: '#61666D',
+      d: 'M6 3.5a.5.5 0 0 1 .5.5v2.25a.5.5 0 1 1-1 0V4a.5.5 0 0 1 .5-.5ZM6 7.25a.5.5 0 0 1 .5.5v.125a.5.5 0 1 1-1 0V7.75a.5.5 0 0 1 .5-.5Z',
+    }),
+  );
 
 /** 「字幕设置」右尖角图标（参考 DOM:112，path 不写 fill，颜色由 CSS 的 fill 控制） */
-const CHEVRON_RIGHT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" data-pointer="none" viewBox="0 0 16 16"><path d="m9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z"></path></svg>';
+const ChevronRightIcon = (): VNode =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      'xml:space': 'preserve',
+      'data-pointer': 'none',
+      viewBox: '0 0 16 16',
+    },
+    h('path', {
+      d: 'm9.188 7.999-3.359 3.359a.75.75 0 1 0 1.061 1.061l3.889-3.889a.75.75 0 0 0 0-1.061L6.89 3.58a.75.75 0 1 0-1.061 1.061l3.359 3.358z',
+    }),
+  );
 
 /** 勾选未选中图标（参考 DOM:349，path 不写 fill，颜色由 CSS 的 fill 控制） */
-const CHECKBOX_DEFAULT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg>';
+const CheckboxDefaultIcon = (): VNode =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      'data-pointer': 'none',
+      viewBox: '0 0 32 32',
+    },
+    h('path', {
+      d: 'M8 6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H8zm0-2h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z',
+    }),
+  );
 
 /** 勾选选中图标（参考 DOM:350） */
-const CHECKBOX_SELECTED_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 32 32"><path d="m13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z"></path></svg>';
+const CheckboxSelectedIcon = (): VNode =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      'data-pointer': 'none',
+      viewBox: '0 0 32 32',
+    },
+    h('path', {
+      d: 'm13 18.25-1.8-1.8c-.6-.6-1.65-.6-2.25 0s-.6 1.5 0 2.25l2.85 2.85c.318.318.762.468 1.2.448.438.02.882-.13 1.2-.448l8.85-8.85c.6-.6.6-1.65 0-2.25s-1.65-.6-2.25 0l-7.8 7.8zM8 4h16c2.21 0 4 1.79 4 4v16c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8c0-2.21 1.79-4 4-4z',
+    }),
+  );
 
 // ============================================
 // 组件
@@ -254,11 +324,27 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
     // DOM 引用
     // ============================================
 
-    /** 按钮根节点（Controls.ts 在此加 state-show） */
+    /** 按钮根节点（面板显隐的类名挂载点） */
     const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'subtitleRootRef');
 
     /** 面板根节点（内部查询各控件用） */
     const menuRef = useTemplateRef<HTMLDivElement>(lifecycle, 'subtitleMenuRef');
+
+    /** 展开定时器 */
+    let showTimer: AnimationFrameID | null = null;
+
+    /** 收起定时器 */
+    let hideTimer: AnimationFrameID | null = null;
+
+    /** 取消两个方向的排队任务 */
+    const clearTimers = (): void => {
+      cancelRaf(showTimer!);
+      cancelRaf(hideTimer!);
+      showTimer = null;
+      hideTimer = null;
+    };
+
+    useComponentUnmount(lifecycle, clearTimers);
 
     // ============================================
     // 工具
@@ -693,15 +779,27 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
       });
     };
 
-    /** 鼠标进入按钮：下次打开固定从第 1 页（窄面板）开始，再通知父层显示 */
+    /** 鼠标进入按钮：下次打开固定从第 1 页（窄面板）开始，再延迟展开面板 */
     const handleMouseEnter = (): void => {
       showOriginPage();
-      lifecycle.emit?.('menuAnimation', { type: 'subtitle', action: 'show' });
+      cancelRaf(hideTimer!);
+      hideTimer = null;
+      if (showTimer !== null) return;
+      showTimer = rafTimeout(() => {
+        showTimer = null;
+        rootRef.value?.classList.toggle('state-show', true);
+      }, 120);
     };
 
-    /** 鼠标离开按钮：通知父层隐藏（面板是按钮的后代，指针在面板内不会触发本回调） */
+    /** 鼠标离开按钮：延迟收起面板（面板是按钮的后代，指针在面板内不会触发本回调） */
     const handleMouseLeave = (): void => {
-      lifecycle.emit?.('menuAnimation', { type: 'subtitle', action: 'hide' });
+      cancelRaf(showTimer!);
+      showTimer = null;
+      if (hideTimer !== null) return;
+      hideTimer = rafTimeout(() => {
+        hideTimer = null;
+        rootRef.value?.classList.toggle('state-show', false);
+      }, 220);
     };
 
     /** 点击「字幕设置」：滑出第 2 页（与 SettingMenu.handleMoreClick 同机制） */
@@ -730,10 +828,11 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
           onClick: () => handleLangClick(item),
         },
         h('div', { class: 'player-ctrl-subtitle-language-item-text' }, item.label),
-        h('span', {
-          class: 'player-ctrl-subtitle-language-item-icon',
-          innerHTML: SUBTITLE_MARK_ICON,
-        }),
+        h(
+          'span',
+          { class: 'player-ctrl-subtitle-language-item-icon' },
+          SubtitleMarkIcon(),
+        ),
       );
 
     /**
@@ -874,16 +973,22 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
           h(
             'label',
             { class: 'player-ctrl-subtitle-checkbox-label' },
-            h('span', {
-              class:
-                'player-ctrl-subtitle-checkbox-icon player-ctrl-subtitle-checkbox-icon-default',
-              innerHTML: CHECKBOX_DEFAULT_ICON,
-            }),
-            h('span', {
-              class:
-                'player-ctrl-subtitle-checkbox-icon player-ctrl-subtitle-checkbox-icon-selected',
-              innerHTML: CHECKBOX_SELECTED_ICON,
-            }),
+            h(
+              'span',
+              {
+                class:
+                  'player-ctrl-subtitle-checkbox-icon player-ctrl-subtitle-checkbox-icon-default',
+              },
+              CheckboxDefaultIcon(),
+            ),
+            h(
+              'span',
+              {
+                class:
+                  'player-ctrl-subtitle-checkbox-icon player-ctrl-subtitle-checkbox-icon-selected',
+              },
+              CheckboxSelectedIcon(),
+            ),
             h('span', { class: 'player-ctrl-subtitle-checkbox-name' }, label),
           ),
         ),
@@ -960,11 +1065,14 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
         'div',
         { class: 'player-ctrl-subtitle-result-wrap' },
         h('div', { class: 'player-ctrl-subtitle-result' }, '字幕'),
-        h('span', {
-          class: 'player-ctrl-subtitle-result-icon',
-          style: { display: 'none' },
-          innerHTML: SUBTITLE_MARK_ICON,
-        }),
+        h(
+          'span',
+          {
+            class: 'player-ctrl-subtitle-result-icon',
+            style: { display: 'none' },
+          },
+          SubtitleMarkIcon(),
+        ),
       ),
 
       // ---------- 面板 ----------
@@ -1039,10 +1147,11 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
                             style: { display: 'none' },
                           },
                           h('div', { class: 'player-ctrl-subtitle-fake-switch-text' }, '关闭'),
-                          h('span', {
-                            class: 'player-ctrl-subtitle-fake-switch-icon',
-                            innerHTML: FAKE_SWITCH_ICON,
-                          }),
+                          h(
+                            'span',
+                            { class: 'player-ctrl-subtitle-fake-switch-icon' },
+                            FakeSwitchIcon(),
+                          ),
                         ),
 
                         // 上方分隔线 / 未登录提示 / 上方双语开关（参考 DOM 中均 display:none）
@@ -1126,10 +1235,11 @@ export const SubtitleMenu = defineComponent<SubtitleMenuProps, SubtitleMenuEvent
                           'div',
                           { class: 'player-ctrl-subtitle-setting', onClick: handleSettingsEntry },
                           h('span', { class: 'player-ctrl-subtitle-setting-text' }, '字幕设置'),
-                          h('span', {
-                            class: 'player-ctrl-subtitle-setting-icon',
-                            innerHTML: CHEVRON_RIGHT_ICON,
-                          }),
+                          h(
+                            'span',
+                            { class: 'player-ctrl-subtitle-setting-icon' },
+                            ChevronRightIcon(),
+                          ),
                         ),
                       ),
                     ),

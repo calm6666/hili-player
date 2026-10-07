@@ -14,8 +14,12 @@
  * 内联优先级最高，用 display 会互相打架。
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext, materialize } from '@/core';
+import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
+import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from '@/utils/rafTimeout';
 import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
+import type { VNode } from '@/types';
 
 /**
  * 选集项
@@ -39,20 +43,24 @@ export interface EpisodesMenuProps {
 export interface EpisodesMenuEvents {
   /** 点击某一集 */
   episodeChange: (index: number) => void;
-  /** 面板 hover 显隐（必须发，父层用它做统一动画） */
-  menuAnimation: (payload: { type: 'eplist'; action: 'show' | 'hide' }) => void;
 }
 
 /** 列表区域最小高度，与参考实现的 min-height: 480px 对齐（普通模式盖掉，由 scss 控制） */
 const MENU_MIN_HEIGHT = '180px';
 
 /** 当前集「播放中」三段竖条图标（参考 DOM：viewBox 0 0 12 13 + 3 个 rect） */
-const PLAYING_ICON_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" data-pointer="none" viewBox="0 0 12 13">' +
-  '<rect width="2" height="6" x="1" y="3.5" rx="1"></rect>' +
-  '<rect width="2" height="4" x="9" y="4.5" rx="1"></rect>' +
-  '<rect width="2" height="10" x="5" y="1.5" rx="1"></rect>' +
-  '</svg>';
+const PlayingIcon = (): VNode =>
+  h(
+    'svg',
+    {
+      xmlns: 'http://www.w3.org/2000/svg',
+      'data-pointer': 'none',
+      viewBox: '0 0 12 13',
+    },
+    h('rect', { width: '2', height: '6', x: '1', y: '3.5', rx: '1' }),
+    h('rect', { width: '2', height: '4', x: '9', y: '4.5', rx: '1' }),
+    h('rect', { width: '2', height: '10', x: '5', y: '1.5', rx: '1' }),
+  );
 
 /**
  * EpisodesMenu 组件 - 使用 defineComponent 创建独立组件
@@ -67,6 +75,31 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
 
   /** 选集列表容器（ul）引用 */
   const listRef = useTemplateRef<HTMLUListElement>(lifecycle, 'eplistListRef');
+
+  /** 按钮根元素引用（面板显隐的类名挂载点） */
+  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'eplistRootRef');
+
+  /** 展开定时器 */
+  let showTimer: AnimationFrameID | null = null;
+
+  /** 收起定时器 */
+  let hideTimer: AnimationFrameID | null = null;
+
+  /**
+   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * @param show - 是否展开
+   */
+  const setShown = (show: boolean): void => {
+    rootRef.value?.classList.toggle('state-show', show);
+  };
+
+  /** 取消两个方向的排队任务 */
+  const clearTimers = (): void => {
+    cancelRaf(showTimer!);
+    cancelRaf(hideTimer!);
+    showTimer = null;
+    hideTimer = null;
+  };
 
   // ============================================
   // 内部状态（非响应式，仅渲染时手动维护）
@@ -83,64 +116,66 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
   // ============================================
 
   /**
-   * 创建当前集「播放中」图标节点（仅当前集插入）
-   * @returns 图标 span 元素
+   * 创建当前集「播放中」图标虚拟节点（仅当前集插入）
+   * @returns 图标 span 的虚拟节点
    */
-  const createPlayingIcon = (): HTMLSpanElement => {
-    const icon = document.createElement('span');
-    icon.className = 'player-ctrl-eplist-multi-menu-item-icon';
-    icon.innerHTML = PLAYING_ICON_SVG;
-    return icon;
-  };
+  const renderPlayingIcon = (): VNode =>
+    h('span', { class: 'player-ctrl-eplist-multi-menu-item-icon' }, PlayingIcon());
 
   /**
-   * 创建单个选集项（真实 DOM 节点）
+   * 创建单个选集项
    * 普通项：li[data-index] > span.player-ctrl-eplist-multi-menu-item-text
    * 当前项：额外加 player-state-active 类，并在文字前插播放中图标
    * @param item - 选集项
    * @returns 选集项 li 元素
    */
   const createItem = (item: EpisodeOption): HTMLLIElement => {
-    const li = document.createElement('li');
-    li.className = 'player-ctrl-eplist-multi-menu-item';
-    li.dataset.index = String(item.index);
-
     const isActive = item.index === activeIndex;
-    if (isActive) {
-      li.classList.add('player-state-active');
-      // 图标在文字之前
-      li.appendChild(createPlayingIcon());
-    }
-
-    const text = document.createElement('span');
-    text.className = 'player-ctrl-eplist-multi-menu-item-text';
-    text.textContent = item.title ?? '';
-    li.appendChild(text);
-
-    li.addEventListener('click', () => {
-      // 当前项点击不做任何事
-      if (li.classList.contains('player-state-active')) return;
-      activeIndex = item.index;
-      renderEpisodes(currentList);
-      lifecycle.emit?.('episodeChange', item.index);
-    });
-
-    return li;
+    return materialize(
+      h(
+        'li',
+        {
+          class: isActive
+            ? 'player-ctrl-eplist-multi-menu-item player-state-active'
+            : 'player-ctrl-eplist-multi-menu-item',
+          'data-index': String(item.index),
+          onClick: () => {
+            // 当前项点击不做任何事
+            if (item.index === activeIndex) return;
+            activeIndex = item.index;
+            renderEpisodes(currentList);
+            lifecycle.emit?.('episodeChange', item.index);
+          },
+        },
+        ...(isActive ? [renderPlayingIcon()] : []),
+        h(
+          'span',
+          { class: 'player-ctrl-eplist-multi-menu-item-text' },
+          item.title ?? '',
+        ),
+      ),
+    ) as HTMLLIElement;
   };
 
   /**
    * 创建空态项（episodes 为空数组时展示）
    * @returns 空态 li 元素
    */
-  const createEmptyItem = (): HTMLLIElement => {
-    const li = document.createElement('li');
-    li.className = 'player-ctrl-eplist-multi-menu-item player-ctrl-eplist-empty';
-    const text = document.createElement('span');
-    text.className = 'player-ctrl-eplist-multi-menu-item-text';
-    text.textContent = '暂无选集';
-    li.appendChild(text);
-    return li;
-  };
+  const createEmptyItem = (): HTMLLIElement =>
+    materialize(
+      h(
+        'li',
+        {
+          class:
+            'player-ctrl-eplist-multi-menu-item player-ctrl-eplist-empty',
+        },
+        h(
+          'span',
+          { class: 'player-ctrl-eplist-multi-menu-item-text' },
+          '暂无选集',
+        ),
+      ),
+    ) as HTMLLIElement;
 
   /**
    * 命令式重建选集列表（列表数据 / 当前集变化时调用）
@@ -151,12 +186,11 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
     currentList = items;
 
     if (!listRef.value) return;
-    listRef.value.innerHTML = '';
-    if (items.length === 0) {
-      listRef.value.appendChild(createEmptyItem());
-      return;
-    }
-    items.forEach((item) => listRef.value!.appendChild(createItem(item)));
+    listRef.value.replaceChildren(
+      ...(items.length === 0
+        ? [createEmptyItem()]
+        : items.map((item) => createItem(item))),
+    );
   };
 
   // ============================================
@@ -182,28 +216,41 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
   // ============================================
 
   /**
-   * 鼠标进入选集按钮：通知父层做面板展开动画（父层给根节点加 state-show）
+   * 鼠标进入选集按钮：延迟展开面板（面板显隐由本组件自己负责）
    */
   const handleMouseEnter = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'show' });
+    cancelRaf(hideTimer!);
+    hideTimer = null;
+    if (showTimer !== null) return;
+    showTimer = rafTimeout(() => {
+      showTimer = null;
+      setShown(true);
+    }, 120);
   };
 
   /**
-   * 鼠标离开选集按钮：通知父层收起面板
+   * 鼠标离开选集按钮：延迟收起面板
    */
   const handleMouseLeave = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'hide' });
+    cancelRaf(showTimer!);
+    showTimer = null;
+    if (hideTimer !== null) return;
+    hideTimer = rafTimeout(() => {
+      hideTimer = null;
+      setShown(false);
+    }, 220);
   };
 
   /**
-   * 键盘可达性：Enter / Space 触发面板展开动画
+   * 键盘可达性：Enter / Space 展开面板
    * @param event - 键盘事件
    */
   const handleKeydown = (event: KeyboardEvent): void => {
     const key = event.key;
     if (key !== 'Enter' && key !== ' ') return;
     event.preventDefault();
-    lifecycle.emit?.('menuAnimation', { type: 'eplist', action: 'show' });
+    clearTimers();
+    setShown(true);
   };
 
   // ============================================
@@ -223,6 +270,8 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
     renderEpisodes(props.episodes ?? []);
   };
 
+  useComponentUnmount(lifecycle, clearTimers);
+
   // ============================================
   // 主渲染函数
   // ============================================
@@ -232,6 +281,7 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
     role: 'button',
     'aria-label': '选集',
     tabindex: '0',
+    ref: 'eplistRootRef',
     onMouseEnter: handleMouseEnter,
     onMouseLeave: handleMouseLeave,
     onKeydown: handleKeydown,

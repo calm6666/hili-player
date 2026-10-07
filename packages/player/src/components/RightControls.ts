@@ -53,7 +53,6 @@ export type RightControlsEvents = {
   /** 双语字幕开关变化 */
   bilingualChange: boolean;
   settingChange: { key: string; value: boolean | string | number };
-  menuAnimation: { type: 'quality' | 'eplist' | 'playbackrate' | 'subtitle' | 'volume' | 'setting'; action: 'show' | 'hide' };
   moreSettingClick: undefined;
   rightControlsMounted: undefined;
 };
@@ -138,20 +137,12 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   const onRateChange = (r: number): void => {
     lifecycle.emit?.('backrateChange', r);
   };
-  const onSettingChange = (key: string, value: boolean | string | number): void => {
-    lifecycle.emit?.('settingChange', { key, value });
-  };
-  /**
-   * 菜单动画事件桥接（QualityMenu / PlaybackRateMenu / SettingMenu 均以
-   * 单个 payload 对象 { type, action } 发射，与 eplist 的内联发射保持一致）
-   */
-  const onMenuAnimation = (payload: {
-    type: 'quality' | 'eplist' | 'playbackrate' | 'volume' | 'setting';
-    action: 'show' | 'hide';
+  const onSettingChange = (payload: {
+    key: string;
+    value: boolean | string | number;
   }): void => {
-    lifecycle.emit?.('menuAnimation', payload);
+    lifecycle.emit?.('settingChange', payload);
   };
-
   /** 音量滑块拖拽 / 点击调量事件桥接（VolumeSlider 以单个数值发射） */
   const onVolumeChange = (volume: number): void => {
     lifecycle.emit?.('volumeChange', volume);
@@ -224,7 +215,6 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       episodes,
       currentIndex,
       onEpisodeChange,
-      onMenuAnimation,
       __providers: state
         ? [{ contextId: StateContext.id, value: state }]
         : undefined,
@@ -235,7 +225,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
    *
    * 框架无虚拟 DOM diff：EpisodesMenu 的 episodes 是 props 快照，
    * 仅靠订阅拿不到新列表，只能销毁旧实例再挂载新实例。
-   * mount 只能追加到容器末尾，故先挂到临时容器，再 insertBefore 插回原位置，
+   * mount 只能追加到容器末尾，故挂载后立刻 insertBefore 插回原位置，
    * 保证选集按钮在右侧控制栏中的顺序不变。
    */
   const rebuildEplist = (): void => {
@@ -249,8 +239,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
     const next = createEplistVNode();
     eplistVNode = next;
 
-    const staging = document.createElement('div');
-    mount(next, staging);
+    mount(next, host);
     if (next.el) {
       host.insertBefore(next.el, anchor);
     }
@@ -487,7 +476,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
   const bottomRightRenderers: Record<string, () => VNode | null> = {
     /** 渲染画质选择菜单 */
     quality: () => {
-      return h(QualityMenu, { qualities, currentQuality, onQualityChange, onMenuAnimation });
+      return h(QualityMenu, { qualities, currentQuality, onQualityChange });
     },
     /** 渲染选集菜单（列表数据 / 当前集高亮由 EpisodesMenu 内部订阅运行时状态维护） */
     eplist: () => {
@@ -495,7 +484,7 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
       return eplistVNode;
     },
     /** 渲染播放速率选择菜单 */
-    playbackrate: () => h(PlaybackRateMenu, { rate, rates, onRateChange, onMenuAnimation }),
+    playbackrate: () => h(PlaybackRateMenu, { rate, rates, onRateChange }),
     /** 渲染字幕设置面板（开关 / 语言 / 字号颜色位置等 / 双语） */
     subtitle: () => {
       /** 字幕样式初值（面板内部会按用户操作命令式更新） */
@@ -522,14 +511,13 @@ export const RightControls = defineComponent<RightControlsProps, RightControlsEv
         onSubtitleLangChange,
         onSubtitleStyleChange,
         onBilingualChange,
-        onMenuAnimation,
       });
     },
     /** 渲染音量滑块组件（hover 展开 / 拖拽调量 / 静音切换） */
-    volume: () => h(VolumeSlider, { onMenuAnimation, onVolumeChange, onMuteToggle }),
+    volume: () => h(VolumeSlider, { onVolumeChange, onMuteToggle }),
     /** 渲染设置菜单 */
     setting: () => {
-      return h(SettingMenu, { onSettingChange, onMenuAnimation });
+      return h(SettingMenu, { onSettingChange });
     },
     /** 渲染画中画按钮 */
     pip: () => {

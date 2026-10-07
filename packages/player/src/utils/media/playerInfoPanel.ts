@@ -14,6 +14,8 @@ import {
 } from './chart';
 import { PlayerType, type PlayerStats, type DashPlayer, type HlsPlayer, type FlvPlayer } from './types';
 import { Close } from '@/hili-player/components/icons';
+import { materialize } from '@/core';
+import { renderSvgMarkup } from '@/hili-player/utils/svgMarkup';
 
 /** 面板配置 */
 export interface PanelConfig {
@@ -162,7 +164,7 @@ export class PlayerInfoPanel {
 
     const closeBtn = document.createElement('button');
     // 关闭图标使用既有实现 icons 的 Close SVG（禁止用 unicode 字符当图标）
-    closeBtn.innerHTML = Close;
+    closeBtn.appendChild(materialize(Close()));
     closeBtn.style.cssText = `
       background: none;
       border: none;
@@ -386,7 +388,7 @@ export class PlayerInfoPanel {
       height: this.config.chartHeight,
     });
 
-    this.bitrateChartContainer.innerHTML = svg;
+    renderSvgMarkup(this.bitrateChartContainer, svg);
   }
 
   /**
@@ -401,7 +403,7 @@ export class PlayerInfoPanel {
       height: this.config.chartHeight,
     });
 
-    this.throughputChartContainer.innerHTML = svg;
+    renderSvgMarkup(this.throughputChartContainer, svg);
   }
 
   /**
@@ -416,7 +418,7 @@ export class PlayerInfoPanel {
       height: this.config.chartHeight,
     });
 
-    this.bufferChartContainer.innerHTML = svg;
+    renderSvgMarkup(this.bufferChartContainer, svg);
   }
 
   /**
@@ -431,7 +433,7 @@ export class PlayerInfoPanel {
       height: this.config.chartHeight,
     });
 
-    this.fpsChartContainer.innerHTML = svg;
+    renderSvgMarkup(this.fpsChartContainer, svg);
   }
 
   /**

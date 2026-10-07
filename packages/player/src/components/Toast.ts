@@ -188,7 +188,7 @@ export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLif
         'div',
         { class: 'player-toast-close', onClick: handleClose },
         // 关闭图标使用既有实现 icons 的 Close SVG（禁止用 unicode 字符当图标）
-        h('span', { class: 'common-svg-icon', innerHTML: Close })
+        h('span', { class: 'common-svg-icon' }, Close())
       ),
       h('span', { class: 'player-toast-text', ref: 'fixedTextRef' }, props.text ?? '记忆你上次看到'),
       h('span', { class: 'player-toast-time', ref: 'fixedTimeRef' }, props.jumpTime ?? '00:00'),

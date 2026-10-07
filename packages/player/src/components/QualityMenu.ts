@@ -27,7 +27,10 @@
  * 内部用 :not(#…) 提权以压过 index.scss 里那份重复的旧规则，详见该文件头部注释）。
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
+import { h, defineComponent, useTemplateRef, useState, useContext, materialize } from '@/core';
+import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
+import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
+import type { AnimationFrameID } from '@/utils/rafTimeout';
 import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
 
 /** 自动档 id（与 types/streamPlugin 的 AUTO_QUALITY_ID 取值一致；此处本地定义，避免跨模块耦合） */
@@ -101,7 +104,6 @@ export interface QualityMenuProps {
 
 export type QualityMenuEvents = {
   qualityChange: string;
-  menuAnimation: { type: 'quality'; action: 'show' | 'hide' };
   qualityMenuMounted: undefined;
 };
 
@@ -141,6 +143,28 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
 
   /** 清晰度列表容器（ul） */
   const listRef = useTemplateRef<HTMLUListElement>(lifecycle, 'qualityListRef');
+
+  /** 展开 / 收起定时器 */
+  let showTimer: AnimationFrameID | null = null;
+
+  /** 收起定时器 */
+  let hideTimer: AnimationFrameID | null = null;
+
+  /**
+   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * @param show - 是否展开
+   */
+  const setShown = (show: boolean): void => {
+    btnRef.value?.classList.toggle('state-show', show);
+  };
+
+  /** 取消两个方向的排队任务 */
+  const clearTimers = (): void => {
+    cancelRaf(showTimer!);
+    cancelRaf(hideTimer!);
+    showTimer = null;
+    hideTimer = null;
+  };
 
   // ============================================
   // 内部状态（框架无响应式，渲染时手动维护）
@@ -332,51 +356,74 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
   };
 
   /**
-   * 创建单个清晰度菜单项（真实 DOM 节点，命令式）
+   * 创建单个清晰度菜单项
    * @param item - 清晰度档位
-   * @returns 条目与 DOM 的绑定关系
+   * @returns 条目与元素的绑定关系
    */
   const createItem = (item: QualityMenuItem): QualityEntry => {
-    const li = document.createElement('li');
-    li.className = 'player-ctrl-quality-menu-item';
-    li.dataset.value = item.id;
+    let textEl: HTMLSpanElement | null = null;
+    let codecEl: HTMLSpanElement | null = null;
 
-    const text = document.createElement('span');
-    text.className = 'player-ctrl-quality-text';
-    // 自动项文案由 updateActive 统一维护（未激活「自动」/ 激活「自动(具体档位名)」）
-    text.textContent = item.id === autoId ? AUTO_LABEL : labelOf(item);
-    li.appendChild(text);
+    const li = materialize(
+      h(
+        'li',
+        {
+          class: 'player-ctrl-quality-menu-item',
+          'data-value': item.id,
+          onClick: () => {
+            // 乐观切换选中态，切换结果由 player.qualityCurrent 订阅最终校正
+            selectedId = item.id;
+            // 点「自动」→ 回到自动态；点具体档位 → 记为手动指定（自适应下不再显示自动徽标）
+            manualPick = item.id !== autoId;
+            updateActive();
+            applyResultName();
+            // 具体档位发档位 id，自动项发 'auto'（VideoPlayer.setQuality 自身会对同档位去重）
+            lifecycle.emit?.('qualityChange', item.id);
+          },
+        },
+        h(
+          'span',
+          {
+            class: 'player-ctrl-quality-text',
+            ref: (el: Element) => {
+              textEl = el as HTMLSpanElement;
+            },
+          },
+          item.id === autoId ? AUTO_LABEL : labelOf(item),
+        ),
+        // 编码格式徽标：仅在数据带 codec 时渲染（无数据不渲染，不造假）
+        ...(item.codec
+          ? [
+              h(
+                'span',
+                {
+                  class:
+                    'player-ctrl-quality-badge player-ctrl-quality-badge-codec',
+                  ...(item.codecString ? { title: item.codecString } : {}),
+                  ref: (el: Element) => {
+                    codecEl = el as HTMLSpanElement;
+                  },
+                },
+                item.codec,
+              ),
+            ]
+          : []),
+        // 会员类徽标：仅在数据带标记时渲染（当前运行时数据无该标记 → 不会出现）
+        ...(item.vip === true
+          ? [
+              h(
+                'span',
+                {
+                  class: 'player-ctrl-quality-badge player-ctrl-quality-badge-vip',
+                },
+                item.badge || VIP_LABEL,
+              ),
+            ]
+          : []),
+      ),
+    ) as HTMLLIElement;
 
-    // 编码格式徽标：仅在数据带 codec 时渲染（无数据不渲染，不造假）
-    let codec: HTMLSpanElement | undefined;
-    if (item.codec) {
-      codec = document.createElement('span');
-      codec.className = 'player-ctrl-quality-badge player-ctrl-quality-badge-codec';
-      codec.textContent = item.codec;
-      if (item.codecString) codec.title = item.codecString;
-      li.appendChild(codec);
-    }
-
-    // 会员类徽标：仅在数据带标记时渲染（当前运行时数据无该标记 → 不会出现）
-    if (item.vip === true) {
-      const vip = document.createElement('span');
-      vip.className = 'player-ctrl-quality-badge player-ctrl-quality-badge-vip';
-      vip.textContent = item.badge || VIP_LABEL;
-      li.appendChild(vip);
-    }
-
-    li.addEventListener('click', () => {
-      // 乐观切换选中态，切换结果由 player.qualityCurrent 订阅最终校正
-      selectedId = item.id;
-      // 点「自动」→ 回到自动态；点具体档位 → 记为手动指定（自适应下不再显示自动徽标）
-      manualPick = item.id !== autoId;
-      updateActive();
-      applyResultName();
-      // 具体档位发档位 id，自动项发 'auto'（VideoPlayer.setQuality 自身会对同档位去重）
-      lifecycle.emit?.('qualityChange', item.id);
-    });
-
-    return { item, li, text, codec };
+    return { item, li, text: textEl as unknown as HTMLSpanElement, codec: codecEl ?? undefined };
   };
 
   /**
@@ -416,12 +463,10 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
     const ul = listRef.value;
     entryEls = [];
     if (ul) {
-      ul.innerHTML = '';
       for (const item of menuItems) {
-        const entry = createItem(item);
-        entryEls.push(entry);
-        ul.appendChild(entry.li);
+        entryEls.push(createItem(item));
       }
+      ul.replaceChildren(...entryEls.map((entry) => entry.li));
     }
 
     updateActive();
@@ -528,17 +573,29 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
   // ============================================
 
   /**
-   * 鼠标进入清晰度按钮时触发的回调
+   * 鼠标进入清晰度按钮：延迟展开面板（面板显隐由本组件自己负责）
    */
   const handleMouseEnter = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'quality', action: 'show' });
+    cancelRaf(hideTimer!);
+    hideTimer = null;
+    if (showTimer !== null) return;
+    showTimer = rafTimeout(() => {
+      showTimer = null;
+      setShown(true);
+    }, 120);
   };
 
   /**
-   * 鼠标离开清晰度按钮时触发的回调
+   * 鼠标离开清晰度按钮：延迟收起面板
    */
   const handleMouseLeave = (): void => {
-    lifecycle.emit?.('menuAnimation', { type: 'quality', action: 'hide' });
+    cancelRaf(showTimer!);
+    showTimer = null;
+    if (hideTimer !== null) return;
+    hideTimer = rafTimeout(() => {
+      hideTimer = null;
+      setShown(false);
+    }, 220);
   };
 
   // ============================================
@@ -564,6 +621,8 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
 
     lifecycle.emit?.('qualityMenuMounted');
   };
+
+  useComponentUnmount(lifecycle, clearTimers);
 
   // ============================================
   // 主渲染函数

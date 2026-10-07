@@ -2138,6 +2138,10 @@ export class VideoPlayer
       !!this.streamMiddleware &&
       this.streamMiddleware.getMode() !== PlayerMode.NATIVE;
 
+    if (isStream) {
+      this.streamAutoQuality = quality === "auto";
+    }
+
     if (!isStream && this.resolveSourceIndex(quality) === -1) return;
 
     this.beginQualitySwitch(
@@ -2206,12 +2210,18 @@ export class VideoPlayer
     });
   }
 
+  /** 流媒体当前是否处于自动档（由插件回调 isAuto 得到，用于清晰度能力判定） */
+  private streamAutoQuality: boolean | null = null;
+
   /**
    * 插件上报清晰度变化（HLS: LEVEL_SWITCHED / DASH: qualityChangeRendered）
    */
   private handleStreamQualityChange(
     payload: PlayerEventMap["streamQualityChange"],
   ): void {
+    if (typeof payload.isAuto === "boolean") {
+      this.streamAutoQuality = payload.isAuto;
+    }
     const pending = this.pendingQuality;
     if (!pending || pending.kind !== "stream") {
       // 非切换期：仅同步当前档位
@@ -2345,9 +2355,13 @@ export class VideoPlayer
     ) {
       const format = this.currentStreamFormat();
       if (format === StreamFormatEnum.FLV) return "none";
-      return format === StreamFormatEnum.HLS || format === StreamFormatEnum.DASH
-        ? "adaptive"
-        : "static";
+      if (
+        format === StreamFormatEnum.HLS ||
+        format === StreamFormatEnum.DASH
+      ) {
+        return this.streamAutoQuality === false ? "static" : "adaptive";
+      }
+      return "static";
     }
     return this.sources.length > 1 ? "static" : "none";
   }

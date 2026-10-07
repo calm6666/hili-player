@@ -66,6 +66,10 @@
 
     .ui-panel-wrap {
       height: 311px;
+      overflow: hidden;
+      transition:
+        width 0.25s,
+        height 0.25s;
       width: 168px;
     }
 
@@ -79,6 +83,7 @@
     }
 
     .player-ctrl-subtitle-panel-item {
+      flex-shrink: 0;
       height: 311px;
       opacity: 0;
       pointer-events: none;

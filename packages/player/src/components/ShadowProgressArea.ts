@@ -15,7 +15,8 @@
 import { h, defineComponent, useTemplateRef } from '@/core';
 import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
 import type { ProgressSegment } from '@/types';
-import { computeSegmentBox, computeSegmentRatio } from './ProgressBar';
+import { computeSegmentBox, computeSegmentRatio, computeSegmentBufferRatio } from './ProgressBar';
+import { normalizeSegmentSpan } from '@/hili-player/utils/media/progressSegment';
 
 /** 影子进度条挂载后回传的控制 API */
 export interface ShadowProgressAreaApi {
@@ -57,6 +58,9 @@ export const ShadowProgressArea = defineComponent<
   /** 是否常驻形态（参考实现为 isEdit 且存在多个分段） */
   let permanent = props.permanent === true;
 
+  /** 当前播放时间（秒），用于把缓冲条限定在播放头所在的分段 */
+  let currentTime = 0;
+
   /** 影子进度条容器 */
   const areaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'shadowAreaRef');
 
@@ -73,7 +77,7 @@ export const ShadowProgressArea = defineComponent<
   const resolveSegments = (): Array<
     Pick<ProgressSegment, 'startTime' | 'endTime'>
   > => {
-    if (segments.length > 1) return segments;
+    if (segments.length > 1) return normalizeSegmentSpan(segments, duration);
     return [{ startTime: 0, endTime: duration }];
   };
 
@@ -91,6 +95,7 @@ export const ShadowProgressArea = defineComponent<
    * @param childClass - 需要设置 scaleX 的子元素类名
    */
   const updateSegmentFills = (value: number, childClass: string): void => {
+    if (!Number.isFinite(value)) return;
     const rangeList = resolveSegments();
     getScheduleElements().forEach((schedule, index) => {
       const range = rangeList[index];
@@ -100,7 +105,35 @@ export const ShadowProgressArea = defineComponent<
       schedule
         .querySelectorAll<HTMLDivElement>(`.${childClass}`)
         .forEach((el) => {
-          el.style.transform = `scaleX(${ratio})`;
+          el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
+        });
+    });
+  };
+
+  /**
+   * 按分段逐个更新影子缓冲条比例
+   * 只有播放头所在的分段按真实缓冲时间填充，之前的分段整段为 1、之后的分段为 0，
+   * 与顶部进度条的缓冲表现保持一致。
+   * @param buffer - 缓冲时间（秒）
+   */
+  const updateBufferFills = (buffer: number): void => {
+    if (!Number.isFinite(buffer)) return;
+    const rangeList = resolveSegments();
+    const playhead = Number.isFinite(currentTime) ? currentTime : 0;
+    getScheduleElements().forEach((schedule, index) => {
+      const range = rangeList[index];
+      if (!range) return;
+      if (range.endTime <= range.startTime) return;
+      const ratio = computeSegmentBufferRatio(
+        buffer,
+        range.startTime,
+        range.endTime,
+        playhead,
+      );
+      schedule
+        .querySelectorAll<HTMLDivElement>('.player-progress-schedule-buffer')
+        .forEach((el) => {
+          el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
         });
     });
   };
@@ -136,8 +169,9 @@ export const ShadowProgressArea = defineComponent<
   const applySegmentGeometry = (): void => {
     if (!(duration > 0)) return;
     const list = getScheduleElements();
+    const normalized = normalizeSegmentSpan(segments, duration);
     list.forEach((schedule, index) => {
-      const segment = segments.length > 1 ? segments[index] : segments[0];
+      const segment = normalized.length > 1 ? normalized[index] : normalized[0];
       if (!segment) return;
       applySegmentBox(schedule, segment, index, Math.max(list.length, 1));
     });
@@ -226,13 +260,14 @@ export const ShadowProgressArea = defineComponent<
   /** 更新已播放进度（影子条与顶部进度条同步） */
   const updateProgress = (time: number): void => {
     if (duration <= 0) return;
+    if (Number.isFinite(time)) currentTime = time;
     updateSegmentFills(time, 'player-progress-schedule-current');
   };
 
   /** 更新缓冲进度 */
   const updateBuffer = (buffer: number): void => {
     if (duration <= 0) return;
-    updateSegmentFills(buffer, 'player-progress-schedule-buffer');
+    updateBufferFills(buffer);
   };
 
   /** 更新视频总时长 */

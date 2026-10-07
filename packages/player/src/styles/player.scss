@@ -75,6 +75,77 @@ input {
   border: none;
 }
 
+.ui-radio-wrap.ui-radio-button {
+  width: 100%;
+
+  .ui-radio-group {
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    height: 24px;
+    width: 100%;
+  }
+
+  .ui-radio-item {
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    -webkit-box-pack: center;
+    -ms-flex-pack: center;
+    align-items: center;
+    background-color: #999;
+    border-radius: 2px;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+    color: #fff;
+    cursor: pointer;
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    height: 24px;
+    justify-content: center;
+    padding: 0 12px;
+    -webkit-transition: all 0.2s;
+    transition: all 0.2s;
+    white-space: nowrap;
+
+    .ui-radio-input {
+      height: 0;
+      margin: 0;
+      opacity: 0;
+      pointer-events: none;
+      position: absolute;
+      width: 0;
+    }
+
+    .ui-radio-label {
+      -webkit-box-align: center;
+      -ms-flex-align: center;
+      align-items: center;
+      display: -webkit-box;
+      display: -ms-flexbox;
+      display: flex;
+
+      .ui-radio-text {
+        color: #fff;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+    }
+
+    &:hover {
+      background-color: #757575;
+    }
+
+    &.active {
+      background: #00a1d6;
+      background: var(--player-fn-color, #00a1d6);
+    }
+  }
+}
+
 .ui-slider {
   cursor: pointer;
   height: 12px;

@@ -145,6 +145,8 @@ export interface DashAdaptationSet {
   codecs?: string;
   startWithSAP?: number;
   segmentAlignment?: boolean;
+  subsegmentAlignment?: boolean;
+  subsegmentStartsWithSAP?: number;
   bitstreamSwitching?: boolean;
   lang?: string;
   /** 角色描述列表 */

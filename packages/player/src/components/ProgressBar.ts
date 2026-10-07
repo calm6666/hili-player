@@ -1,6 +1,7 @@
 import { h, defineComponent, useTemplateRef } from "@/core";
 import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
 import { resolveProgressPreviewSlice } from "@/hili-player/utils/media/progressPreview";
+import { normalizeSegmentSpan } from "@/hili-player/utils/media/progressSegment";
 import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
 import type { ProgressSegment } from "@/types";
 import { isBrowser } from "@/utils";
@@ -9,7 +10,7 @@ import { createLogger } from "@/utils";
 import { isDev } from "@/core/warning";
 
 /** 进度条组件日志（仅 error 级别的异常 / 非法配置诊断） */
-const logger = createLogger('ProgressBar');
+const logger = createLogger("ProgressBar");
 
 /**
  * 计算单个分段在当前时间下的填充比例（纯函数，便于单元测试）
@@ -32,6 +33,32 @@ export const computeSegmentRatio = (
   if (time <= startTime) return 0;
   if (time >= endTime) return 1;
   return (time - startTime) / (endTime - startTime);
+};
+
+/**
+ * 计算单个分段的缓冲比例
+ *
+ * 播放头所在分段直接按缓冲时间点求比例；播放头之前的分段已整段缓冲，返回 1；
+ * 播放头之后的分段尚未触达，返回 0。这样缓冲条只会出现在播放头附近，
+ * 不会因为「整段被缓冲」而在每段都画出一条满格缓冲条。
+ *
+ * @param buffer - 已缓冲到的时间（秒）
+ * @param startTime - 分段起始时间（秒）
+ * @param endTime - 分段结束时间（秒）
+ * @param currentTime - 当前播放时间（秒）
+ * @returns 0-1 之间的比例
+ */
+export const computeSegmentBufferRatio = (
+  buffer: number,
+  startTime: number,
+  endTime: number,
+  currentTime: number,
+): number => {
+  if (endTime <= startTime) return 0;
+  if (!Number.isFinite(buffer)) return 0;
+  if (currentTime >= endTime) return 1;
+  if (currentTime < startTime && buffer < startTime) return 0;
+  return computeSegmentRatio(buffer, startTime, endTime);
 };
 
 export interface ProgressBarProps {
@@ -119,13 +146,15 @@ export function computeSegmentBox(
   return strategies[strategy](segment, duration);
 }
 
-
 export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
   (props, lifecycle) => {
     const { progressSegments: initialSegments } = props;
 
     /** 视频总时长（秒），初值取自 props，元数据加载后通过 setDuration 更新 */
     let duration = props.duration;
+
+    /** 当前播放时间（秒），用于把缓冲条限定在播放头所在的分段 */
+    let currentTime = 0;
 
     /** 当前分段数据（挂载时为 props 快照，后续可经 rebuildSegments 整体替换） */
     let segments: ProgressSegment[] = initialSegments ?? [];
@@ -144,6 +173,12 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     const scheduleWrapRef = useTemplateRef<HTMLDivElement>(
       lifecycle,
       "scheduleWrapRef",
+    );
+
+    /** 分钟刻度层元素引用 */
+    const scaleplateRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "scaleplateRef",
     );
 
     /** 进度条外层包裹元素引用（悬停态 state-active 类挂载点，与既有实现一致） */
@@ -248,8 +283,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * - 单分段 / 无分段：整条进度条视作一个 [0, duration] 分段，退化为整体比例
      * @returns 用于逐段计算的比例区间列表
      */
-    const resolveSegments = (): Array<Pick<ProgressSegment, "startTime" | "endTime">> => {
-      if (segments.length > 1) return segments;
+    const resolveSegments = (): Array<
+      Pick<ProgressSegment, "startTime" | "endTime">
+    > => {
+      if (segments.length > 1) return normalizeSegmentSpan(segments, duration);
       return [{ startTime: 0, endTime: duration }];
     };
 
@@ -273,6 +310,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * @param childClass - 需要设置 scaleX 的子元素类名（缓冲条 / 已播放条）
      */
     const updateSegmentFills = (value: number, childClass: string): void => {
+      if (!Number.isFinite(value)) return;
       const rangeList = resolveSegments();
       getScheduleElements().forEach((schedule, index) => {
         const range = rangeList[index];
@@ -292,7 +330,40 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           .querySelectorAll<HTMLDivElement>(`.${childClass}`)
           .forEach((el) => {
             // SCSS 以 transform: scaleX 驱动进度条（transform-origin: 0 0）
-            el.style.transform = `scaleX(${ratio})`;
+            el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
+          });
+      });
+    };
+
+    /**
+     * 按分段逐个更新缓冲条填充比例
+     * 只有播放头所在的分段按真实缓冲时间填充，播放头之前的分段整段为 1、
+     * 之后的分段为 0，避免「每段都画一条满格缓冲条」。
+     * @param buffer - 缓冲时间（秒）
+     */
+    const updateBufferFills = (buffer: number): void => {
+      if (!Number.isFinite(buffer)) return;
+      const rangeList = resolveSegments();
+      const playhead = Number.isFinite(currentTime) ? currentTime : 0;
+      getScheduleElements().forEach((schedule, index) => {
+        const range = rangeList[index];
+        if (!range) return;
+        if (range.endTime <= range.startTime) {
+          warnInvalidSegment();
+          return;
+        }
+        const ratio = computeSegmentBufferRatio(
+          buffer,
+          range.startTime,
+          range.endTime,
+          playhead,
+        );
+        schedule
+          .querySelectorAll<HTMLDivElement>(
+            ".player-progress-schedule-buffer",
+          )
+          .forEach((el) => {
+            el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
           });
       });
     };
@@ -300,13 +371,13 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     /**
      * 更新缓冲条 UI
      * 缓冲条元素（.player-progress-schedule-buffer）由 setupProgressElements 动态创建，
-     * 无法通过 useTemplateRef 绑定，故在 updateSegmentFills 中按容器检索子元素；
-     * 缓冲按 buffered 时间范围与分段区间求交后计算比例（等价于 computeSegmentRatio(buffer, start, end)）
+     * 无法通过 useTemplateRef 绑定，故按容器检索子元素后逐段求比例；
+     * 只有播放头所在的分段按真实缓冲时间填充，之前的分段整段为 1、之后的分段为 0。
      * @param buffer - 缓冲时间（秒）
      */
     const updateBufferUI = (buffer: number): void => {
       if (duration <= 0) return;
-      updateSegmentFills(buffer, "player-progress-schedule-buffer");
+      updateBufferFills(buffer);
     };
 
     /**
@@ -317,6 +388,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     const updateProgressUI = (time: number): void => {
       // 边界处理：总时长非正时直接返回，避免除零得到 NaN/Infinity
       if (duration <= 0) return;
+
+      // 记录播放头，供缓冲条按「播放头所在分段」计算比例
+      if (Number.isFinite(time)) currentTime = time;
 
       // 更新各分段已播放进度条：每段按自身区间独立计算比例
       // 已播放条元素（.player-progress-schedule-current）同样动态创建，无法用 ref 绑定
@@ -423,10 +497,11 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     const updateHotspotLabel = (time: number): void => {
       const hotspot = hotspotRef.value;
       if (!hotspot) return;
-      const hit = segments.find(
+      const timeline = normalizeSegmentSpan(segments, duration);
+      const hit = timeline.find(
         (segment) => time >= segment.startTime && time < segment.endTime,
       );
-      const text = segments.length > 1 && hit ? hit.label : "";
+      const text = timeline.length > 1 && hit ? hit.label : "";
       if (hotspot.textContent !== text) {
         hotspot.textContent = text;
       }
@@ -680,8 +755,11 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     const applySegmentGeometry = (): void => {
       if (!(duration > 0)) return;
       const list = getScheduleElements();
+      // 分段跨度与媒体总时长不一致时先归一到总时长（保证 Σwidth = 100%）
+      const normalized = normalizeSegmentSpan(segments, duration);
       list.forEach((schedule, index) => {
-        const segment = segments.length > 1 ? segments[index] : segments[0];
+        const segment =
+          normalized.length > 1 ? normalized[index] : normalized[0];
         if (!segment) return;
         applyProgressStyle(
           schedule,
@@ -743,12 +821,12 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           segments.length,
           duration,
         );
-        progress.onmouseenter = (event: MouseEvent): void => {
+        progress.addEventListener("mouseenter", (event: MouseEvent) => {
           progressPointMove(progress, event);
-        };
-        progress.onmouseleave = (event: MouseEvent): void => {
+        });
+        progress.addEventListener("mouseleave", (event: MouseEvent) => {
           progressPointLeave(progress, event);
-        };
+        });
       }
       if (segments.length > 1 && index !== undefined) {
         segments[index].element = progress;
@@ -822,6 +900,28 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       duration = value;
       // 时长到手后立刻重算分段几何（挂载期算过的那一份是「时长未知」的）
       applySegmentGeometry();
+      buildScaleplate();
+    };
+
+    /**
+     * 生成分钟刻度（1 分钟一根，整 5 分钟加高）
+     */
+    const buildScaleplate = (): void => {
+      const plate = scaleplateRef.value;
+      if (!plate) return;
+      plate.textContent = "";
+      if (!(duration > 0)) return;
+      const totalMinutes = Math.floor(duration / 60);
+      for (let minute = 1; minute <= totalMinutes; minute += 1) {
+        const tick = document.createElement("div");
+        tick.classList.add(
+          minute % 5 === 0
+            ? "player-progress-scaleplate-2m"
+            : "player-progress-scaleplate-1m",
+        );
+        tick.style.left = `${((minute * 60) / duration) * 100}%`;
+        plate.appendChild(tick);
+      }
     };
 
     // ============================================
@@ -889,6 +989,11 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           h("div", {
             class: "player-progress-schedule-wrap",
             ref: "scheduleWrapRef",
+          }),
+          // 分钟刻度层（预览浮层下方的分段点）
+          h("div", {
+            class: "player-progress-scaleplate",
+            ref: "scaleplateRef",
           }),
           // 进度点容器
           h("div", { class: "player-progress-point-wrap" }),

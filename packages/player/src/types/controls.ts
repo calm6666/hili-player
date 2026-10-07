@@ -8,27 +8,6 @@
 import type { AnimationFrameID } from "@/utils/rafTimeout";
 
 /**
- * 菜单显示状态项
- */
-export interface CtrlShowMenuItem {
-  showTimer: AnimationFrameID | null;
-  hideTimer: AnimationFrameID | null;
-}
-
-/**
- * 菜单显示状态
- */
-export interface CtrlShowMenu {
-  viewpoint: CtrlShowMenuItem;
-  quality: CtrlShowMenuItem;
-  eplist: CtrlShowMenuItem;
-  subtitle: CtrlShowMenuItem;
-  playbackrate: CtrlShowMenuItem;
-  volume: CtrlShowMenuItem;
-  setting: CtrlShowMenuItem;
-}
-
-/**
  * 音量进度状态
  */
 export interface VolumeProgress {

@@ -5,8 +5,8 @@
  */
 
 import { h, defineComponent, useTemplateRef } from '@/core';
+import { CheckboxDefaultIcon, CheckboxSelectedIcon } from './icons';
 import type { ComponentLifecycle } from '@/types';
-import type { VNode } from '@/types';
 
 /**
  * 复选框组件 Props 接口
@@ -32,48 +32,24 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
   let checked = props.checked ?? false;
 
   /**
-   * 复选框盒子元素引用
+   * 复选框输入元素引用
    */
-  const checkboxBoxRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'checkboxBoxRef');
-
-  /**
-   * 处理点击事件
-   * 切换选中状态并更新 DOM 样式和触发回调
-   */
-  const handleClick = (): void => {
-    checked = !checked;
-
-    // 更新 DOM 类名
-    if (checkboxBoxRef.value) {
-      if (checked) {
-        checkboxBoxRef.value.classList.add('checkbox-checked');
-      } else {
-        checkboxBoxRef.value.classList.remove('checkbox-checked');
-      }
-    }
-
-    // 触发回调
-    props.onChange?.(checked);
-    props.onClick?.();
-  };
-
-  /**
-   * 渲染标签元素
-   * @returns 标签 VNode，若无标签则返回 null
-   */
-  const renderLabel = (): VNode | null => {
-    if (!props.label) {
-      return null;
-    }
-
-    return h('span', {
-      class: 'checkbox-label',
-    }, props.label);
-  };
+  const checkboxInputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'checkboxInputRef');
 
   // ============================================
   // DOM 更新方法
   // ============================================
+
+  /**
+   * 处理选中状态变化（以 input.checked 为准，选中样式由 CSS 的 :checked 承担）
+   * @param event - change 事件
+   */
+  const handleChange = (event: Event): void => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    checked = event.target.checked;
+    props.onChange?.(checked);
+    props.onClick?.();
+  };
 
   /**
    * 外部设置选中状态
@@ -81,12 +57,8 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
    */
   const setChecked = (value: boolean): void => {
     checked = value;
-    if (checkboxBoxRef.value) {
-      if (checked) {
-        checkboxBoxRef.value.classList.add('checkbox-checked');
-      } else {
-        checkboxBoxRef.value.classList.remove('checkbox-checked');
-      }
+    if (checkboxInputRef.value) {
+      checkboxInputRef.value.checked = value;
     }
   };
 
@@ -98,33 +70,38 @@ export const Checkbox = defineComponent<CheckboxProps>((props, lifecycle: Compon
    * 组件挂载后的回调，向外暴露设置选中状态的方法
    */
   lifecycle.onMounted = (): void => {
-    // 挂载时按初始 checked 落一次选中样式（否则 checked:true 的框看起来是未选中）
+    // 挂载时按初始 checked 落一次（否则 checked:true 的框看起来是未选中）
     setChecked(checked);
     lifecycle.emit?.('checkboxMounted', { setChecked });
   };
 
-  /**
-   * 组件销毁前的回调，清理 DOM 引用
-   */
-  lifecycle.onBeforeDestroy = (): void => {
-  };
-
-  return h('div', {
-    class: 'u-checkbox',
+  return h('span', {
+    class: 'ui-checkbox',
   },
     h('div', {
-      class: 'u-checkbox-wrap',
+      class: 'ui-checkbox-area',
     },
-      h('div', {
-        class: 'u-checkbox-box',
-        onClick: handleClick,
+      h('input', {
+        class: 'ui-checkbox-input',
+        type: 'checkbox',
+        checked,
+        ref: 'checkboxInputRef',
+        ...(props.label ? { 'aria-label': props.label } : {}),
+        onChange: handleChange,
+      }),
+      h('label', {
+        class: 'ui-checkbox-label',
       },
         h('span', {
-          class: 'checkbox-box',
-          ref: 'checkboxBoxRef',
-        }),
-        renderLabel()
-      )
-    )
+          class: 'ui-checkbox-icon ui-checkbox-icon-default',
+        }, CheckboxDefaultIcon()),
+        h('span', {
+          class: 'ui-checkbox-icon ui-checkbox-icon-selected',
+        }, CheckboxSelectedIcon()),
+        props.label
+          ? h('span', { class: 'ui-checkbox-name' }, props.label)
+          : null,
+      ),
+    ),
   );
 });

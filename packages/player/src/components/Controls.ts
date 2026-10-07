@@ -2,12 +2,11 @@
  * ============================================
  * 控制条组件 (Controls)
  * ============================================
- * 所有 DOM 引用通过 ref 回调获取，不使用 querySelector
+ * 所有 DOM 引用通过 useTemplateRef 获取
  */
 
-import { h, defineComponent, useTemplateRef, useContext } from "@/core";
+import { h, defineComponent, useTemplateRef, useContext, useState } from "@/core";
 import type {
-  CtrlShowMenu,
   VolumeProgress,
   Tooltip,
   ControlsConfig,
@@ -15,12 +14,15 @@ import type {
 import type { ProgressSegment } from "@/types";
 import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
 import type { EnergyProgressData } from "@/hili-player/utils/media/energyProgress";
-import { ConfigContext } from "@/store/runtimeState";
-import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
 import {
-  publishPermanent,
-  observePermanent,
-} from "@/hili-player/store/permanentState";
+  ConfigContext,
+  PlayerStateKeyEnum,
+  StateContext,
+} from "@/store/runtimeState";
+import type {
+  PlayerStateMap,
+  TypedStateManager,
+} from "@/store/runtimeState";
 import { formatTime } from "@/utils/formatTime";
 import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
 import type { AnimationFrameID } from "@/utils/rafTimeout";
@@ -32,54 +34,6 @@ import { PbpControls } from "./PbpControls";
 import { ShadowProgressArea } from "./ShadowProgressArea";
 import type { ShadowProgressAreaApi } from "./ShadowProgressArea";
 import type { ProgressBarApi } from "./ProgressBar";
-
-/**
- * 菜单类型
- */
-type MenuType =
-  | "viewpoint"
-  | "quality"
-  | "eplist"
-  | "playbackrate"
-  | "subtitle"
-  | "volume"
-  | "setting";
-
-/**
- * 菜单元素配置
- */
-interface MenuElement {
-  /** 菜单主元素 */
-  element: HTMLDivElement | null;
-  /** 菜单附加元素列表（如设置面板的子面板） */
-  extraElements?: HTMLDivElement[];
-}
-
-/**
- * 菜单配置映射
- */
-interface MenuConfig {
-  /** 视点菜单元素配置 */
-  viewpoint?: MenuElement;
-  /** 画质菜单元素配置 */
-  quality?: MenuElement;
-  /** 选集菜单元素配置 */
-  eplist?: MenuElement;
-  /** 字幕设置面板挂载点 */
-  subtitle?: MenuElement;
-  /** 播放倍速菜单元素配置 */
-  playbackrate?: MenuElement;
-  /** 设置菜单元素配置 */
-  setting?: MenuElement;
-  /** 音量菜单元素配置 */
-  volume?: MenuElement;
-  /** 画中画按钮元素配置 */
-  pip?: MenuElement;
-  /** 宽屏按钮元素配置 */
-  wide?: MenuElement;
-  /** 网页全屏按钮元素配置 */
-  web?: MenuElement;
-}
 
 /**
  * 视频进度数据
@@ -113,13 +67,22 @@ export type ControlsEvents = {
   eplistChange: number;
   subtitleToggle: boolean;
   subtitleLangChange: string;
-  subtitleStyleChange: { fontSize?: number; color?: string; position?: "top" | "bottom"; offset?: number; strokeColor?: string; strokeWidth?: number; opacity?: number; scale?: boolean; fade?: boolean };
+  subtitleStyleChange: {
+    fontSize?: number;
+    color?: string;
+    position?: "top" | "bottom";
+    offset?: number;
+    strokeColor?: string;
+    strokeWidth?: number;
+    opacity?: number;
+    scale?: boolean;
+    fade?: boolean;
+  };
   bilingualChange: boolean;
   settingChange: { key: string; value: boolean | string | number };
   moreSettingClick: undefined;
   showTooltip: Tooltip;
   hideTooltip: Tooltip;
-  menuAnimation: { type: MenuType; action: "show" | "hide" };
   progressChange: number;
   stateChange: unknown;
   /** 顶部进度条挂载完成，向上层回传其更新 API */
@@ -181,64 +144,29 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       ...configCtx,
     };
 
+    const stateMgr = useContext<TypedStateManager<PlayerStateMap> | null>(
+      StateContext,
+    );
+
     /** 底部影子进度条 API（由 ShadowProgressArea 挂载后填充） */
     let shadowApi: ShadowProgressAreaApi | null = null;
-
-    /** 常驻态订阅的取消函数 */
-    let permanentUnsub: (() => void) | null = null;
 
     /** 高能进度条常驻态：存在多个分段即常驻，之后由 `.player-pbp-pin` 或设置面板切换 */
     let permanent = (config.progressSegments?.length ?? 0) > 1;
 
-    // 把初值发布出去，保证设置面板渲染时读到的是真实状态
-    publishPermanent(permanent);
+    // 常驻态是全局状态，写入运行时状态（PbpControls / 影子进度条 / 设置面板订阅同一份）
+    stateMgr?.set(PlayerStateKeyEnum.PBP_PERMANENT, permanent);
 
-    /**
-     * 应用常驻态到影子进度条与高能进度条，并广播给设置面板（双向同步）
-     * @param next - 目标常驻态
-     */
+    /** 应用常驻态到运行时状态（订阅方据此更新影子进度条与高能进度条） */
     const applyPermanent = (next: boolean): void => {
-      // 只有真正变化才广播，避免订阅回调再次进入本函数造成递归
-      const changed = permanent !== next;
       permanent = next;
-      shadowApi?.setPermanent(next);
-      pbpApi?.setPermanent(next);
-      if (changed) publishPermanent(next);
+      stateMgr?.set(PlayerStateKeyEnum.PBP_PERMANENT, next);
     };
 
     /** 视频进度数据 */
     const videoProgress: VideoPlayerProgress = {
       bufferTime: 0,
       currentTime: 0,
-    };
-
-    /** 各菜单的显示/隐藏定时器状态 */
-    const ctrlShowMenu: CtrlShowMenu = {
-      viewpoint: { showTimer: null, hideTimer: null },
-      quality: { showTimer: null, hideTimer: null },
-      eplist: { showTimer: null, hideTimer: null },
-    subtitle: { showTimer: null, hideTimer: null },
-      playbackrate: { showTimer: null, hideTimer: null },
-      volume: { showTimer: null, hideTimer: null },
-      setting: { showTimer: null, hideTimer: null },
-    };
-
-    /** 各菜单的 DOM 元素引用配置 */
-    const menuConfig: MenuConfig = {};
-
-    /**
-     * 菜单类型 → 菜单挂载点（按钮容器）选择器
-     * 与既有实现 CLASS_NAMES.CTRL_*_BTN 保持一致：
-     * state-show 类加在按钮容器上，由 CSS `.state-show .player-ctrl-*-menu-wrap` 控制菜单展开
-     */
-    const MENU_SELECTORS: Record<MenuType, string> = {
-      viewpoint: ".player-ctrl-btn.player-ctrl-viewpoint",
-      quality: ".player-ctrl-btn.player-ctrl-quality",
-      eplist: ".player-ctrl-btn.player-ctrl-eplist",
-  subtitle: ".player-ctrl-btn.player-ctrl-subtitle",
-      playbackrate: ".player-ctrl-btn.player-ctrl-playbackrate",
-      volume: ".player-ctrl-btn.player-ctrl-volume",
-      setting: ".player-ctrl-btn.player-ctrl-setting",
     };
 
     /** 音量滑块拖拽状态 */
@@ -361,48 +289,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // ============================================
 
     /**
-     * 控制菜单的显示/隐藏动画，带 300ms 延迟
-     * @param type - 菜单类型
-     * @param action - 动作：'show' 显示或 'hide' 隐藏
-     */
-    const handleMenuAnimation = (
-      type: MenuType,
-      action: "show" | "hide",
-    ): void => {
-      const menuCfg = menuConfig[type];
-      if (!menuCfg) {
-        return;
-      }
-      /**
-       * 挂载点可能在运行期被重建（选集面板列表变化时 RightControls 会原地
-       * 重建 EpisodesMenu，按钮元素换成新节点），此时缓存元素已脱离文档，
-       * 按选择器重新解析一次，保证面板展开/收起动画仍然生效
-       */
-      if (menuCfg.element && !menuCfg.element.isConnected) {
-        menuCfg.element =
-          controlEntityRef.value?.querySelector<HTMLDivElement>(
-            MENU_SELECTORS[type],
-          ) ?? null;
-      }
-      const control = ctrlShowMenu[type];
-      cancelRaf(control.showTimer!);
-      cancelRaf(control.hideTimer!);
-      const timerType = action === "show" ? "showTimer" : "hideTimer";
-      control[timerType] = rafTimeout(() => {
-        menuCfg.element?.classList.toggle("state-show", action === "show");
-        if (type === "setting") {
-          menuCfg.extraElements?.forEach((el, index) => {
-            const classes = [
-              "state-show-right",
-              "player-ctrl-seting-more-area",
-            ];
-            el?.classList.remove(classes[index]);
-          });
-        }
-      }, 300);
-    };
-
-    /**
      * 初始化倍速菜单项，为当前倍速添加激活样式
      */
     const initBackrate = (): void => {
@@ -495,7 +381,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         volumeProgressbarRef.value &&
         volumeSliderThumbRef.value
       ) {
-        volumeNumberRef.value.innerHTML = Math.floor(volume * 100).toString();
+        volumeNumberRef.value.textContent = Math.floor(volume * 100).toString();
         volumeProgressbarRef.value.style.transform = `scaleY(${volume})`;
         volumeSliderThumbRef.value.style.transform = `translateY(${-(60 * volume - 6)}px)`;
       }
@@ -506,7 +392,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
      */
     const initDuration = (): void => {
       if (playerCtrlTimeDurationRef.value) {
-        playerCtrlTimeDurationRef.value.innerHTML = formatTime(duration);
+        playerCtrlTimeDurationRef.value.textContent = formatTime(duration);
       }
     };
 
@@ -571,45 +457,27 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       initDuration();
       initBackrate();
 
-      // 常驻态订阅：设置面板勾选 / 图钉点击任一处变更都会同步到影子条与高能条
-      permanentUnsub = observePermanent((value) => {
-        applyPermanent(value);
-      });
-      applyPermanent(permanent);
-      useComponentUnmount(lifecycle, () => {
-        permanentUnsub?.();
-        permanentUnsub = null;
-      });
+      // 常驻态订阅：设置面板勾选 / 图钉点击任一处写入运行时状态，这里落到影子条与高能条
+      if (stateMgr) {
+        useState(
+          stateMgr,
+          PlayerStateKeyEnum.PBP_PERMANENT,
+          (value) => {
+            permanent = value;
+            shadowApi?.setPermanent(value);
+            pbpApi?.setPermanent(value);
+          },
+          lifecycle,
+        );
+      }
+      shadowApi?.setPermanent(permanent);
+      pbpApi?.setPermanent(permanent);
 
       // 填充菜单配置：子组件（LeftControls / RightControls）先于父组件挂载，
       // 此处控制条主体 DOM 已就绪，可直接在实体容器内检索各菜单挂载点
       // （与既有实现 initMenu 的 querySelector 初始化方式一致）
       const entity = controlEntityRef.value;
       if (entity) {
-        (Object.keys(MENU_SELECTORS) as MenuType[]).forEach((type) => {
-          menuConfig[type] = {
-            element: entity.querySelector<HTMLDivElement>(MENU_SELECTORS[type]),
-          };
-        });
-        // 设置面板的附加元素（二级面板区域），与既有实现 menuConfig.setting.extraElements 一致
-        const settingElement = menuConfig.setting?.element ?? null;
-        if (settingElement) {
-          const extraElements = [
-            settingElement.querySelector<HTMLDivElement>(
-              ".player-ctrl-setting-menu.ui .ui-area",
-            ),
-            settingElement.querySelector<HTMLDivElement>(
-              ".player-ctrl-setting-menu.ui .ui-area .player-ctrl-seting-menu-right",
-            ),
-          ].filter((el): el is HTMLDivElement => el !== null);
-          if (extraElements.length > 0) {
-            menuConfig.setting = {
-              element: settingElement,
-              extraElements,
-            };
-          }
-        }
-
         tooltipBtns.forEach((btn) => {
           btn.element = entity.querySelector<HTMLDivElement>(
             TOOLTIP_SELECTORS[btn.name] ?? "",
@@ -657,13 +525,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       lifecycle.emit?.("seek", time);
     };
 
-    const handleLeftMenuAnimation = (payload: {
-      type: MenuType;
-      action: "show" | "hide";
-    }): void => {
-      handleMenuAnimation(payload.type, payload.action);
-    };
-
     /**
      * 处理右侧控制栏组件的事件分发
      * @param event - 事件名称
@@ -680,36 +541,36 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
 
     /** 选集面板选择某一集：仅透传下标，由上层接到 VideoPlayer.switchTo(index) */
     /** 字幕：开关向上转发 */
-  const handleRightSubtitleToggle = (visible: boolean): void => {
-    lifecycle.emit?.("subtitleToggle", visible);
-  };
+    const handleRightSubtitleToggle = (visible: boolean): void => {
+      lifecycle.emit?.("subtitleToggle", visible);
+    };
 
-  /** 字幕：语言切换向上转发 */
-  const handleRightSubtitleLangChange = (lang: string): void => {
-    lifecycle.emit?.("subtitleLangChange", lang);
-  };
+    /** 字幕：语言切换向上转发 */
+    const handleRightSubtitleLangChange = (lang: string): void => {
+      lifecycle.emit?.("subtitleLangChange", lang);
+    };
 
-  /** 字幕：样式变化向上转发 */
-  const handleRightSubtitleStyleChange = (patch: {
-    fontSize?: number;
-    color?: string;
-    position?: "top" | "bottom";
-    offset?: number;
-    strokeColor?: string;
-    strokeWidth?: number;
-    opacity?: number;
-    scale?: boolean;
-    fade?: boolean;
-  }): void => {
-    lifecycle.emit?.("subtitleStyleChange", patch);
-  };
+    /** 字幕：样式变化向上转发 */
+    const handleRightSubtitleStyleChange = (patch: {
+      fontSize?: number;
+      color?: string;
+      position?: "top" | "bottom";
+      offset?: number;
+      strokeColor?: string;
+      strokeWidth?: number;
+      opacity?: number;
+      scale?: boolean;
+      fade?: boolean;
+    }): void => {
+      lifecycle.emit?.("subtitleStyleChange", patch);
+    };
 
-  /** 字幕：双语开关向上转发 */
-  const handleRightBilingualChange = (enabled: boolean): void => {
-    lifecycle.emit?.("bilingualChange", enabled);
-  };
+    /** 字幕：双语开关向上转发 */
+    const handleRightBilingualChange = (enabled: boolean): void => {
+      lifecycle.emit?.("bilingualChange", enabled);
+    };
 
-  const handleRightEplistChange = (index: number): void => {
+    const handleRightEplistChange = (index: number): void => {
       lifecycle.emit?.("eplistChange", index);
     };
 
@@ -717,18 +578,7 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       key: string;
       value: boolean | string | number;
     }): void => {
-      // 「高能进度条」常驻开关：先落到真实状态（影子条常驻形态 + 图钉图标），再向上转发
-      if (payload.key === "highenergy") {
-        applyPermanent(payload.value === true);
-      }
       lifecycle.emit?.("settingChange", payload);
-    };
-
-    const handleRightMenuAnimation = (payload: {
-      type: MenuType;
-      action: "show" | "hide";
-    }): void => {
-      handleMenuAnimation(payload.type, payload.action);
     };
 
     // ============================================
@@ -775,7 +625,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
             onNext: () => lifecycle.emit?.("next"),
             onPlayPause: () => lifecycle.emit?.("playPause"),
             onSeek: handleLeftSeek,
-            onMenuAnimation: handleLeftMenuAnimation,
           }),
           h("div", { class: "player-control-bottom-center" }),
           h(RightControls, {
@@ -797,7 +646,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
             onSubtitleStyleChange: handleRightSubtitleStyleChange,
             onBilingualChange: handleRightBilingualChange,
             onSettingChange: handleRightSettingChange,
-            onMenuAnimation: handleRightMenuAnimation,
             onMoreSettingClick: () => lifecycle.emit?.("moreSettingClick"),
           }),
         ),

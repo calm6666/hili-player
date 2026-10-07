@@ -89,6 +89,9 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
   /** 圆点元素引用（loading 图标插入位置） */
   const circleRef = useTemplateRef<HTMLDivElement>(lifecycle, 'circleRef');
 
+  /** 已插入的加载图标节点（自持引用，避免反查子元素） */
+  let loadingIcon: Element | null = null;
+
   // ============================================
   // DOM 更新方法
   // ============================================
@@ -148,16 +151,18 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
    * @param value - 是否处于加载状态
    */
   const loading = (value: boolean): void => {
-    if (!circleRef.value) return;
+    const circle = circleRef.value;
+    if (!circle) return;
     if (value) {
-      if (!circleRef.value.querySelector('.switch-loading-icon')) {
-        circleRef.value.appendChild(materialize(LoadingIcon()));
-      }
-    } else {
-      circleRef.value
-        .querySelectorAll('.switch-loading-icon')
-        .forEach((icon) => icon.remove());
+      // 已持有加载图标节点时直接复用，不再反查子元素
+      if (loadingIcon) return;
+      loadingIcon = materialize(LoadingIcon()) as Element;
+      circle.appendChild(loadingIcon);
+      return;
     }
+    if (!loadingIcon) return;
+    loadingIcon.remove();
+    loadingIcon = null;
   };
 
   // ============================================

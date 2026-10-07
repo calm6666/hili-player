@@ -5,27 +5,10 @@
  * 支持弹幕详情提示弹窗 (DmTip) 和通用对话框
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
+import { h, defineComponent, useTemplateRef, materialize } from '@/core';
 import { isBrowser } from '@/utils';
 import { Close } from '@/hili-player/components/icons';
-import type { ComponentLifecycle } from '@/types';
-
-/**
- * HTML 特殊字符转义
- *
- * 将用户内容插入 innerHTML 前必须转义，防止 XSS 攻击。
- * 弹幕内容和用户名来自用户输入，可能包含 <script> 或其他恶意内容。
- */
-function escapeHtml(str: string): string {
-  const map: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  };
-  return str.replace(/[&<>"']/g, (ch) => map[ch] || ch);
-}
+import type { ComponentLifecycle, VNode } from '@/types';
 
 /**
  * 安全转义 CSS 颜色值字符串
@@ -94,6 +77,27 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
   // ============================================
 
   /**
+   * 弹幕提示里的一行「标签 + 值」
+   * @param label - 标签文本
+   * @param value - 值文本
+   * @param color - 值的颜色（可选）
+   * @returns 行虚拟节点
+   */
+  const tipRow = (label: string, value: string, color?: string): VNode =>
+    h(
+      'div',
+      { class: 'player-dm-tip-row' },
+      h('span', { class: 'player-dm-tip-label' }, label),
+      h(
+        'span',
+        color
+          ? { class: 'player-dm-tip-value', style: { color: sanitizeColor(color) } }
+          : { class: 'player-dm-tip-value' },
+        value,
+      ),
+    );
+
+  /**
    * 显示弹幕详情提示弹窗
    * @param dmTip - 弹幕提示数据
    * @param container - 弹幕元素所在的容器，提示弹窗将挂载到此容器内
@@ -105,58 +109,35 @@ export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentL
 
     if (!container) return;
 
-    /** 弹幕提示弹窗根元素 */
-    const tipEl = document.createElement('div');
-    tipEl.className = 'player-dm-tip';
-
-    // 弹幕内容行
-    /** 弹幕内容信息行元素 */
-    const contentRow = document.createElement('div');
-    contentRow.className = 'player-dm-tip-row';
-    contentRow.innerHTML = `<span class="player-dm-tip-label">内容：</span><span class="player-dm-tip-value">${escapeHtml(dmTip.content)}</span>`;
-    tipEl.appendChild(contentRow);
-
-    // 弹幕时间行
-    /** 弹幕时间信息行元素 */
-    const timeRow = document.createElement('div');
-    timeRow.className = 'player-dm-tip-row';
     /** 时间点对应的分钟数 */
     const minutes = Math.floor(dmTip.timePoint / 60);
     /** 时间点对应的秒数 */
     const seconds = Math.floor(dmTip.timePoint % 60);
     /** 格式化后的时间字符串，格式为 "mm:ss" */
     const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    timeRow.innerHTML = `<span class="player-dm-tip-label">时间：</span><span class="player-dm-tip-value">${timeStr}</span>`;
-    tipEl.appendChild(timeRow);
 
-    // 发送用户行
-    if (dmTip.user) {
-      /** 弹幕发送用户信息行元素 */
-      const userRow = document.createElement('div');
-      userRow.className = 'player-dm-tip-row';
-      userRow.innerHTML = `<span class="player-dm-tip-label">用户：</span><span class="player-dm-tip-value">${escapeHtml(dmTip.user)}</span>`;
-      tipEl.appendChild(userRow);
-    }
-
-    // 弹幕颜色行
-    if (dmTip.color) {
-      /** 弹幕颜色信息行元素 */
-      const colorRow = document.createElement('div');
-      colorRow.className = 'player-dm-tip-row';
-      colorRow.innerHTML = `<span class="player-dm-tip-label">颜色：</span><span class="player-dm-tip-value" style="color:${sanitizeColor(dmTip.color)}">${escapeHtml(dmTip.color)}</span>`;
-      tipEl.appendChild(colorRow);
-    }
-
-    // 关闭按钮（图标使用既有实现 icons 的 Close SVG，禁止用 unicode 字符当图标）
-    /** 关闭弹幕提示的按钮元素 */
-    const closeBtn = document.createElement('div');
-    closeBtn.className = 'player-dm-tip-close';
-    closeBtn.innerHTML = Close;
-    closeBtn.addEventListener('click', () => {
-      hideDmTip();
-      props.onClose?.();
-    });
-    tipEl.appendChild(closeBtn);
+    /** 弹幕提示弹窗根元素（关闭按钮同样由虚拟节点挂载，不再手工绑定监听） */
+    const tipEl = materialize(
+      h(
+        'div',
+        { class: 'player-dm-tip' },
+        tipRow('内容：', dmTip.content),
+        tipRow('时间：', timeStr),
+        ...(dmTip.user ? [tipRow('用户：', dmTip.user)] : []),
+        ...(dmTip.color ? [tipRow('颜色：', dmTip.color, dmTip.color)] : []),
+        h(
+          'div',
+          {
+            class: 'player-dm-tip-close',
+            onClick: () => {
+              hideDmTip();
+              props.onClose?.();
+            },
+          },
+          Close(),
+        ),
+      ),
+    ) as HTMLDivElement;
 
     container.appendChild(tipEl);
     dmTipElement = tipEl;

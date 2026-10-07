@@ -90,8 +90,8 @@
     justify-content: flex-start;
     -webkit-box-pack: start;
     -ms-flex-pack: start;
-    fill: #757575;
-    fill: var(--player-dmsend-switch-icon, #757575);
+    color: #505050;
+    color: var(--player-dmsend-info-font, #505050);
 
     &:not(.disabled):hover {
       fill: #00a1d6;
@@ -188,8 +188,8 @@
     justify-content: flex-start;
     -webkit-box-pack: start;
     -ms-flex-pack: start;
-    fill: #757575;
-    fill: var(--player-dmsend-switch-icon, #757575);
+    color: #505050;
+    color: var(--player-dmsend-info-font, #505050);
 
     &:hover {
       fill: #00a1d6;
@@ -210,7 +210,7 @@
     box-sizing: border-box;
     cursor: default;
     font-size: 12px;
-    height: 270px;
+    height: 359px;
     position: absolute;
     right: -149px;
     text-align: left;
@@ -221,6 +221,8 @@
 
   .player-dm-setting-box {
     bottom: 0;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
     position: absolute;
     right: 0;
   }

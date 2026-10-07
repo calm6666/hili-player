@@ -380,7 +380,7 @@ export const LottieIcon = defineComponent<LottieIconProps, LottieIconApi>(
         if (!containerRef.value) return;
 
         // lottie 加载成功，清空回退内容后渲染动画
-        containerRef.value.innerHTML = "";
+        containerRef.value.replaceChildren();
 
         // 序列模式
         if (sequence && sequence.length > 0) {

@@ -53,6 +53,7 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
   const curveClipRef = useTemplateRef<SVGPathElement>(lifecycle, 'pbpCurveClipRef');
   const playedRef = useTemplateRef<SVGPathElement>(lifecycle, 'pbpPlayedRef');
   const playedClipRef = useTemplateRef<SVGRectElement>(lifecycle, 'pbpPlayedClipRef');
+  const cursorLineRef = useTemplateRef<SVGPathElement>(lifecycle, 'pbpCursorLineRef');
 
   /** 高能数据（未到达前为 null，此时不绘制曲线） */
   let energy: EnergyProgressData | null = null;
@@ -68,14 +69,24 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
 
   /** 重绘曲线与已播放裁切窗口 */
   const render = (): void => {
-    const d = energy ? buildEnergyAreaPath(energy.data) : '';
+    const barWidthPx = pbpRef.value?.clientWidth ?? 0;
+    const d = energy
+      ? buildEnergyAreaPath(energy.data, undefined, barWidthPx)
+      : '';
     curveRef.value?.setAttribute('d', d);
     curveClipRef.value?.setAttribute('d', d);
     playedRef.value?.setAttribute('d', d);
 
     const total = duration > 0 ? duration : (energy?.duration ?? 0);
     const ratio = total > 0 ? Math.max(0, Math.min(1, currentTime / total)) : 0;
-    playedClipRef.value?.setAttribute('width', String(ratio * ENERGY_VIEW_WIDTH));
+    const playedWidth = ratio * ENERGY_VIEW_WIDTH;
+    playedClipRef.value?.setAttribute('width', String(playedWidth));
+
+    // 当前位置指示线：跟随播放进度横坐标
+    cursorLineRef.value?.setAttribute(
+      'd',
+      `M${playedWidth},0 V${ENERGY_VIEW_HEIGHT}`,
+    );
   };
 
   /**
@@ -185,6 +196,11 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
         ref: 'pbpPlayedRef',
         'clip-path': 'url(#player-pbp-played-path)',
       }),
+      h('path', {
+        class: 'player-pbp-cursor-line',
+        d: `M0,0 V${ENERGY_VIEW_HEIGHT}`,
+        ref: 'pbpCursorLineRef',
+      }),
     ),
     h('div', { class: 'player-pbp-pin', onClick: handlePinClick },
       h('div', { class: 'player-pbp-pin-icon player-pbp-pin-icon-off' },
@@ -193,7 +209,6 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
           'data-pointer': 'none',
           viewBox: '0 0 1024 1024',
         }, h('path', { fill: '#fff', d: PIN_ICON_OFF })),
-        h('span', { class: 'player-pbp-pin-tip' }, '打开《高能进度条》常驻'),
       ),
       h('div', { class: 'player-pbp-pin-icon player-pbp-pin-icon-on' },
         h('svg', {
@@ -201,8 +216,9 @@ export const PbpControls = defineComponent<PbpControlsProps, PbpControlsEvents>(
           'data-pointer': 'none',
           viewBox: '0 0 1024 1024',
         }, h('path', { fill: '#fff', d: PIN_ICON_ON })),
-        h('span', { class: 'player-pbp-pin-tip' }, '关闭《高能进度条》常驻'),
       ),
+      h('span', { class: 'player-pbp-pin-tip player-pbp-pin-tip-off' }, '打开《高能进度条》常驻'),
+      h('span', { class: 'player-pbp-pin-tip player-pbp-pin-tip-on' }, '关闭《高能进度条》常驻'),
     ),
   );
 });

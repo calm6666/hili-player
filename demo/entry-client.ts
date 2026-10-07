@@ -43,7 +43,12 @@ import { VideoPlayer } from "@/hili-player/player";
 import { createHlsPlugin } from "@/hili-player/plugins/hls";
 import { createDashPlugin } from "@/hili-player/plugins/dash";
 import { DanmakuPlugin } from "@/hili-player/plugins/danmaku";
-import type { MediaItem, PlayerConfig, PlayerSource, ProgressSegment } from "@/types";
+import type {
+  MediaItem,
+  PlayerConfig,
+  PlayerSource,
+  ProgressSegment,
+} from "@/types";
 import type { Plugin } from "@/hili-player/core/plugin";
 import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
 import {
@@ -144,10 +149,16 @@ async function fetchProgressPreview(): Promise<
             img_y_size?: number;
           };
           index?: number[];
+          sprite?: { status?: string };
         };
       };
       const pv = payload.data?.pvdata;
-      if (pv?.img_url && pv.img_x_len && pv.img_y_len) {
+      // 只在服务端确认雪碧图可用时才走雪碧图模式；否则 img_url 可能指向 404，
+      // 预览区会整块空白（逐帧 preview.bin 才是可用的那条路）
+      const spriteReady =
+        payload.data?.sprite?.status === "ready" &&
+        pv?.img_url?.includes("sprite") === true;
+      if (spriteReady && pv?.img_url && pv.img_x_len && pv.img_y_len) {
         spriteSource = {
           imgUrl: `${MOCK_SERVER_BASE}${pv.img_url}`,
           imgXLen: pv.img_x_len,
@@ -229,7 +240,9 @@ function appendHydrationItem(item: HydrationItem): void {
       "</span>" +
       '<span class="label">' +
       escapeHtml(item.id) +
-      (item.detail ? '<div class="detail">' + escapeHtml(item.detail) + "</div>" : "") +
+      (item.detail
+        ? '<div class="detail">' + escapeHtml(item.detail) + "</div>"
+        : "") +
       "</span>";
     list.appendChild(el);
     list.scrollTop = list.scrollHeight;
@@ -248,7 +261,9 @@ function updateHydrationSummary(): void {
       const passCount = hydrationItems.filter((i) => i.pass).length;
       const failCount = hydrationItems.filter((i) => !i.pass).length;
       const total = hydrationItems.length;
-      span.textContent = `${passCount}/${total} 通过` + (failCount > 0 ? ` · ${failCount} 失败` : "");
+      span.textContent =
+        `${passCount}/${total} 通过` +
+        (failCount > 0 ? ` · ${failCount} 失败` : "");
       if (failCount > 0) {
         (span as HTMLElement).style.background = "rgba(248,113,113,0.15)";
         (span as HTMLElement).style.color = "#f87171";
@@ -312,10 +327,16 @@ appEventBus.on("ACTION_LOG", (data) => {
   if (logContent) {
     const entry = document.createElement("div");
     entry.className = "log-entry";
-    const time = new Date(data.timestamp).toLocaleTimeString("zh-CN", { hour12: false });
+    const time = new Date(data.timestamp).toLocaleTimeString("zh-CN", {
+      hour12: false,
+    });
     entry.innerHTML =
-      '<span class="time">[' + time + "]</span>" +
-      '<span class="msg">' + escapeHtml(data.action) + "</span>";
+      '<span class="time">[' +
+      time +
+      "]</span>" +
+      '<span class="msg">' +
+      escapeHtml(data.action) +
+      "</span>";
     logContent.appendChild(entry);
     logContent.scrollTop = logContent.scrollHeight;
 
@@ -387,14 +408,26 @@ if (root) {
       });
 
       // 监听播放器关键事件并写入日志
-      const playerEvents = ["ready", "play", "pause", "ended", "error", "destroy"];
+      const playerEvents = [
+        "ready",
+        "play",
+        "pause",
+        "ended",
+        "error",
+        "destroy",
+      ];
       playerEvents.forEach((evt) => {
         try {
-          (playerInstance as unknown as {
-            on: (e: string, cb: (...args: unknown[]) => void) => void;
-          }).on(evt, (...args: unknown[]) => {
+          (
+            playerInstance as unknown as {
+              on: (e: string, cb: (...args: unknown[]) => void) => void;
+            }
+          ).on(evt, (...args: unknown[]) => {
             appEventBus.emit("ACTION_LOG", {
-              action: "Player:" + evt + (args.length ? " " + JSON.stringify(args[0]).slice(0, 80) : ""),
+              action:
+                "Player:" +
+                evt +
+                (args.length ? " " + JSON.stringify(args[0]).slice(0, 80) : ""),
               timestamp: Date.now(),
             });
           });
@@ -519,7 +552,8 @@ const OBJECT_URLS: string[] = [];
 
 function collectPlugins(source?: PlayerSource): Plugin[] {
   const list: Plugin[] = [DanmakuPlugin()];
-  const text = typeof source === "string" ? source : JSON.stringify(source ?? "");
+  const text =
+    typeof source === "string" ? source : JSON.stringify(source ?? "");
   if (/\.m3u8(\?|$)/i.test(text)) {
     list.unshift(createHlsPlugin({ autoplay: false }));
   } else if (/\.mpd(\?|$)/i.test(text)) {
@@ -562,7 +596,8 @@ function sourceKind(item: MediaItem): string {
 
 function sourceTitle(item: MediaItem, index: number): string {
   if (item.title) return `${index + 1}. ${item.title}`;
-  if (typeof item.src === "string") return `${index + 1}. ${item.src.slice(0, 64)}`;
+  if (typeof item.src === "string")
+    return `${index + 1}. ${item.src.slice(0, 64)}`;
   return `${index + 1}. JSON 视频源`;
 }
 
@@ -607,7 +642,8 @@ function renderSourceList(): void {
   const current = playerInstance?.getCurrentIndex() ?? 0;
   MEDIA_LIST.forEach((item, index) => {
     const li = document.createElement("li");
-    li.className = index === current ? "source-item player-state-active" : "source-item";
+    li.className =
+      index === current ? "source-item player-state-active" : "source-item";
     li.dataset.index = String(index);
 
     const main = document.createElement("span");
@@ -689,7 +725,7 @@ async function rebuildPlayer(targetIndex: number): Promise<void> {
     playback: {
       autoplay: true,
       muted: true,
-      volume: 0.8,
+      volume: 0.3,
     },
     interaction: {
       keyboard: true,
@@ -714,7 +750,11 @@ async function rebuildPlayer(targetIndex: number): Promise<void> {
     }
     appEventBus.emit("ACTION_LOG", {
       action:
-        "视频列表 " + MEDIA_LIST.length + " 项，当前第 " + (targetIndex + 1) + " 项",
+        "视频列表 " +
+        MEDIA_LIST.length +
+        " 项，当前第 " +
+        (targetIndex + 1) +
+        " 项",
       timestamp: Date.now(),
     });
   } catch (e) {
@@ -741,7 +781,10 @@ function handleAddSource(): void {
     return;
   }
   input.value = "";
-  addSource(source, typeof source === "string" ? source.slice(0, 64) : "JSON 视频源");
+  addSource(
+    source,
+    typeof source === "string" ? source.slice(0, 64) : "JSON 视频源",
+  );
 }
 
 function handleLocalFile(event: Event): void {
