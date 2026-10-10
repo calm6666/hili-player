@@ -827,11 +827,11 @@ export class HlsPlugin implements StreamPlugin {
 
   /**
    * 取某个 level 的视频编码原始串（库原始 API → 我们的 codecString）
-   * 依据本地 hls-fork/dist/hls.d.ts：
+   * 依据本地 fork（packages/plugins/hls）的 dist/hls.d.ts：
    * - L3030 `readonly videoCodec: string | undefined`（清单解析出的视频编码，首选）
    * - L3077 `CODECS?: string`（LevelAttributes，即 #EXT-X-STREAM-INF 的 CODECS 原串，如 "avc1.640028,mp4a.40.2"）
    * - L3052 `get codecs(): string`（同一 CODECS 串的 getter）
-   * - L3023 `readonly codecSet: string`（由 videoCodec/audioCodec 拼成，见 hls-fork/src/types/level.ts:153）
+   * - L3023 `readonly codecSet: string`（由 videoCodec/audioCodec 拼成，见 hls/src/types/level.ts:153）
    *
    * @param level - hls.js 的 Level 对象
    * @returns 视频编码原始串；取不到返回 undefined
@@ -855,7 +855,7 @@ export class HlsPlugin implements StreamPlugin {
 
   /**
    * 取自动档当前实际生效的档位对象（供 UI 显示「自动(1080P 高清)」）
-   * 依据本地 hls-fork/dist/hls.d.ts：
+   * 依据本地 fork（packages/plugins/hls）的 dist/hls.d.ts：
    * - L1996-1998 `get currentLevel(): number`「Index of quality level (variant) currently played」
    *   —— 自动档下它返回 ABR 实际选中的档位索引（不是 -1），仅起播前为 -1
    * - L2014-2017 `get loadLevel(): number`（当前/最近一次加载片段的档位）
@@ -930,10 +930,10 @@ export class HlsPlugin implements StreamPlugin {
    * - 'auto' / '-1'：切回 ABR 自动档
    * - 其它：切到指定索引的真实档位
    *
-   * 「切回自动」的确切 API（依据本地 hls-fork/dist/hls.d.ts）：
+   * 「切回自动」的确切 API（依据本地 fork（packages/plugins/hls）的 dist/hls.d.ts）：
    * - L2000-2002 `set currentLevel(newLevel: number)`，其 JSDoc 明写
    *   「Set to -1 for automatic level selection」，因此 `currentLevel = -1` 就是切回自动的入口；
-   * - hls-fork/src/hls.ts:1022-1026 该 setter 内部执行 `levelController.manualLevel = -1`
+   * - hls/src/hls.ts:1022-1026 该 setter 内部执行 `levelController.manualLevel = -1`
    *   并调用 `streamController.immediateLevelSwitch()`，切换真实生效；
    * - autoLevelEnabled 是只读 getter（d.ts L2088-2090 / src/hls.ts:1220-1221
    *   `return this.levelController.manualLevel === -1`），不能直接赋值，

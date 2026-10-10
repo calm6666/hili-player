@@ -33,7 +33,7 @@ export default defineConfig({
       { find: /^@\/(.*)/, replacement: path.resolve(__dirname, 'packages/player/src/$1') },
 
       // ===== 外部库别名 =====
-      { find: 'hls.js', replacement: path.resolve(__dirname, 'hls-fork/dist/hls.mjs') },
+      { find: 'hls.js', replacement: path.resolve(__dirname, 'packages/plugins/hls/dist/hls.mjs') },
     ],
   },
   css: {

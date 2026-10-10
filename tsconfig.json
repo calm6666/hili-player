@@ -34,7 +34,7 @@
       "@/nova/*": ["packages/player/src/*"],
       "@/lumina/plugins/*": ["packages/plugins/src/*"],
       "@lumina/nova": ["packages/player/src/index.ts"],
-      "hls.js": ["hls-fork/dist/hls"]
+      "hls.js": ["packages/plugins/hls/dist/hls"]
     }
   },
   "include": [
@@ -48,7 +48,7 @@
     "plugins/**/*",
     "packages/player/src/**/*",
     "packages/plugins/src/**/*",
-    "hls-fork/dist/hls.d.ts",
+    "packages/plugins/hls/dist/hls.d.ts",
     "demo/**/*",
     "demo-prod/**/*"
   ],

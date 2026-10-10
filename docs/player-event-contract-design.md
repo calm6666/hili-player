@@ -265,6 +265,8 @@ private registerBusCallbacks(): void {
 
 ### 10.1 hls.js：fork 入库 + 新增缓冲速度 API（已定案）
 
+> **2026-10-10 迁移注记**：fork 已从仓库根 `hls-fork/` 迁出，现为独立仓库 `packages/plugins/hls`（git submodule，双远程 github.com/calm6666/hls.js + gitee.com/danding0000001/hls.js 独立维护）。本节下述路径为迁移前的历史记录。
+
 **决策**：不采用依赖关联，**把 fork 直接放进仓库**（用户决策）。
 
 **实施**：

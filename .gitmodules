@@ -1,0 +1,3 @@
+[submodule "packages/plugins/hls"]
+	path = packages/plugins/hls
+	url = https://github.com/calm6666/hls.js.git

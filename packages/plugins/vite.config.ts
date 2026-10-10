@@ -5,11 +5,12 @@ export default defineConfig({
   plugins: [
     dts({
       include: ['src/**/*'],
-      // 注意：hls.js 现在指向仓库根的 fork（../../hls.js/dist/hls.mjs）。
-      // dts 插件会按导入图把包外文件也镜像输出，路径会变成 dist/hls.js/dist/*，
+      // 注意：hls.js 现指向包内的独立 fork 仓库 hls/（git submodule，独立双远程维护）。
+      // dts 插件会按导入图把 fork 源文件也镜像输出（路径镜像成 dist/hls/...），
       // 与 rollup 要写出的入口 chunk（entryFileNames 的 hls → dist/hls.js）**同名冲突**，
-      // 导致 EISDIR 构建失败。故必须把 fork 目录排除在声明输出之外。
-      exclude: ['**/*.test.ts', '**/hls-fork/**'],
+      // 导致 EISDIR 构建失败。故必须把 fork 目录排除在声明输出之外；
+      // 'hls/**' 锚定包根的 fork 目录，不会误伤插件源码 src/hls/**。
+      exclude: ['**/*.test.ts', 'hls/**'],
       insertTypesEntry: true,
       entryRoot: 'src',
     }),
@@ -43,7 +44,7 @@ export default defineConfig({
       { find: /^@\/lumina\/plugins/, replacement: resolve(__dirname, 'src') },
       { find: /^@\/nova/, replacement: resolve(__dirname, '../player/src') },
       { find: /^@\//, replacement: resolve(__dirname, '../..') + '/' },
-      { find: 'hls.js', replacement: resolve(__dirname, '../../hls-fork/dist/hls.mjs') },
+      { find: 'hls.js', replacement: resolve(__dirname, 'hls/dist/hls.mjs') },
     ],
   },
 });

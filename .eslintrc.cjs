@@ -6,7 +6,7 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
     'plugin:@typescript-eslint/recommended-requiring-type-checking',
   ],
-  ignorePatterns: ['dist', '.eslintrc.cjs', 'node_modules', '**/vite.config.ts', 'hls-fork/**'],
+  ignorePatterns: ['dist', '.eslintrc.cjs', 'node_modules', '**/vite.config.ts', 'packages/plugins/hls/**'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     project: './tsconfig.json',

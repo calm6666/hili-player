@@ -22,7 +22,7 @@ export default defineConfig({
       { find: /^@\/events\/(.*)/, replacement: path.resolve(__dirname, '../events/$1') },
       { find: /^@\/error\/(.*)/, replacement: path.resolve(__dirname, '../error/$1') },
       { find: /^@\/(.*)/, replacement: path.resolve(__dirname, '../packages/player/src/$1') },
-      { find: 'hls.js', replacement: path.resolve(__dirname, '../hls-fork/dist/hls.mjs') },
+      { find: 'hls.js', replacement: path.resolve(__dirname, '../packages/plugins/hls/dist/hls.mjs') },
     ],
   },
 });
