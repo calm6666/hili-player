@@ -74,17 +74,28 @@
       }
 
       // ===== 曲线图区（码率 / 缓冲区 / 帧率，SVG 由 VideoInfo 采样重绘） =====
+      // 与上方信息行同一左右布局：左侧标签文字 + 右侧内容（曲线图）
       .info-chart-section {
+        display: flex;
+        align-items: center;
         margin-top: 12px;
 
         .info-chart-title {
+          // 与 .info-line .info-title 同列规范：宽 100px 右对齐 + 右间距 10px，
+          // 曲线图标签与信息行标签垂直对齐成整齐的左列
+          width: 100px;
+          flex-shrink: 0;
           color: #999;
           font-size: 12px;
           font-weight: 500;
-          margin-bottom: 6px;
+          text-align: right;
+          margin-right: 10px;
         }
 
         .info-chart-container {
+          // 右侧曲线图：弹性占满信息行数据列宽度，窄面板时按容器缩放
+          flex: 1;
+          min-width: 0;
           // 半透明底板衬托白色曲线（与旧版媒体面板图表容器一致）
           background: rgba(255, 255, 255, 0.05);
           border-radius: 4px;
