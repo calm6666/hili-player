@@ -9,6 +9,7 @@ import {
   defineComponent,
   useContext,
   useReactiveState,
+  useTemplateRef,
   signal,
   onEffect,
   For,
@@ -22,6 +23,17 @@ import {
   PlayerStateKeyEnum,
   type PlayerStateMap,
 } from "@/store/runtimeState";
+import {
+  generateBitrateChart,
+  generateBufferChart,
+  generateFPSChart,
+} from "../utils/media/chart";
+import { renderSvgMarkup } from "../utils/svgMarkup";
+import type {
+  BitrateDataPoint,
+  BufferDataPoint,
+  FrameRateDataPoint,
+} from "../utils/media/types";
 
 /**
  * 视频信息项接口
@@ -58,8 +70,27 @@ export interface VideoInfoApi {
   updateItem: (title: string, data: string) => void;
 }
 
-/** 刷新间隔（毫秒），Host 信息非响应式，仍需定时刷新 */
+/** 刷新间隔（毫秒），Host 信息非响应式，仍需定时刷新；图表采样同频复用 */
 const REFRESH_INTERVAL = 1000;
+
+/** 曲线图最多保留的采样点数（1Hz 采样下即 60 秒窗口） */
+const MAX_CHART_POINTS = 60;
+
+/** 曲线图尺寸（px）：宽取面板内容区宽度，高与旧版媒体面板一致 */
+const CHART_SIZE = { width: 280, height: 80 };
+
+/**
+ * 支持 Chrome 解码字节计数的 video 元素（webkitDecodedByteCount 非
+ * W3C 标准属性，lib.dom 无声明，经类型谓词而非 as 断言收窄）
+ */
+interface DecodedBytesVideo extends HTMLVideoElement {
+  /** 累计已解码视频字节数（Chrome 扩展），差分除以时间即估算码率 */
+  webkitDecodedByteCount?: number;
+}
+
+/** 类型谓词：判断 video 是否支持解码字节计数 */
+const hasDecodedBytes = (video: HTMLVideoElement): video is DecodedBytesVideo =>
+  "webkitDecodedByteCount" in video;
 
 /** 关闭图标（与既有实现的 Close 图标一致） */
 const CloseIcon = (): VNode =>
@@ -232,15 +263,165 @@ export const VideoInfo = defineComponent<VideoInfoProps>(
     };
 
     // ============================================
+    // 曲线图（码率 / 缓冲区 / 帧率，1Hz 采样 + SVG 重绘）
+    // 图表为命令式渲染：generateXxxChart 生成 SVG 标记串，
+    // renderSvgMarkup 解析后替换容器子节点（响应式系统不参与）
+    // ============================================
+
+    /** 面板根元素引用（用于向上定位播放器容器内的 video 元素） */
+    const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, "infoRootRef");
+
+    /** 三个图表容器引用（SVG 渲染目标） */
+    const bitrateChartRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "bitrateChartRef",
+    );
+    const bufferChartRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "bufferChartRef",
+    );
+    const fpsChartRef = useTemplateRef<HTMLDivElement>(lifecycle, "fpsChartRef");
+
+    /** 三条曲线的采样数据（环形窗口：超限丢弃最旧点） */
+    const bitrateData: BitrateDataPoint[] = [];
+    const bufferData: BufferDataPoint[] = [];
+    const fpsData: FrameRateDataPoint[] = [];
+
+    /** 差分基线（null 表示首次采样，只记基线不出数据点） */
+    let videoEl: HTMLVideoElement | null = null;
+    let lastSampleTime = 0;
+    let lastDecodedBytes: number | null = null;
+    let lastTotalFrames: number | null = null;
+    let lastDroppedFrames: number | null = null;
+
+    /**
+     * 定位播放器内的 video 元素：面板根向上找 .nova-player-container
+     * 再向下查 video（与 VideoPlayer 内部 closest 定位同一约定）
+     */
+    const findVideo = (): HTMLVideoElement | null => {
+      const root = rootRef.value;
+      if (!root) return null;
+      const container = root.closest(".nova-player-container");
+      const video = container?.querySelector("video");
+      return video instanceof HTMLVideoElement ? video : null;
+    };
+
+    /** 采样数据点入窗（环形窗口） */
+    const pushPoint = <T extends { timestamp: number }>(
+      data: T[],
+      point: T,
+    ): void => {
+      data.push(point);
+      if (data.length > MAX_CHART_POINTS) {
+        data.shift();
+      }
+    };
+
+    /**
+     * 一次采样 tick：差分三个指标（码率 / 缓冲秒数 / FPS）并重绘三张图
+     * - 码率：webkitDecodedByteCount 差分（Chrome 扩展，非 Chrome 内核
+     *   无该字段 → 码率曲线保持空图「等待数据...」）
+     * - 缓冲：buffered 末段与当前播放位置的差（缓冲秒数）
+     * - FPS / 丢帧：getVideoPlaybackQuality 标准接口的帧计数差分
+     */
+    const sampleCharts = (): void => {
+      if (!videoEl) {
+        videoEl = findVideo();
+        // video 就位（或切换清晰度换元素）时重置差分基线，避免跨元素差分
+        if (videoEl) {
+          lastDecodedBytes = null;
+          lastTotalFrames = null;
+          lastDroppedFrames = null;
+        }
+      }
+      if (!videoEl) return;
+
+      const now = Date.now();
+      const elapsed = lastSampleTime > 0 ? (now - lastSampleTime) / 1000 : 0;
+      lastSampleTime = now;
+
+      // 视频缓冲秒数（buffered 末段 - 当前播放位置）
+      const buffered = videoEl.buffered;
+      const bufferAhead =
+        buffered.length > 0
+          ? Math.max(0, buffered.end(buffered.length - 1) - videoEl.currentTime)
+          : 0;
+      pushPoint(bufferData, {
+        timestamp: now,
+        videoBuffer: bufferAhead,
+        audioBuffer: 0,
+      });
+
+      // 帧率 / 丢帧率（getVideoPlaybackQuality 为标准接口）
+      if (typeof videoEl.getVideoPlaybackQuality === "function") {
+        const quality = videoEl.getVideoPlaybackQuality();
+        const total = quality.totalVideoFrames;
+        const dropped = quality.droppedVideoFrames;
+        if (lastTotalFrames !== null && lastDroppedFrames !== null && elapsed > 0) {
+          pushPoint(fpsData, {
+            timestamp: now,
+            fps: Math.max(0, (total - lastTotalFrames) / elapsed),
+            droppedFrames: Math.max(0, dropped - lastDroppedFrames),
+          });
+        }
+        lastTotalFrames = total;
+        lastDroppedFrames = dropped;
+      }
+
+      // 码率（Chrome 扩展属性，差分估算解码码率）
+      if (hasDecodedBytes(videoEl)) {
+        const bytes = videoEl.webkitDecodedByteCount;
+        if (typeof bytes === "number") {
+          if (lastDecodedBytes !== null && elapsed > 0) {
+            const bps = Math.max(0, ((bytes - lastDecodedBytes) * 8) / elapsed);
+            pushPoint(bitrateData, {
+              timestamp: now,
+              totalBitrate: bps,
+              videoBitrate: bps,
+              audioBitrate: 0,
+            });
+          }
+          lastDecodedBytes = bytes;
+        }
+      }
+
+      // 重绘三张图（renderSvgMarkup 负责解析与挂载，空数据时图表自绘占位）
+      renderSvgMarkup(
+        bitrateChartRef.value,
+        generateBitrateChart(bitrateData, CHART_SIZE),
+      );
+      renderSvgMarkup(
+        bufferChartRef.value,
+        generateBufferChart(bufferData, CHART_SIZE),
+      );
+      renderSvgMarkup(
+        fpsChartRef.value,
+        generateFPSChart(fpsData, CHART_SIZE),
+      );
+    };
+
+    // ============================================
     // 显隐控制（signal 驱动根节点 class，编译器自动 __reactiveAttrs + normalizeClass）
     // ============================================
 
-    /** 显示信息面板，并启动定时刷新 Host */
+    /**
+     * 定时刷新 tick：Host 刷新 + 曲线图采样（同一频率，共用定时器）
+     */
+    const refreshTick = (): void => {
+      refreshHostInfo();
+      sampleCharts();
+    };
+
+    /**
+     * 显示信息面板，并启动定时刷新（Host + 图表采样）
+     */
     const open = (): void => {
       visibleSignal.value = true;
       if (refreshTimer === null) {
-        refreshHostInfo();
-        refreshTimer = setInterval(refreshHostInfo, REFRESH_INTERVAL);
+        // 重置采样时钟：面板重开时 elapsed 从本次算起，避免休眠期大跳变
+        lastSampleTime = 0;
+        refreshTick();
+        refreshTimer = setInterval(refreshTick, REFRESH_INTERVAL);
       }
     };
 
@@ -289,6 +470,8 @@ export const VideoInfo = defineComponent<VideoInfoProps>(
           "nova-player-info-container",
           { "nova-player-active": visibleSignal.value },
         ],
+        // 面板根引用：曲线图采样时向上定位播放器容器内的 video 元素
+        ref: "infoRootRef",
       },
       h(
         "div",
@@ -330,6 +513,26 @@ export const VideoInfo = defineComponent<VideoInfoProps>(
             );
           },
         }),
+        // ===== 三个曲线图（信息行下方，1Hz 采样差分：码率 / 缓冲 / 帧率） =====
+        // 命令式 SVG 渲染区：容器 ref 供 sampleCharts 写入，首次采样前为空
+        h(
+          "div",
+          { class: "info-chart-section" },
+          h("div", { class: "info-chart-title" }, "码率曲线"),
+          h("div", { class: "info-chart-container", ref: "bitrateChartRef" }),
+        ),
+        h(
+          "div",
+          { class: "info-chart-section" },
+          h("div", { class: "info-chart-title" }, "缓冲区曲线"),
+          h("div", { class: "info-chart-container", ref: "bufferChartRef" }),
+        ),
+        h(
+          "div",
+          { class: "info-chart-section" },
+          h("div", { class: "info-chart-title" }, "帧率曲线"),
+          h("div", { class: "info-chart-container", ref: "fpsChartRef" }),
+        ),
       ),
     );
   },

@@ -244,12 +244,17 @@
 .danmaku-x-liked-icon {
   position: absolute;
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  // 负左移把图标挂到弹幕文字左前方（absolute 静态位置 = 文字起点）
-  margin: 0 0 0 -20px;
+  // 尺寸用 em 相对弹幕元素字号（--fontSize）：基准字号 25px 时
+  // 图标 16px（0.64em），随用户字号缩放与屏幕自适应同步缩放，
+  // 不再固定像素大小（否则小字号弹幕旁图标显得过大不协调）
+  width: 0.64em;
+  height: 0.64em;
+  // 负左移同样按字号等比（基准 -20px ≈ -0.8em），图标恒挂文字左前方
+  margin: 0 0 0 -0.8em;
   opacity: 0;
-  font-size: 0;
+  // 注意不能 font-size:0（参考 CSS 原本用于消 inline-block 空隙）：
+  // em 尺寸参照本元素 font-size，归零会让 0.64em 宽高全部变 0；
+  // 行内空隙问题已由 svg display:block 消除，此处保留继承字号作 em 基准
   vertical-align: bottom;
   // 图标不劫持弹幕 hover 命中（引擎事件委托在弹幕层，命中判定按弹幕元素）
   pointer-events: none;

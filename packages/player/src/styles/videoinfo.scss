@@ -13,6 +13,11 @@
     top: 10px;
     z-index: 80;
     display: none;
+    // 面板含 9 行信息 + 3 张曲线图后高度可观：限高滚动避免小屏溢出播放器
+    // （百分比参照包含块 .nova-player-container 高度，absolute 定位可解析；
+    // top 10px + 底部余量 10px）
+    max-height: calc(100% - 20px);
+    overflow-y: auto;
 
     span {
       display: inline-block;
@@ -65,6 +70,31 @@
           text-overflow: ellipsis;
           max-width: 470px;
           vertical-align: middle;
+        }
+      }
+
+      // ===== 曲线图区（码率 / 缓冲区 / 帧率，SVG 由 VideoInfo 采样重绘） =====
+      .info-chart-section {
+        margin-top: 12px;
+
+        .info-chart-title {
+          color: #999;
+          font-size: 12px;
+          font-weight: 500;
+          margin-bottom: 6px;
+        }
+
+        .info-chart-container {
+          // 半透明底板衬托白色曲线（与旧版媒体面板图表容器一致）
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 4px;
+          padding: 8px;
+
+          svg {
+            display: block;
+            max-width: 100%;
+            height: auto;
+          }
         }
       }
     }
