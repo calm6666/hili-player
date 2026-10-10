@@ -97,6 +97,10 @@ class AudioEffectPluginClass implements AudioEffectPluginAPI {
   private unsubscribers: Array<() => void> = [];
   /** 初始音量（dB），由配置传入 */
   private initialVolume: number;
+  /** video 的 play 事件回调 —— 每次播放时确保 AudioContext 恢复 running */
+  private readonly handlePlayResume = (): void => {
+    this.tryResume();
+  };
 
   constructor(config?: AudioEffectPluginConfig) {
     this.options = config?.options;
@@ -128,6 +132,12 @@ class AudioEffectPluginClass implements AudioEffectPluginAPI {
    */
   private initAudio(): void {
     if (!this.video) return;
+    // 幂等守卫：createMediaElementSource 对同一元素仅允许调用一次，
+    // 同一 video 的重复 MOUNTED 不能二次接管（二次调用抛 InvalidStateError）
+    if (this.mediaSource) {
+      logger.warn('音效链已初始化，跳过重复接管');
+      return;
+    }
     // 检查 AudioContext 是否可用
     if (typeof window.AudioContext !== 'function') {
       logger.warn('当前环境不支持 AudioContext，音效插件不可用');
@@ -146,10 +156,52 @@ class AudioEffectPluginClass implements AudioEffectPluginAPI {
       );
       // gain → destination 的连接由 EffectChain.init 负责，避免重复 connect
       this.effectChain.setVolume(this.initialVolume);
+      // 接管后 video 的音频全部改道进 Web Audio 图。但浏览器 autoplay 策略下，
+      // 无用户手势时 AudioContext 处于 suspended —— 表现为所有源（mp4/hls/dash）
+      // 全部无声，且 Chrome 对 suspended 图中被接管的媒体元素会冻结帧推进
+      // （暂停后再播放画面卡死）。修复：订阅 video 的 play 事件（用户点击播放时
+      // 文档已有 sticky activation），每次播放都确保 ctx 处于 running
+      this.video.addEventListener('play', this.handlePlayResume);
+      this.tryResume();
       logger.info('音效链初始化成功');
     } catch (err) {
       logger.error('音效链初始化失败:', err);
     }
+  }
+
+  /**
+   * 尝试恢复 AudioContext 至 running
+   * suspended 才动作；resume 彻底失败（无法获得用户激活）时放弃接管并 close，
+   * close 后 media element 恢复直接输出原生音频 —— 宁可音效失效也不能无声/卡帧
+   */
+  private tryResume(): void {
+    const ctx = this.audioCtx;
+    if (!ctx || ctx.state !== 'suspended') return;
+    ctx.resume().catch((): void => {
+      logger.warn('AudioContext 恢复失败，放弃音频接管（回退视频原生音频输出）');
+      this.releaseAudioGraph();
+    });
+  }
+
+  /**
+   * 释放 Web Audio 图：移除 play 监听、销毁效果链、close AudioContext
+   * close 后 createMediaElementSource 对 video 的接管解除，原生音频恢复
+   */
+  private releaseAudioGraph(): void {
+    if (this.video) {
+      this.video.removeEventListener('play', this.handlePlayResume);
+    }
+    this.effectChain?.destroy();
+    this.effectChain = null;
+    const ctx = this.audioCtx;
+    if (ctx) {
+      ctx.close().catch((): void => {
+        // 关闭失败忽略
+      });
+    }
+    this.audioCtx = null;
+    this.mediaSource = null;
+    this.gain = null;
   }
 
   // ==================== 公共 API ====================
@@ -190,25 +242,14 @@ class AudioEffectPluginClass implements AudioEffectPluginAPI {
   }
 
   /**
-   * 卸载插件：取消订阅 + 销毁效果链 + 关闭 AudioContext
+   * 卸载插件：取消订阅 + 释放音频图（销毁效果链 + 关闭 AudioContext）
    */
   uninstall(): void {
     // 取消所有事件订阅
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
-    // 销毁效果链
-    this.effectChain?.destroy();
-    this.effectChain = null;
-    // 关闭 AudioContext（异步，失败忽略）
-    const ctx = this.audioCtx;
-    if (ctx) {
-      ctx.close().catch((): void => {
-        // 关闭失败忽略
-      });
-    }
-    this.audioCtx = null;
-    this.mediaSource = null;
-    this.gain = null;
+    // 释放 Web Audio 图（含 play 监听移除与 AudioContext close）
+    this.releaseAudioGraph();
     this.video = null;
     this.eventBus = null;
   }
