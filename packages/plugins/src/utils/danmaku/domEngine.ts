@@ -61,6 +61,13 @@ const SPEED_MULTIPLIERS: Record<DanmakuSpeed, number> = {
   [DanmakuSpeed.VERY_FAST]: 2.0,
 };
 
+/**
+ * 点赞图标 SVG（B 站点赞手势，参考 DOM 提取）
+ * 常驻插入每条弹幕元素内（absolute + opacity:0 不参与布局，DanmakuTip
+ * 点赞后或后端点赞数 > 0 时经 .danmaku-x-liked 类切换为 opacity:1）
+ */
+const LIKED_ICON_SVG = `<svg data-pointer="none" viewBox="0 0 24 24"><path d="M4.909 8.543v15.275h-1.78a2.944 2.944 0 0 1-2.947-2.94v-9.395c0-1.624 1.32-2.94 2.948-2.94zm8.64-8.114c1.282.62 2.128 2.183 2.128 4.272q0 1.875-.468 3.842h5.655a2.955 2.955 0 0 1 2.868 3.662l-1.865 7.568a5.32 5.32 0 0 1-5.163 4.045H6.682V8.508l.132-.047c2.316-.894 3.634-3.072 3.957-6.64C10.9.396 12.256-.196 13.548.428"></path></svg>`;
+
 export class DOMEngine {
   private container: HTMLElement;
   private danmakuLayer: HTMLElement;
@@ -534,8 +541,16 @@ export class DOMEngine {
     // 获取元素
     const element = this.elementPool.acquire();
 
-    // 设置内容
-    element.textContent = item.text;
+    // 组装内容：常驻点赞图标（absolute 定位 + opacity:0，不参与布局与
+    // 尺寸测量，DanmakuTip 点赞后经 .danmaku-x-liked 类淡入，与后端
+    // 点赞数 > 0 的初始态同一机制）+ 弹幕文本节点；
+    // replaceChildren 先清空池化复用元素的旧内容（图标 + 文本），池回收
+    // 侧 release 也会以 textContent='' 兜底清理
+    element.replaceChildren();
+    const likedIcon = document.createElement("span");
+    likedIcon.className = "danmaku-x-liked-icon";
+    likedIcon.innerHTML = LIKED_ICON_SVG;
+    element.append(likedIcon, document.createTextNode(item.text));
 
     // 计算字体大小（含用户缩放与屏幕自适应因子）
     const fontSize = this.getEffectiveFontSize(item.fontSize);
@@ -546,9 +561,16 @@ export class DOMEngine {
     const color = item.color || "#ffffff";
     // 判断是否为自己发布的弹幕（uid为1表示本人），追加 danmaku-x-self 白框高亮
     const isSelf = item.uid === 1 || item.uid === "1";
-    element.className = isSelf
-      ? "danmaku-x-dm danmaku-x-show danmaku-x-self"
-      : "danmaku-x-dm danmaku-x-show";
+    // 后端返回的点赞数 > 0：弹幕文字前置点亮点赞图标（danmaku-x-liked）
+    const isLiked = (item.like ?? 0) > 0;
+    element.className = [
+      "danmaku-x-dm",
+      "danmaku-x-show",
+      isSelf ? "danmaku-x-self" : "",
+      isLiked ? "danmaku-x-liked" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     element.style.setProperty("--fontSize", `${fontSize}px`);
     element.style.setProperty("--color", color);
     element.style.setProperty("--opacity", `${this.config.opacity}`);

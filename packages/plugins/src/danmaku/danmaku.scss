@@ -236,6 +236,40 @@
   box-sizing: border-box;
 }
 
+/* ============================================
+ * 弹幕点赞图标（文字前置，B 站点赞手势）
+ * 常驻于每条弹幕元素内：absolute 定位 + opacity:0 不参与布局与
+ * 尺寸测量；后端点赞数 > 0 或 Tip 点赞后挂 .danmaku-x-liked 淡入
+ * ============================================ */
+.danmaku-x-liked-icon {
+  position: absolute;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  // 负左移把图标挂到弹幕文字左前方（absolute 静态位置 = 文字起点）
+  margin: 0 0 0 -20px;
+  opacity: 0;
+  font-size: 0;
+  vertical-align: bottom;
+  // 图标不劫持弹幕 hover 命中（引擎事件委托在弹幕层，命中判定按弹幕元素）
+  pointer-events: none;
+  transition: opacity 150ms ease-in-out;
+  -webkit-transition: opacity 150ms ease-in-out;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    // 跟随弹幕文字颜色（白字白色图标，彩字弹幕图标随字色）
+    fill: currentColor;
+  }
+}
+
+/* 点赞态：图标淡入显示（挂类由 domEngine 初始渲染 / DanmakuTip 点赞触发） */
+.danmaku-x-dm.danmaku-x-liked .danmaku-x-liked-icon {
+  opacity: 1;
+}
+
 /* 引擎层暂停：与根容器 .nova-player-row-dm-wrap.danmaku-x-paused 同一机制 */
 .danmaku-layer.danmaku-x-paused {
   .danmaku-x-dm {
@@ -310,13 +344,19 @@
       -webkit-box-sizing: border-box;
       box-sizing: border-box;
       cursor: pointer;
-      height: 23px;
-      left: 20px;
+      height: 32px;
+      left: 13px;
       position: absolute;
       text-align: center;
-      top: 16px;
-      width: 23px;
+      border-radius: 4px;
+      top: 10px;
+      width: 32px;
       z-index: 2;
+      display: -webbkit-flex;
+      display: -ms-flexbox;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .nova-player-dm-tip-like-num {
@@ -337,6 +377,12 @@
     .nova-player-dm-tip-back,
     .nova-player-dm-tip-recall {
       left: 120px;
+    }
+    .nova-player-dm-tip-back:hover,
+    .nova-player-dm-tip-copy:hover,
+    .nova-player-dm-tip-like:hover,
+    .nova-player-dm-tip-recall:hover {
+      background: rgba(47, 50, 56, 0.898);
     }
   }
 
@@ -418,35 +464,33 @@
 /* ============================================
  * Tip 按钮 SVG 基础形态（铺满按钮热区）
  * ============================================ */
-.nova-player-dm-tip-wrap {
-  .nova-player-dm-tip {
-    .nova-player-dm-tip-like svg,
-    .nova-player-dm-tip-copy svg,
-    .nova-player-dm-tip-recall svg,
-    .nova-player-dm-tip-back svg {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
+.nova-player-dm-tip {
+  .nova-player-dm-tip-like svg,
+  .nova-player-dm-tip-copy svg,
+  .nova-player-dm-tip-recall svg,
+  .nova-player-dm-tip-back svg {
+    display: block;
+    width: 23px;
+    height: 23px;
+  }
 
-    /* 点赞按钮：描边版与实心版双 SVG 叠放，经点赞态类切换显隐 */
-    .nova-player-dm-tip-like svg {
-      position: absolute;
-      inset: 0;
-    }
+  /* 点赞按钮：描边版与实心版双 SVG 叠放，经点赞态类切换显隐 */
+  // .nova-player-dm-tip-like svg {
+  //   position: absolute;
+  //   inset: 0;
+  // }
 
-    .nova-player-dm-tip-like svg:last-of-type {
-      display: none;
-    }
+  .nova-player-dm-tip-like svg:last-of-type {
+    display: none;
+  }
 
-    /* 点赞后图标填充白色（实心拇指替换描边拇指） */
-    .nova-player-dm-tip-like.nova-player-dm-tip-liked svg:first-of-type {
-      display: none;
-    }
+  /* 点赞后图标填充白色（实心拇指替换描边拇指） */
+  .nova-player-dm-tip-like.nova-player-dm-tip-liked svg:first-of-type {
+    display: none;
+  }
 
-    .nova-player-dm-tip-like.nova-player-dm-tip-liked svg:last-of-type {
-      display: block;
-    }
+  .nova-player-dm-tip-like.nova-player-dm-tip-liked svg:last-of-type {
+    display: block;
   }
 }
 
@@ -474,8 +518,12 @@
     top: 100%;
     -webkit-transform: translateX(-50%);
     transform: translateX(-50%);
-    -webkit-transition: opacity 0.12s ease, visibility 0.12s ease;
-    transition: opacity 0.12s ease, visibility 0.12s ease;
+    -webkit-transition:
+      opacity 0.12s ease,
+      visibility 0.12s ease;
+    transition:
+      opacity 0.12s ease,
+      visibility 0.12s ease;
     visibility: hidden;
     white-space: nowrap;
     z-index: 3;

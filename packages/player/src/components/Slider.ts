@@ -101,6 +101,23 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
       100
     );
 
+    // 带 dot 档位（marks）的滑块：吸附到最近档位 —— dot 才是离散步长的
+    // 事实来源（如区域/速度滑块 5 档，相邻档位间距 25），拖动/点击只落
+    // 在档位值上；此前仅按 step 小步吸附，会在档位之间出现大量中间值，
+    // 观感即「带 dot 却一步一步走」
+    if (props.marks && props.marks.length > 0) {
+      let nearest = props.marks[0].value;
+      let minDist = Math.abs(percentage - nearest);
+      for (const mark of props.marks) {
+        const dist = Math.abs(percentage - mark.value);
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = mark.value;
+        }
+      }
+      return nearest;
+    }
+
     if (step !== 1) {
       return Math.min(
         Math.max(0, Math.round(percentage / step) * step),

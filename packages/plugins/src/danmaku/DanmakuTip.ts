@@ -259,7 +259,9 @@ export class DanmakuTip {
     likeNum.className = "nova-player-dm-tip-like-num";
     likeNum.textContent = "0";
 
-    // 点赞点击：切换点赞态（+1 / -1）、切换图标填充形态并外抛回调
+    // 点赞点击：切换点赞态（+1 / -1）、切换图标填充形态、同步弹幕文字
+    // 前置的点赞图标（挂/摘 danmaku-x-liked 类，初始渲染 like>0 同一
+    // 机制）并外抛回调
     const handleLikeClick = (e: Event) => {
       e.stopPropagation();
       const item = this.currentItem;
@@ -272,6 +274,15 @@ export class DanmakuTip {
         this.likedIds.delete(key);
       }
       item.like = Math.max(0, (item.like ?? 0) + (liked ? 1 : -1));
+      // 同步弹幕元素上的点赞图标：点赞即点亮；取消后计数归零才熄灭
+      // （他人点赞数仍在的弹幕，仅撤销本人那一次时不熄灭图标）
+      if (item.element) {
+        if (liked) {
+          item.element.classList.add("danmaku-x-liked");
+        } else if ((item.like ?? 0) <= 0) {
+          item.element.classList.remove("danmaku-x-liked");
+        }
+      }
       this.applyLikeState();
       this.handlers.onLike?.(item, liked);
     };

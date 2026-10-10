@@ -618,7 +618,7 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
                 t("player.ui.dmsetting.area"),
                 {
                   value: 50,
-                  step: 5,
+                  // 带 dot 档位滑块：档位吸附由 Slider 的 marks 逻辑接管（步长即相邻档位间距）
                   marks: AREA_MARKS,
                   onChange: handleAreaChange,
                   onMounted: (api) => {
@@ -688,7 +688,7 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
                 t("player.ui.dmsetting.speed"),
                 {
                   value: 50,
-                  step: 5,
+                  // 带 dot 档位滑块：档位吸附由 Slider 的 marks 逻辑接管（步长即相邻档位间距）
                   marks: getSpeedMarks(),
                   onChange: handleSpeedChange,
                   onMounted: (api) => {
