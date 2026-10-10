@@ -163,6 +163,9 @@ export class DanmakuTip {
     }
     // 取消移出隐藏（快速 out→in 切换时保证展示不中断）
     cancelRaf(this.outTimer!);
+    // 取消旧展示防抖（连续 hover 命中时旧回调存活会重复触发显示逻辑
+    // 并连锁覆盖 inTimer，造成新一套泄漏，同样无法被 mouseenter 取消）
+    cancelRaf(this.delayTimer!);
     // 立即挂起该弹幕：先暂停后展示 Tip，位置与鼠标所见一致
     this.bindItem(item);
     this.delayTimer = rafTimeout(() => {
@@ -200,11 +203,19 @@ export class DanmakuTip {
     if (this.inTip) return;
     cancelRaf(this.delayTimer!);
     cancelRaf(this.inTimer!);
+    // 取消旧 outTimer：移向 Tip 途中 mouseout(弹幕) 与 mouseleave(弹幕层)
+    // 会连续两次触发 hide()，若直接覆盖引用则旧定时器成为无法被 Tip
+    // mouseenter 取消的「幽灵定时器」，200ms 后照样强制隐藏——观感即
+    // 「移到 Tip 上约 0.2 秒后消失、按钮图标全部点不了」
+    cancelRaf(this.outTimer!);
     // 打开「弹幕 → 操作条」移动通道：200ms 内鼠标进入操作条则由
     // mouseenter 取消本定时器保持展示；通道内路过的弹幕被 show 守卫忽略
     this.movingToTip = true;
     this.outTimer = rafTimeout(() => {
       this.movingToTip = false;
+      // inTip 兜底守卫：即便存在未取消干净的历史定时器（竞态），
+      // 鼠标在操作条内交互期间也绝不隐藏——按钮点击与气泡展示不被打断
+      if (this.inTip) return;
       this.tip?.classList.add("nova-player-hide");
       this.isShow = false;
       this.releaseItem();
