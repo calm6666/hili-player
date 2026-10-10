@@ -115,6 +115,10 @@ export const REVERB_PRESETS: ReverbPresetTable = {
 /**
  * Compressor 预设表
  * - default：通用压缩参数（适合大多数视频源）
+ * - loudnessStandard：设置面板「音量均衡·标准」—— 较高阈值提前触发 +
+ *   高比率强压缩，把忽大忽小的节目响度拉平（对白/夜间观看友好）
+ * - loudnessDynamic：设置面板「音量均衡·高动态」—— 深阈值只压峰值 +
+ *   低比率温和压缩，保留节目的动态起伏（音乐/电影场景）
  */
 export const COMPRESSOR_PRESETS: CompressorPresetTable = {
   default: {
@@ -123,6 +127,20 @@ export const COMPRESSOR_PRESETS: CompressorPresetTable = {
     ratio: 12,
     attack: 0.003,
     release: 0.25,
+  },
+  loudnessStandard: {
+    threshold: -18,
+    knee: 24,
+    ratio: 12,
+    attack: 0.003,
+    release: 0.25,
+  },
+  loudnessDynamic: {
+    threshold: -32,
+    knee: 12,
+    ratio: 4,
+    attack: 0.01,
+    release: 0.4,
   },
 };
 

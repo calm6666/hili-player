@@ -59,6 +59,8 @@ export interface AudioEffectPluginAPI extends Plugin {
   setReverbPreset(preset: ReverbPresetName): void;
   /** 设置音量（dB） */
   setVolume(db: number): void;
+  /** 设置音量均衡模式（0 关闭 / 1 标准 / 2 高动态，设置面板「音量均衡」接线） */
+  setLoudness(mode: number): void;
   /** 应用效果组合预设 */
   selectCombination(preset: CombinationPresetName): void;
   /** 获取效果名列表 */
@@ -124,6 +126,19 @@ class AudioEffectPluginClass implements AudioEffectPluginAPI {
       }
     });
     this.unsubscribers.push(unsub);
+    // 订阅音效设置变化：设置面板「音量均衡」经 VideoPlayer.setLoudness 广播
+    // （{ effect: 'loudness', mode }），此处接入真实音频链路 —— 压缩器按模式
+    // 激活/停用并应用对应参数。订阅在 install 期注册（早于 MOUNTED），
+    // 面板操作与挂载期初始偏好恢复广播均不会漏接
+    const unsubEffect = this.eventBus.on(
+      PlayerEventEnum.AUDIO_EFFECT_CHANGE,
+      (data): void => {
+        if (data && data.effect === 'loudness') {
+          this.setLoudness(data.mode);
+        }
+      },
+    );
+    this.unsubscribers.push(unsubEffect);
   }
 
   /**
@@ -224,6 +239,11 @@ class AudioEffectPluginClass implements AudioEffectPluginAPI {
   /** 设置音量（dB） */
   setVolume(db: number): void {
     this.effectChain?.setVolume(db);
+  }
+
+  /** 设置音量均衡模式（0 关闭 / 1 标准 / 2 高动态），转发效果链处理 */
+  setLoudness(mode: number): void {
+    this.effectChain?.setLoudness(mode);
   }
 
   /** 应用效果组合预设 */

@@ -24,7 +24,12 @@ import type {
   ReverbPresetName,
   CombinationPresetName,
 } from '../types';
-import { COMBINATION_PRESETS, EQ_PRESETS, REVERB_PRESETS } from '../presets';
+import {
+  COMBINATION_PRESETS,
+  COMPRESSOR_PRESETS,
+  EQ_PRESETS,
+  REVERB_PRESETS,
+} from '../presets';
 import { db2gain } from '../utils';
 import { EffectBase } from './EffectBase';
 import { EQEffect } from './EQEffect';
@@ -176,6 +181,33 @@ export class EffectChain {
   setVolume(db: number): void {
     if (!this.gain || !this.audioCtx) return;
     this.gain.gain.setTargetAtTime(db2gain(db), this.audioCtx.currentTime, 0.015);
+  }
+
+  /**
+   * 设置音量均衡模式（设置面板「音量均衡」的真实接线入口）
+   *
+   * 0 关闭 → 停用压缩器（干声直连恢复原声直放）；
+   * 1 标准 → 应用 loudnessStandard 参数（强压缩拉平响度）并激活压缩器；
+   * 2 高动态 → 应用 loudnessDynamic 参数（温和压缩保留动态）并激活压缩器。
+   * 参数应用先于激活：先 setData 再 setEffectActive，避免激活瞬间以
+   * default 参数短暂生效造成听感跳变
+   * @param mode - 0 关闭 / 1 标准 / 2 高动态
+   */
+  setLoudness(mode: number): void {
+    const state = this.effectsObj.compressor;
+    if (!(state.node instanceof CompressorEffect)) return;
+    if (mode === 0) {
+      this.setEffectActive('compressor', false);
+      return;
+    }
+    // 先应用对应模式的压缩参数（未激活时节点已存在，setData 安全）
+    state.node.setData(
+      mode === 2
+        ? COMPRESSOR_PRESETS.loudnessDynamic
+        : COMPRESSOR_PRESETS.loudnessStandard,
+    );
+    // 再激活压缩器（内部幂等守卫：已激活时不重复连接）
+    this.setEffectActive('compressor', true);
   }
 
   /**

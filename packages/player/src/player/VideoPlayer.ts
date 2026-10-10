@@ -1078,6 +1078,17 @@ export class VideoPlayer
           sendingArea: elements.sendingArea,
         });
 
+        // 恢复音量均衡偏好：配置/持久化里的非零 loudness 在挂载后广播一次，
+        // 音效插件（MOUNTED 回调内已完成音效链构建）据此激活压缩器，
+        // 保证刷新/重建后面板设置与实际音频链路状态一致
+        const initialLoudness = this.props.playback?.loudness ?? 0;
+        if (initialLoudness !== 0) {
+          this.events.emit(PlayerEventEnum.AUDIO_EFFECT_CHANGE, {
+            effect: 'loudness',
+            mode: initialLoudness,
+          });
+        }
+
         // 流媒体模式：通过中间件加载源
         // 清单对象（sources 为空数组）也必须在此处完成首帧加载，
         // 否则对象注入模式下首屏只会出现空壳 DOM。
