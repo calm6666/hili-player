@@ -2,8 +2,9 @@
 
 > 极简 TypeScript 视频播放器 —— 基于自研「零 diff」框架构建，视觉与交互对齐哔哩哔哩播放器。
 
-`hili-player` 是一个从零实现的 Web 视频播放器。它不依赖任何 UI 框架，运行时**不做虚拟 DOM diff**：
-挂载完成后由业务代码直接操作真实 DOM。播放器本体、弹幕、字幕、HLS / DASH / FLV 流媒体与互动插件
+`hili-player` 是一个从零实现的 Web 视频播放器。它不依赖任何 UI 框架，没有虚拟 DOM diff：
+挂载期把 VNode 一次性物化为真实 DOM，运行期由自研 Signals 做依赖收集与精准节点更新。
+播放器本体、弹幕、字幕、HLS / DASH / FLV 流媒体与互动插件
 拆分在两个包中，可以整体引入，也可以按需使用。
 
 - 纯 TypeScript，`strict` 全开，零 `any` 债
@@ -16,9 +17,9 @@
 
 | 能力 | 说明 |
 | --- | --- |
-| **零 diff 运行时** | 挂载期由 `h()` 生成 VNode，一次性 `materialize` 成真实 DOM；运行期不 diff、不重渲染、不做响应式依赖收集，性能与手写原生 JS 等价 |
-| **编译期优化** | `vite-plugin-lumina-compile` 用 babel + MagicString 把 `h()` 改写为 `_createEl` / `_createStaticEl` / `_createSvgEl` / `_createFragment` / `_createComp`，生产构建额外做静态提升（`_cloneHoisted`）；dev 模式零开销 |
-| **三套流媒体** | HLS（内置 fork 版 hls.js，支持 URL 与清单对象注入）、DASH（dashjs）、FLV（flv.js） |
+| **Signal 响应式运行时** | 挂载期由 `h()` 生成 VNode，一次性 `materialize` 成真实 DOM；运行期由自研 Signals 做依赖收集与精准 DOM 更新——无虚拟 DOM diff、无整树重渲染，性能关键逐帧场景保留命令式路径 |
+| **编译期优化** | `vite-plugin-lumina-compile` 用 babel + MagicString 把 `h()` 改写为 `_createEl` / `_createStaticEl` / `_createSvgEl` / `_createFragment` / `_createComp`，自动包装响应式属性（`__reactiveAttrs`，class/style 支持对象与数组格式）与响应式文本（`() => expr` 显式 getter 协议 → `_reactiveText`），生产构建额外做静态子树 DOM 化（`tmplStatic`）与静态提升（`_cloneHoisted`）；dev 模式零开销 |
+| **三套流媒体** | HLS（fork 版 hls.js，独立子模块仓库 `packages/plugins/hls`，支持 URL 与清单对象注入）、DASH（dashjs）、FLV（flv.js） |
 | **完整画质链路** | 原生多文件 / HLS / DASH 三源统一档位模型；`auto` / `manual` 双模式、ABR、切换生命周期（requested → rendered / failed，10s 超时兜底） |
 | **弹幕双引擎** | DOM 与 Canvas 可切换，含轨道管理、对象池、增量调度与预取 |
 | **字幕** | SRT / ASS / WebVTT 解析与渲染 |
@@ -46,12 +47,15 @@
 
 ```
 hili-player/
-├── core/                       # 自研「零 diff」框架
+├── core/                       # 自研框架（Signal 响应式 + 零 VDOM diff）
 │   ├── h.ts                    #   h() / defineComponent / Fragment / when / each
 │   ├── mount.ts                #   mount / materialize / applyAttrs / destroy / hydrate
+│   ├── flow.ts                 #   Show / For 控制流（生命周期补发与卸载重挂）
+│   ├── signals.ts  signalsCore.ts  #   自研 Signals（依赖收集 / effect / onEffect）
 │   ├── internal.ts             #   编译期改写目标（_createEl 等）
 │   ├── ssr.ts                  #   renderToString
-│   ├── state.ts  eventBus.ts  signals.ts  hooks.ts  context.ts  ref.ts
+│   ├── state.ts  eventBus.ts  hooks.ts  context.ts  ref.ts  templateRef.ts
+│   ├── reactiveProps.ts  i18n.ts
 │   └── warning.ts  normalize.ts
 ├── types/                      # 全局类型契约
 │   ├── index.ts                #   PlayerConfig / PlayerEvents / PlayMode / MediaItem …
@@ -60,6 +64,7 @@ hili-player/
 ├── utils/  directives/  events/  error/     # 工具、指令、事件、错误处理
 ├── packages/
 │   ├── player/                 # @lumina/nova —— 播放器本体
+│   │   ├── media/              #   媒体工具库参考实现（监控器 / SVG 图表 / 信息面板，不参与编译）
 │   │   └── src/
 │   │       ├── player/VideoPlayer.ts   # 核心类
 │   │       ├── components/             # 37 个 UI 组件
@@ -70,6 +75,7 @@ hili-player/
 │   │       ├── types/                  # 播放器侧类型
 │   │       └── styles/                 # 25 个 SCSS
 │   └── plugins/                # @lumina/plugins —— 官方插件集合
+│       ├── hls/                #   fork 版 hls.js 独立仓库（git submodule，双远程独立维护）
 │       └── src/
 │           ├── danmaku/        #   DanmakuPlugin + DOM / Canvas 引擎
 │           ├── subtitle/       #   SubtitlePlugin + SRT / ASS / VTT 解析
@@ -90,7 +96,8 @@ hili-player/
 | `packages/player/src` | 70 | 20,520 |
 | `packages/plugins/src` | 54 | 17,467 |
 | `plugins/vite-plugin-lumina-compile` | 4 | 939 |
-| `types` / `utils` / `media` / `error` / `events` / `directives` | 26 | 5,949 |
+| `types` / `utils` / `error` / `events` / `directives` | 21 | 5,342 |
+| `packages/player/media`（参考媒体工具库） | 6 | 2,102 |
 | `packages/player/src/styles`（SCSS） | 25 | 9,113 |
 
 ---
@@ -98,6 +105,9 @@ hili-player/
 ## 快速开始
 
 ```bash
+# 克隆后先拉取 hls.js 子模块（packages/plugins/hls，独立 fork 仓库）
+git submodule update --init
+
 # 安装依赖
 pnpm install
 
@@ -368,38 +378,42 @@ export const MyPanel = defineComponent<{ title: string; items: string[] }>(
 );
 ```
 
-**运行时更新的正确姿势**：框架没有响应式，组件 `props` 是挂载时的快照，**不会**随父组件变化而更新。
-需要变化的量必须走状态订阅 + 命令式改 DOM：
+**运行时更新的正确姿势**：框架使用自研 Signals 做响应式。VNode 属性传 Signal 会被编译期
+自动包装为 `__reactiveAttrs`（class / style 支持对象与数组格式归一化）；返回字符串的函数调用
+子节点用显式 getter 协议 `() => expr` 声明为响应式文本（编译期改写为 `_reactiveText`），
+更新精准到单个 DOM 节点。跨组件共享状态用 `createTypedStateManager` + `useState` 订阅
+（卸载自动退订，重挂后补发当前值，覆盖错过窗口期）：
 
 ```ts
-import { createTypedStateManager } from '@/core';
+import { createTypedStateManager, useState } from '@/core';
 
 const state = createTypedStateManager();
-const off = state.subscribe('player.volume', (next) => {
-  slider.style.setProperty('--vol', String(next));   // 手动改原生 DOM
-});
+useState(state, 'player.volume', (next) => {
+  slider.style.setProperty('--vol', String(next));
+}, lifecycle);
 ```
 
 ---
 
 ## 架构说明
 
-### 1. 零 diff
+### 1. Signal 响应式 + 零 VDOM diff
 
 ```
 挂载期：h() → VNode（普通对象） → materialize() 递归 createElement → 真实 DOM
                             ↑
                  编译期 luminaCompile 把 h() 改写为 _createEl / _createStaticEl / …
+                 响应式属性自动包装为 __reactiveAttrs，响应式文本走 _reactiveText
 
-运行期：state.set() → effect / 订阅回调 → 业务代码直接改真实 DOM
-        （框架不重渲染、不做 key diff、不做依赖收集）
+运行期：signal.set() → effect 精准更新对应 DOM 节点（依赖收集 + 细粒度订阅）
+        （无虚拟 DOM diff、无整树重渲染；Show / For 控制流局部卸载重挂）
 ```
 
 ### 2. 三层协作
 
 | 层 | 职责 |
 | --- | --- |
-| `core/` | 框架：VNode、挂载、SSR、状态、事件总线、信号、Context、生命周期 |
+| `core/` | 框架：VNode、挂载、SSR、自研 Signals（依赖收集 / effect）、Show / For 控制流、状态、事件总线、Context、生命周期、i18n |
 | `packages/player` | 播放器：`VideoPlayer` 核心类 + 37 个组件 + store / config |
 | `packages/plugins` | 插件：弹幕、字幕、三种流媒体、互动 |
 
