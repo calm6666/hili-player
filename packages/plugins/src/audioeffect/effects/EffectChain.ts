@@ -7,7 +7,14 @@
  * 采用并联结构：每个效果独立从 mediaSource 接入，输出统一汇入 gain 节点
  *   mediaSource ──► effect_i (active=true) ──► gain ──► destination
  *                └─► (inactive 不连接)
+ * 另含干声直连（bypass）路径：无任何激活效果时 mediaSource 直通 gain
+ *   mediaSource ──► gain ──► destination（0 个效果激活 = 原声直放）
  * 优点：激活/切换互不干扰，单效果出问题不影响其它
+ *
+ * 直连路径为链路兜底：MediaElementSource 接管后视频音频全部改道进
+ * Web Audio 图，若 source 无任何下游（全 inactive 又无 bypass）音频会被
+ * 吞掉（无声），且 Chrome 下被接管元素的音频不被消费会导致 A/V 时钟
+ * 停摆（暂停后恢复播放画面冻结）—— 直连保证音频链路任何状态恒通
  */
 
 import type {
@@ -82,15 +89,32 @@ export class EffectChain {
     this.effectsList.forEach((name) => {
       this.effectsObj[name].node.init(audioCtx, source, gain);
     });
+    // 初始全部效果 inactive，connectAll 在此状态下建立干声直连，
+    // 从第一帧起 source → gain → destination 链路即恒通（见 connectAll）
+    this.connectAll();
   }
 
   /**
-   * 重建所有 active 效果的连接
-   * 每个效果：effect.connect() 将 source 接入输入；effect.source().connect(gain) 将输出汇入 gain
+   * 重建音频连接（干声直连 / active 效果支路二选一）
+   * - 无任何激活效果：source 直通 gain（干声 bypass，原声直放）
+   * - 有激活效果：每个效果 effect.connect() 将 source 接入输入；
+   *   effect.source().connect(gain) 将输出汇入 gain
+   * 两条路径互斥，保证任何状态下 source 必有下游（链路恒通兜底）
    */
   private connectAll(): void {
-    if (!this.gain) return;
+    if (!this.gain || !this.source) return;
     const gain = this.gain;
+    // 干声直连分支：全部效果 inactive 时 source 直通 gain。
+    // 根因修复：此前全 inactive 时 source 无任何下游 —— 接管后音频
+    // 直接蒸发（无声），且 Chrome 下被接管元素的音频不被消费会冻结
+    // A/V 时钟（暂停后恢复播放画面卡死）
+    const hasActive = this.effectsList.some(
+      (name) => this.effectsObj[name].active,
+    );
+    if (!hasActive) {
+      this.source.connect(gain);
+      return;
+    }
     this.effectsList.forEach((name) => {
       const state = this.effectsObj[name];
       if (!state.active) return;
@@ -100,13 +124,19 @@ export class EffectChain {
   }
 
   /**
-   * 断开所有 active 效果的连接
-   * 与 connectAll 对称：先断输出→gain，再断 source→输入
-   * 容错 try/catch：节点可能尚未连接，避免抛出影响后续断开
+   * 断开所有连接（干声直连 + active 效果支路）
+   * 与 connectAll 对称：先断 source→gain 直连，再逐效果断输出→gain、
+   * source→输入；容错 try/catch：节点可能尚未连接，避免抛出影响后续断开
    */
   private disconnectAll(): void {
     if (!this.gain) return;
     const gain = this.gain;
+    // 断开干声直连（connectAll 的互斥另一半；未连接时为 no-op）
+    try {
+      this.source?.disconnect(gain);
+    } catch {
+      // 直连可能尚未建立，忽略
+    }
     this.effectsList.forEach((name) => {
       const state = this.effectsObj[name];
       if (!state.active) return;
