@@ -46,8 +46,3 @@ npm-debug.log*
 pnpm-debug.log*
 
 # ============================================
-
-# 已迁移：fork 版 hls.js 现为 packages/plugins/hls 独立子模块仓库
-# （github.com/calm6666/hls.js + gitee.com/danding0000001/hls.js 独立维护）
-# 本行为迁移时被句柄锁定的旧目录残留，目录删除后此规则可一并移除
-hls-fork/
