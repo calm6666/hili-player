@@ -1,8 +1,8 @@
-# hili-player
+# nova-player
 
 > 极简 TypeScript 视频播放器 —— 基于自研「零 diff」框架构建，视觉与交互对齐哔哩哔哩播放器。
 
-`hili-player` 是一个从零实现的 Web 视频播放器。它不依赖任何 UI 框架，没有虚拟 DOM diff：
+`nova-player` 是一个从零实现的 Web 视频播放器。它不依赖任何 UI 框架，没有虚拟 DOM diff：
 挂载期把 VNode 一次性物化为真实 DOM，运行期由自研 Signals 做依赖收集与精准节点更新。
 播放器本体、弹幕、字幕、HLS / DASH / FLV 流媒体与互动插件
 拆分在两个包中，可以整体引入，也可以按需使用。
@@ -46,7 +46,7 @@
 ## 目录结构
 
 ```
-hili-player/
+nova-player/
 ├── core/                       # 自研框架（Signal 响应式 + 零 VDOM diff）
 │   ├── h.ts                    #   h() / defineComponent / Fragment / when / each
 │   ├── mount.ts                #   mount / materialize / applyAttrs / destroy / hydrate
