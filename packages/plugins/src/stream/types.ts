@@ -4,7 +4,7 @@
  * ============================================
  */
 
-import type { Plugin } from '@hili-player/player';
+import type { Plugin } from '@lumina/nova';
 import type { EventBus } from '@/core/eventBus';
 // 枚举以运行时真正使用的那份为准（@/types/streamPlugin）；
 // ./enums 下曾有一份同名但取值不同的旧版（大写 'HLS' …），已删除

@@ -1,5 +1,6 @@
 import type { DisplayMode, PlayerState } from "@/types";
 import type { QualityLevel } from "@/types/streamPlugin";
+import type { SubtitleTrackInfo } from "@/types/subtitle";
 
 /**
  * ============================================
@@ -11,7 +12,7 @@ import type { QualityLevel } from "@/types/streamPlugin";
 import { createTypedStateManager } from "@/core/state";
 import type { TypedStateManager } from "@/core/state";
 import { createContext } from "@/core/context";
-import type { ControlsConfig } from "@/hili-player/types";
+import type { ControlsConfig } from "@/nova/types";
 
 export type { TypedStateManager };
 
@@ -108,12 +109,19 @@ export enum PlayerStateKeyEnum {
   DANMAKU_SCALE_WITH_SCREEN = "player.danmakuScaleWithScreen",
 
   // 高能进度条
-  /** 高能进度条常驻（设置面板复选框 / 图钉 / 影子进度条共享同一状态源） */
+  /** 高能进度条常驻（图钉 / 影子进度条共享同一状态源） */
   PBP_PERMANENT = "player.pbpPermanent",
+  /**
+   * 高能进度条是否渲染（设置面板「高能进度条」复选框）
+   * 取消勾选 → PbpControls 整个不挂载（与常驻态解耦：常驻开关是右侧图钉图标）
+   */
+  PBP_RENDERED = "player.pbpRendered",
 
   // 字幕状态
   SUBTITLE_VISIBLE = "player.subtitleVisible",
   SUBTITLE_LANG = "player.subtitleLang",
+  /** 运行时字幕轨道列表（文件轨/服务端轨/本地识别轨统一注册表，字幕面板数据源） */
+  SUBTITLE_TRACKS = "player.subtitleTracks",
 }
 
 /**
@@ -176,7 +184,7 @@ export type PlayerStateMap = {
   "player.playlistLength": number;
   "video.width": number;
   "video.height": number;
-  "video.aspectRatio": number;
+  "video.aspectRatio": string;
   "player.errorCode": number;
   "player.errorMessage": string;
   "player.isLoading": boolean;
@@ -199,8 +207,12 @@ export type PlayerStateMap = {
   "player.danmakuScaleWithScreen": boolean;
   /** 高能进度条常驻 */
   "player.pbpPermanent": boolean;
+  /** 高能进度条是否渲染（false 时 PbpControls 整个不挂载） */
+  "player.pbpRendered": boolean;
   "player.subtitleVisible": boolean;
   "player.subtitleLang": string;
+  /** 运行时字幕轨道列表（空数组时字幕面板回退到配置语言列表） */
+  "player.subtitleTracks": SubtitleTrackInfo[];
   browser: object;
 } & Record<string, object>;
 
@@ -285,10 +297,14 @@ export interface RuntimeState {
   // 高能进度条
   /** 高能进度条常驻 */
   pbpPermanent: boolean;
+  /** 高能进度条是否渲染（false 时 PbpControls 整个不挂载） */
+  pbpRendered: boolean;
 
   // 字幕状态
   subtitleVisible: boolean;
   subtitleLang: string;
+  /** 运行时字幕轨道列表 */
+  subtitleTracks: SubtitleTrackInfo[];
 }
 
 /**
@@ -334,8 +350,10 @@ export const defaultRuntimeState: RuntimeState = {
   danmakuMode: 1,
   danmakuScaleWithScreen: true,
   pbpPermanent: false,
+  pbpRendered: true,
   subtitleVisible: true,
   subtitleLang: "zh-CN",
+  subtitleTracks: [],
 };
 
 /**
@@ -453,6 +471,8 @@ export function createRuntimeStateManager(
       initialState.subtitleVisible ?? defaultRuntimeState.subtitleVisible,
     [PlayerStateKeyEnum.SUBTITLE_LANG]:
       initialState.subtitleLang ?? defaultRuntimeState.subtitleLang,
+    [PlayerStateKeyEnum.SUBTITLE_TRACKS]:
+      initialState.subtitleTracks ?? defaultRuntimeState.subtitleTracks,
   };
 
   return createTypedStateManager<PlayerStateMap>(state);
@@ -485,7 +505,7 @@ export const StateContext =
 
 // 控件开关默认值的唯一来源在 config/defaultConfig.ts，
 // 这里只做转发，避免与配置文件各写一份导致默认值漂移。
-import { defaultControlConfig } from "@/hili-player/config/defaultConfig";
+import { defaultControlConfig } from "@/nova/config/defaultConfig";
 
 export { defaultControlConfig };
 

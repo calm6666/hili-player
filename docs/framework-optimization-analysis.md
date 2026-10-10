@@ -1,6 +1,6 @@
-# 框架优化分析报告：h 函数与 vite-plugin-hili-compile
+# 框架优化分析报告：h 函数与 vite-plugin-lumina-compile
 
-> 分析范围：`core/h.ts`、`core/internal.ts`、`core/mount.ts`、`core/ssr.ts`、`plugins/vite-plugin-hili-compile/*`
+> 分析范围：`core/h.ts`、`core/internal.ts`、`core/mount.ts`、`core/ssr.ts`、`plugins/vite-plugin-lumina-compile/*`
 > 结论先行：编译插件的思路（h() → 专用内部函数）方向正确，但目前存在 **3 个编译路径下的功能性 Bug**、**1 个架构性缺陷（dev/prod 双路径不一致）**，以及若干未完成的优化点。h 函数本身有少量可减的分配开销。
 
 ---
@@ -48,11 +48,11 @@
 
 1. 上面 3 个 Bug 在 `vite dev` 下永远不会复现，上线才炸；
 2. dev 与 prod 的 VNode 结构、attrs 内容、错误行为都可能不同（如 SVG 根节点 xmlns、`__providers` 提取），"dev 正常 prod 异常"排查成本极高；
-3. `__hili_type` 标记、`_create*` 函数在 dev 下零覆盖。
+3. `__lumina_type` 标记、`_create*` 函数在 dev 下零覆盖。
 
-Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__DEV__` 条件分支 + DCE 决定。本插件已经注入了 `__HILI_DEV__`，完全可以：
+Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__DEV__` 条件分支 + DCE 决定。本插件已经注入了 `__LUMINA_DEV__`，完全可以：
 
-- dev 也执行转换（生成 `_create*`），只是保留 `if (__HILI_DEV__)` 包裹的开发警告；
+- dev 也执行转换（生成 `_create*`），只是保留 `if (__LUMINA_DEV__)` 包裹的开发警告；
 - 或至少：新增"编译产物级"集成测试，把 transformCode 的输出喂给 jsdom 跑 mount/SSR/hydrate，覆盖编译路径。
 
 ---
@@ -63,7 +63,7 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 
 - `transform.ts` L128-130：只要 callee 是标识符 `h` 就转换；`index.ts` L73-78 的 `usesFrameworkAPI` 正则也不检查 import 的**来源模块**。
 - 后果：文件里 `import { h } from 'preact'`（或用户自己的局部 `h` 函数），只要同时 import 了本框架的任意 API，preact 的 `h(...)` 会被改写成 `_createComp(...)` → 静默破坏。
-- 修复：在 traverse 里用 babel scope 解析 `h` 的 binding，确认其来自框架模块；`usesFrameworkAPI` 的正则把 `from ['"]...` 的来源也纳入匹配（只认 `@/core`、`hili-player` 等已知入口）。
+- 修复：在 traverse 里用 babel scope 解析 `h` 的 binding，确认其来自框架模块；`usesFrameworkAPI` 的正则把 `from ['"]...` 的来源也纳入匹配（只认 `@/core`、`lumina`、`nova` 等已知入口）。
 
 ### 4.2 静态提升不递归：真实代码几乎提升不动
 
@@ -78,7 +78,7 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 
 ### 4.4 其他小问题
 
-- `export default defineComponent(...)` 不注入 `__hili_type`（transform.ts L353-358），prod 下仍走反射 fallback——可用"本地 const + 重新 export default"改写。
+- `export default defineComponent(...)` 不注入 `__lumina_type`（transform.ts L353-358），prod 下仍走反射 fallback——可用"本地 const + 重新 export default"改写。
 - `markClassComponent` 只认字面名为 `Component` 的父类（L380-381）。
 - `markComponentType` 用 `s.appendRight(node.end, ';\n...')` 注入，遇到 `export const X = defineComponent(...)` 等写法是合法的，但没有针对 ASI/注释边界做测试。
 - SVG 标签表在 `core/h.ts` 与 `plugins/.../svgTags.ts` **双份维护**（内容相同），必然漂移——应只保留一份，两处 import。
@@ -101,7 +101,7 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 
 ### 5.3 dev 下组件类型反射可缓存
 
-- `getComponentType`（h.ts L115-131）在无 `__hili_type` 标记时每次做 `Object.getOwnPropertyDescriptor` 反射。prod 有标记没问题，dev 可用 `WeakMap<Function, 'fn'|'class'>` 缓存（class 身份稳定，缓存安全）。
+- `getComponentType`（h.ts L115-131）在无 `__lumina_type` 标记时每次做 `Object.getOwnPropertyDescriptor` 反射。prod 有标记没问题，dev 可用 `WeakMap<Function, 'fn'|'class'>` 缓存（class 身份稳定，缓存安全）。
 
 ### 5.4 小项
 
@@ -112,7 +112,7 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 
 ## 六、P2：构建产物层面的优化机会
 
-1. `packages/player/vite.config.ts` `minify: false`：`isDev()` 是函数调用，esbuild define 只替换 `__HILI_DEV__`，**不做 minify 就不会发生 DCE**，lib 构建产物里 dev 警告代码全部保留。建议 lib 构建开 `minify: 'esbuild'`（或把 `isDev()` 内联为可折叠的常量表达式）。
+1. `packages/player/vite.config.ts` `minify: false`：`isDev()` 是函数调用，esbuild define 只替换 `__LUMINA_DEV__`，**不做 minify 就不会发生 DCE**，lib 构建产物里 dev 警告代码全部保留。建议 lib 构建开 `minify: 'esbuild'`（或把 `isDev()` 内联为可折叠的常量表达式）。
 2. `include: [/\.tsx?$/]` 默认不含 `.js/.mjs`：消费方若用 JS 写组件，编译优化完全缺席（demo 是 .ts 无感，但对外提供时要注意）。
 3. 插件对 `each`/`when`/`show` 没有任何编译处理——`each` 每次渲染全量重建数组（无 key diff），这是设计决策（无响应式），但如果要做性能提升，`each` 的 keyed diff 是下一个大头，建议单独立项评估。
 
@@ -128,7 +128,7 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 | P1 | 静态提升递归化 + 提升节点 clone 复用 | 中（~2 天） |
 | P2 | SVG 表去重、按需注入 import、`export default` 标记、alias 可配置 | 小 |
 | P2 | h() flatten 单遍化、props 单次展开、dev 类型缓存 | 小 |
-| P2 | lib 构建开 minify 让 `__HILI_DEV__` DCE 生效 | 小 |
+| P2 | lib 构建开 minify 让 `__LUMINA_DEV__` DCE 生效 | 小 |
 
 > 注：本次分析过程中 `pnpm test` 因沙箱限制（esbuild spawn EPERM）无法执行，上述结论全部基于静态代码阅读；建议修复后在本地跑一遍 `pnpm test` 和 `pnpm build` 验证。
 
@@ -156,17 +156,17 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 
 ### 9.1 插件核心改造：dev/prod 统一编译（与 Vue/Solid 一致）
 
-- **`plugins/vite-plugin-hili-compile/index.ts`**
+- **`plugins/vite-plugin-lumina-compile/index.ts`**
   - `dev` 选项默认改为 `true`：开发模式也执行转换，dev/prod 同一套编译产物，编译路径的 Bug 在 dev 即可暴露（双路径不一致是 P0 三连 Bug 的根源）
   - `hoistStatic` 仅生产构建生效（`isProduction && opts.hoistStatic`，与 Vue plugin-vue 一致）
   - 新增 `internalImportSource` 选项（默认 `@/core/internal`），用户可覆盖别名
 - **dev 验证**：`vite dev` 下 `demo/main.ts` 实际输出 `_createComp`×58 / `_createEl`×103 / 注入 `core/internal` 导入，且无 `_hoisted_`（提升仅生产）
 
-### 9.2 插件正确性修复（`plugins/vite-plugin-hili-compile/transform.ts` 重写）
+### 9.2 插件正确性修复（`plugins/vite-plugin-lumina-compile/transform.ts` 重写）
 
 | 问题 | 修复 |
 |------|------|
-| `isHCall` 不校验来源，preact 等库的 `h` 会被误改 | babel scope binding 校验（`isFrameworkNamedImport`）：只有来自 `@/core`/`@/hili-player` 等框架模块的 h/defineComponent/Fragment/Component 才转换；支持 `import { h as alias }` 别名 |
+| `isHCall` 不校验来源，preact 等库的 `h` 会被误改 | babel scope binding 校验（`isFrameworkNamedImport`）：只有来自 `@/core`/`@/nova` 等框架模块的 h/defineComponent/Fragment/Component 才转换；支持 `import { h as alias }` 别名 |
 | 静态提升不递归，真实代码几乎提升不动 | 递归 `isStaticSubtree` + 预扫描标记提升目标；AST 级代码生成（`genStaticExpr`），无字符串拼接冲突；嵌套静态调用内联进父级提升代码 |
 | 提升常量共享对象互相污染（el 覆盖/destroy 错删） | 使用点生成 `_cloneHoisted(_hoisted_N)`（新增 `core/internal.ts` 运行时函数，深克隆独立树，Vue cloneVNode 同思路） |
 | `h('fragment', {}, ...)` 的 attrs 被当子节点 | 字符串形式与 `h(Fragment, {}, ...)` 形式都丢弃 attrs，生成 `_createFragment(...children)` |
@@ -181,11 +181,11 @@ Vue/Solid 的做法是 **dev 和 prod 编译同一份代码**，差异只由 `__
 - **`core/internal.ts`**：flatten 复用 `h.ts` 实现；`_createComp` props 单次拷贝；新增 `_cloneHoisted`
 - **`plugins/.../svgTags.ts`**：改为从 `core/h` 再导出（消除双份 SVG 表漂移）
 - **`core/index.ts`**：导出 `_cloneHoisted`
-- **`packages/player/vite.config.ts`**：`minify: false → 'esbuild'`，让 `__HILI_DEV__` 替换后触发 DCE（此前 dev 警告代码全量留在库产物）
+- **`packages/player/vite.config.ts`**：`minify: false → 'esbuild'`，让 `__LUMINA_DEV__` 替换后触发 DCE（此前 dev 警告代码全量留在库产物）
 
 ### 9.4 新增测试
 
-- `tests/plugin/hili-compile.test.ts`（20 条）：dev 默认编译、dev:false 退出、递归提升、克隆复用、属性预分类、SVG、Fragment 两种形式、组件/export default/class 标记、preact h 与局部 h 不误伤、别名导入、按需注入、真实组件文件（Ending.ts）dev/prod 冒烟
+- `tests/plugin/lumina-compile.test.ts`（20 条）：dev 默认编译、dev:false 退出、递归提升、克隆复用、属性预分类、SVG、Fragment 两种形式、组件/export default/class 标记、preact h 与局部 h 不误伤、别名导入、按需注入、真实组件文件（Ending.ts）dev/prod 冒烟
 - `tests/core/internal.test.ts` 新增 `_cloneHoisted` 多次挂载互不污染测试
 
 验证结果：全量 402 条中 401 通过（唯一失败仍为历史遗留的 `VideoPlayer > should merge default config`）；`core/`、`plugins/`、`tests/` 目录 tsc 类型检查零新增错误；`packages/player` 的 `vite build` 生产构建通过（`tsc && vite build` 中的 tsc 步骤因改动前就存在的类型错误失败，经 stash 对照确认与本次修改无关），产物经 sourcemap 确认包含 `_hoisted_N`/`_cloneHoisted`，且 minify 后 dev 警告代码已被 DCE 移除。

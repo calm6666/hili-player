@@ -10,15 +10,20 @@
 import type {
   VNode,
   VNodeAttrs,
+  VNodeChild,
   Lifecycle,
   RefValue,
   DirectiveFn,
 } from "@/types";
-import type { Signal } from "@preact/signals-core";
+import { effect, untracked } from "./signalsCore";
+import type { Signal } from "./signalsCore";
 import { isBrowser } from "@/utils";
 import { safeCall, ErrorSource, isDev, warn, WarnSource } from "./warning";
-import { applyStyle, normalizeClass } from "./normalize";
+import { applyStyle, normalizeClass, normalizeStyle } from "./normalize";
+import type { ClassInput, StyleInput } from "./normalize";
 import { isRefObject, isSignalRef } from "./templateRef";
+import { h } from "./h";
+import { getDirective } from "./directives";
 
 /**
  * 沿 __parent 链向上查找最近的组件生命周期注册表，解析字符串模板引用
@@ -54,7 +59,7 @@ function bindRef(refValue: unknown, el: Element, vnode: VNode): void {
     } else if (isDev()) {
       warn(
         WarnSource.MOUNT,
-        `模板引用 "${refValue}" 未注册：请在 setup 中调用 useTemplateRef(lc, "${refValue}")`,
+        `Template ref "${refValue}" not registered: call useTemplateRef(lc, "${refValue}") in setup`,
       );
     }
     return;
@@ -137,7 +142,7 @@ export function mount(vnode: VNode | string, container: HTMLElement): void {
    */
   if (typeof vnode === "object" && vnode._mounted && isDev()) {
     console.warn(
-      "[HiliFramework/mount] 检测到 VNode 重复挂载，同一 VNode 对象不应被多次 mount",
+      "[Lumina/mount] Detected duplicate VNode mount, the same VNode object should not be mounted multiple times",
     );
   }
 
@@ -196,6 +201,82 @@ export function materialize(vnode: VNode | string): Node {
    */
   if (typeof vnode === "string") {
     return document.createTextNode(vnode);
+  }
+
+  /**
+   * 静态模板节点处理（编译期 DOM 化阶段 1）
+   *
+   * 整棵静态子树已在编译期生成 HTML 字符串（_tmpl），运行时仅从惰性 <template>
+   * 克隆一份真实 DOM：一次 cloneNode 替代整棵子树的 createElement/applyAttrs/递归物化。
+   * - 单根：克隆出的元素直接作为 vnode.el
+   * - 多根（fragment）：克隆出 DocumentFragment，顶层节点存入 __tmplRoots
+   *   （destroy 时逐个移除；appendChild 展开后数组引用仍然有效）
+   */
+  if (vnode.__tmpl !== undefined) {
+    const cloned = vnode.__tmpl.clone();
+    if (cloned instanceof Element) {
+      vnode.el = cloned;
+    } else if (cloned instanceof DocumentFragment && cloned.childNodes.length > 1) {
+      vnode.__tmplRoots = Array.from(cloned.childNodes);
+    }
+    return cloned;
+  }
+
+  /**
+   * 处理响应式文本节点
+   * 编译期 _reactiveText(getter) 生成的 VNode 带有 __reactive 标记
+   * 创建 Text 节点并注册 effect，getter 内读取的 signal 变化时自动更新 textContent
+   * effect 的 dispose 推入 vnode._cleanups，destroy 时自动清理
+   */
+  if (vnode.__reactive !== undefined) {
+    const textNode = document.createTextNode("");
+    const dispose = effect(() => {
+      textNode.textContent = vnode.__reactive!.get();
+    });
+    if (!vnode._cleanups) vnode._cleanups = [];
+    vnode._cleanups.push(dispose);
+    vnode.el = textNode;
+    return textNode;
+  }
+
+  /**
+   * 控制流节点处理（For/Show/Switch/Dynamic）
+   *
+   * 创建空 Text 锚点 + DocumentFragment 容器：
+   * - anchor 标记 flow 子节点在 DOM 中的插入位置（空 Text 节点在页面中不可见）
+   * - fragment 作为首次 effect 运行时的临时父节点
+   *
+   * effect 首次同步运行时，anchor.parentNode 是 fragment（DocumentFragment 支持 insertBefore）；
+   * parent 将 fragment 插入真实 DOM 后，anchor.parentNode 变为真实 parent，
+   * 后续 effect 重跑自动使用真实 parent（无缝衔接）。
+   *
+   * dispose 推入 vnode._cleanups，destroy 时自动清理：
+   * 1. dispose effect（停止响应式更新）
+   * 2. destroy 所有动态创建的子 VNode（移除 DOM + 清理 effects）
+   * 3. removeChild(anchor) 由 destroy() 的通用逻辑处理
+   */
+  if (vnode.__flow !== undefined) {
+    const anchor = document.createTextNode("");
+    const container = document.createDocumentFragment();
+    container.appendChild(anchor);
+    vnode.el = anchor;
+
+    let dispose: (() => void) | undefined;
+    const flowType = vnode.__flow.type;
+    if (flowType === "for") {
+      dispose = initFor(vnode, anchor);
+    } else if (flowType === "show") {
+      dispose = initShow(vnode, anchor);
+    } else if (flowType === "switch") {
+      dispose = initSwitch(vnode, anchor);
+    } else if (flowType === "dynamic") {
+      dispose = initDynamic(vnode, anchor);
+    }
+    if (dispose) {
+      if (!vnode._cleanups) vnode._cleanups = [];
+      vnode._cleanups.push(dispose);
+    }
+    return container;
   }
 
   /**
@@ -272,6 +353,29 @@ export function materialize(vnode: VNode | string): Node {
 }
 
 /**
+ * 类型守卫：判断节点是否有 textContent 属性
+ */
+function hasTextContent(node: unknown): node is { textContent: string } {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    "textContent" in node &&
+    typeof (node as { textContent?: unknown }).textContent === "string"
+  );
+}
+
+/**
+ * VNode → 字符串（用于 SSR flow 渲染）
+ * 递归调用 createMockNode 获取 textContent
+ */
+function vnodeToString(vnode: VNode | string): string {
+  if (typeof vnode === "string") return vnode;
+  const mockNode = createMockNode(vnode);
+  if (hasTextContent(mockNode)) return mockNode.textContent;
+  return "";
+}
+
+/**
  * 创建模拟 DOM 节点（用于 SSR）
  * 在服务端环境中创建一个简单的对象来模拟 DOM 节点
  *
@@ -284,6 +388,85 @@ function createMockNode(vnode: VNode | string): Node {
    */
   if (typeof vnode === "string") {
     return { nodeType: Node.TEXT_NODE, textContent: vnode } as Node;
+  }
+
+  /**
+   * 静态模板节点：SSR 环境直接输出模板 HTML 字符串
+   * （与 ssr.ts renderToString 的 __tmpl 分支语义一致，内容已转义安全）
+   */
+  if (vnode.__tmpl !== undefined) {
+    return { nodeType: Node.TEXT_NODE, textContent: vnode.__tmpl.html } as Node;
+  }
+
+  /**
+   * 响应式文本节点：SSR 环境直接调用 getter 获取当前值
+   */
+  if (vnode.__reactive !== undefined) {
+    return { nodeType: Node.TEXT_NODE, textContent: vnode.__reactive.get() } as Node;
+  }
+
+  /**
+   * 控制流节点：SSR 环境渲染初始状态（不注册 effect）
+   *
+   * 与 __reactive 一致：同步求值一次，输出初始 HTML
+   * - For：遍历 each() 调用 render(item,i) 拼接
+   * - Show：when() 为 true 渲染 children，否则渲染 fallback
+   * - Switch：遍历 matches 渲染第一个 when() 为 true 的分支
+   * - Dynamic：调用 component() 渲染该组件
+   */
+  if (vnode.__flow !== undefined) {
+    const flow = vnode.__flow;
+    const flowType = flow.type;
+    if (flowType === "for") {
+      // For：遍历 items 调用 render 拼接为模拟文本
+      const eachGetter = flow.each;
+      const items = eachGetter ? eachGetter() : [];
+      const renderFn = flow.render;
+      let html = "";
+      for (let i = 0; i < items.length; i++) {
+        if (renderFn) {
+          const childVNode = renderFn(items[i], i);
+          html += vnodeToString(childVNode);
+        }
+      }
+      return { nodeType: Node.TEXT_NODE, textContent: html } as Node;
+    }
+    if (flowType === "show") {
+      const visible = flow.when ? flow.when() : false;
+      const target = visible
+        ? flow.children ?? []
+        : flow.fallback
+          ? [flow.fallback]
+          : [];
+      let html = "";
+      for (const child of target) {
+        html += typeof child === "string" ? child : vnodeToString(child);
+      }
+      return { nodeType: Node.TEXT_NODE, textContent: html } as Node;
+    }
+    if (flowType === "switch") {
+      const matches = flow.matches ?? [];
+      const fallback = flow.children ?? [];
+      let html = "";
+      let found = false;
+      for (const match of matches) {
+        if (match.when()) {
+          for (const child of match.children) {
+            html += typeof child === "string" ? child : vnodeToString(child);
+          }
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        for (const child of fallback) {
+          html += typeof child === "string" ? child : vnodeToString(child);
+        }
+      }
+      return { nodeType: Node.TEXT_NODE, textContent: html } as Node;
+    }
+    // dynamic：SSR 不渲染（无法创建组件实例）
+    return { nodeType: Node.TEXT_NODE, textContent: "" } as Node;
   }
 
   /**
@@ -330,11 +513,583 @@ function createMockNode(vnode: VNode | string): Node {
   return mockEl;
 }
 
+// ============================================
+// 控制流初始化函数（For/Show/Switch/Dynamic）
+// ============================================
+
+/**
+ * 控制流锚点类型：
+ * - Text：空文本节点锚点（现行协议，页面 DOM 与 SSR 输出中均不可见）
+ * - Comment：仅为兼容旧版 SSR 输出的 <!--flow--> 注释占位而保留
+ */
+type FlowAnchor = Text | Comment;
+
+/**
+ * For 组件初始化：key-based 列表精准更新
+ *
+ * 维护 Map<key, {vnode, el}> 映射，effect 监听 each() 变化：
+ * - 新 key：调用 render → materialize → insertBefore(anchor)
+ * - 移除 key：destroy(vnode) → Map.delete
+ * - 移动 key：insertBefore 重排（DOM 自动从原位置摘除，不重建 vnode）
+ * - 现有 key：不重新 render，依赖内部 signal 更新（细粒度响应式）
+ *
+ * @param vnode - flow VNode（__flow.type === 'for'）
+ * @param anchor - 控制流锚点（子 DOM 在其前方插入）
+ * @returns dispose 函数（dispose effect + destroy 所有子 VNode）
+ */
+function initFor(vnode: VNode, anchor: FlowAnchor): () => void {
+  const flow = vnode.__flow!;
+  const keyFn = flow.key;
+  const renderFn = flow.render;
+
+  // key → { vnode, el } 映射（key 类型为 unknown：支持 string/number/object 引用）
+  const entries = new Map<unknown, { vnode: VNode; el: Node }>();
+
+  const effectDispose = effect((): void => {
+    const parent = anchor.parentNode;
+    if (!parent) return; // anchor 未在 DOM 中（理论不会到这，首次运行 parent 是 fragment）
+
+    const eachGetter = flow.each;
+    const items = eachGetter ? eachGetter() : [];
+    const newKeys = new Set<unknown>();
+
+    // 遍历新 items，创建/移动节点
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      // 无 keyFn 时用 item 引用作为 key（Solid <For> 语义）
+      const key = keyFn ? keyFn(item, i) : item;
+      newKeys.add(key);
+
+      const existing = entries.get(key);
+      if (existing) {
+        // 现有 key：移动到正确位置（insertBefore 自动从原位置摘除）
+        parent.insertBefore(existing.el, anchor);
+      } else if (renderFn) {
+        // 新 key：调用 render → materialize → insertBefore
+        const childVNode = renderFn(item, i);
+        childVNode.__parent = vnode;
+        const el = materialize(childVNode);
+        // ★ 就地补发生命周期（同 mountFlowChild：列表项不在静态树 children 递归范围）
+        invokeLifecycle(childVNode, "onBeforeMount");
+        parent.insertBefore(el, anchor);
+        invokeLifecycle(childVNode, "onMounted");
+        entries.set(key, { vnode: childVNode, el });
+      }
+    }
+
+    // 移除不再存在的 key
+    for (const [key, entry] of entries) {
+      if (!newKeys.has(key)) {
+        destroy(entry.vnode);
+        entries.delete(key);
+      }
+    }
+  });
+
+  return () => {
+    effectDispose();
+    for (const [, entry] of entries) {
+      destroy(entry.vnode);
+    }
+    entries.clear();
+  };
+}
+
+/**
+ * 通用 mount/unmount 辅助：处理 VNode 和字符串两种子节点
+ *
+ * @param child - VNode 或字符串
+ * @param vnode - 父 flow VNode（设置 __parent）
+ * @param anchor - 控制流锚点
+ * @returns { vnode, textNode } 用于后续 unmount
+ */
+function mountFlowChild(
+  child: VNodeChild,
+  vnode: VNode,
+  anchor: FlowAnchor,
+): { vnode: VNode | null; textNode: Text | null } {
+  const parent = anchor.parentNode;
+  if (!parent) return { vnode: null, textNode: null };
+
+  if (typeof child === "string") {
+    // 字符串子节点：创建 Text 节点
+    const textNode = document.createTextNode(child);
+    parent.insertBefore(textNode, anchor);
+    return { vnode: null, textNode };
+  }
+
+  // VNode 子节点
+  child.__parent = vnode;
+  const el = materialize(child);
+  /**
+   * ★ 就地补发生命周期（与 mount() 顺序一致）：
+   * 控制流子节点不在静态 VNode 树的 children 里（存于 __flow.children /
+   * __flow.fallback），mount/hydrate 顶层的 invokeLifecycle 递归遍历
+   * vnode.children 到达不了这里，必须在动态挂载点就地触发，否则：
+   * - onMounted 不执行（组件 mounted 事件链断裂，如 pbpControlsMounted）
+   * - lc._effects 不启动（signal 驱动的 class/style/文本更新全部失效）
+   * - lifecycle.el 不设置、组件 ref 不赋值
+   */
+  invokeLifecycle(child, "onBeforeMount");
+  parent.insertBefore(el, anchor);
+  invokeLifecycle(child, "onMounted");
+  return { vnode: child, textNode: null };
+}
+
+/**
+ * 通用 unmount 辅助：销毁 VNode 或移除 Text 节点
+ */
+function unmountFlowChild(state: {
+  vnode: VNode | null;
+  textNode: Text | null;
+}): void {
+  if (state.vnode) {
+    destroy(state.vnode);
+    state.vnode = null;
+  }
+  if (state.textNode) {
+    state.textNode.parentNode?.removeChild(state.textNode);
+    state.textNode = null;
+  }
+}
+
+/**
+ * Show 组件初始化：条件渲染
+ *
+ * effect 监听 when()：
+ * - true → mount children, destroy fallback
+ * - false → destroy children, mount fallback
+ * - 不重渲染 children，仅 mount/destroy 切换
+ *
+ * 关键：切换 effect 的 dispose 挂在 Show VNode._cleanups（由 materialize 处理），
+ * 不挂在被切换的子 VNode 上（否则子 VNode destroy 会把切换 effect 一起 dispose）
+ */
+function initShow(vnode: VNode, anchor: FlowAnchor): () => void {
+  const flow = vnode.__flow!;
+  const children = flow.children ?? [];
+  const fallback = flow.fallback;
+  let currentState: { vnode: VNode | null; textNode: Text | null } = {
+    vnode: null,
+    textNode: null,
+  };
+  /**
+   * 上一次的显隐判定结果（undefined 表示尚未初始化，确保首跑必挂载）
+   *
+   * ★ 显隐未翻转时跳过重挂：when getter 内可能读取多个 signal，
+   *   effect 的依赖集合大于实际翻转条件，「重跑」不等于「翻转」；
+   *   无条件「先卸载再重挂」会把非翻转重跑升级为子树销毁重建——
+   *   重复触发子组件 onMounted，极易与「挂载即回写」的组件 API
+   *   形成回写型循环（Cycle detected 熔断的常见形态）
+   */
+  let lastVisible: boolean | undefined;
+
+  const effectDispose = effect((): void => {
+    const visible = flow.when ? flow.when() : false;
+    if (visible === lastVisible) return;
+    lastVisible = visible;
+
+    // 先卸载当前内容
+    unmountFlowChild(currentState);
+    const target = visible ? children : fallback ? [fallback] : [];
+
+    if (target.length > 0) {
+      currentState = mountFlowChild(target[0], vnode, anchor);
+    }
+  });
+
+  return () => {
+    effectDispose();
+    unmountFlowChild(currentState);
+  };
+}
+
+/**
+ * Switch 组件初始化：多分支条件渲染
+ *
+ * effect 监听所有 Match 的 when()，挂载第一个匹配分支。
+ * 所有 Match 都不匹配时挂载 fallback children。
+ * 分支切换：destroy 旧分支，mount 新分支。
+ */
+function initSwitch(vnode: VNode, anchor: FlowAnchor): () => void {
+  const flow = vnode.__flow!;
+  const matches = flow.matches ?? [];
+  const fallback = flow.children ?? [];
+  let currentState: { vnode: VNode | null; textNode: Text | null } = {
+    vnode: null,
+    textNode: null,
+  };
+  /**
+   * 上一次命中的分支（undefined=未初始化，-1=fallback，-2=无匹配无 fallback）
+   * 与 initShow 相同的翻转守卫：命中分支未变化时跳过卸载/重挂
+   */
+  let lastTarget: number | undefined;
+
+  const effectDispose = effect((): void => {
+    // 查找第一个匹配的分支
+    let found = false;
+    /** 命中的分支下标 */
+    let matchIndex = -1;
+    for (let i = 0; i < matches.length; i++) {
+      if (matches[i].when()) {
+        matchIndex = i;
+        found = true;
+        break;
+      }
+    }
+
+    /** 本次目标：命中分支下标；无命中时 -1=fallback、-2=空 */
+    const target = found ? matchIndex : fallback.length > 0 ? -1 : -2;
+    if (target === lastTarget) return;
+    lastTarget = target;
+
+    // 先卸载当前分支
+    unmountFlowChild(currentState);
+
+    if (found && matches[matchIndex].children.length > 0) {
+      currentState = mountFlowChild(matches[matchIndex].children[0], vnode, anchor);
+    }
+
+    // 无匹配分支时挂载 fallback
+    if (!found && fallback.length > 0) {
+      currentState = mountFlowChild(fallback[0], vnode, anchor);
+    }
+  });
+
+  return () => {
+    effectDispose();
+    unmountFlowChild(currentState);
+  };
+}
+
+/**
+ * Dynamic 组件初始化：动态组件切换
+ *
+ * effect 监听 component()，切换时 destroy 旧组件 mount 新组件。
+ * 使用 h() 创建组件 VNode（处理 ref/providers/lifecycle 等）。
+ */
+function initDynamic(vnode: VNode, anchor: FlowAnchor): () => void {
+  const flow = vnode.__flow!;
+  let currentVNode: VNode | null = null;
+
+  const effectDispose = effect((): void => {
+    // 先卸载当前组件
+    if (currentVNode) {
+      destroy(currentVNode);
+      currentVNode = null;
+    }
+
+    const compGetter = flow.component;
+    const comp = compGetter ? compGetter() : undefined;
+    if (comp) {
+      // 使用 h() 创建组件 VNode（处理 ref/providers/lifecycle 等）
+      const childVNode = h(comp, flow.props ?? {});
+      childVNode.__parent = vnode;
+      const el = materialize(childVNode);
+      // ★ 就地补发生命周期（同 mountFlowChild：动态组件不在静态树 children 递归范围）
+      invokeLifecycle(childVNode, "onBeforeMount");
+      const parent = anchor.parentNode;
+      if (parent) {
+        parent.insertBefore(el, anchor);
+      }
+      invokeLifecycle(childVNode, "onMounted");
+      currentVNode = childVNode;
+    }
+  });
+
+  return () => {
+    effectDispose();
+    if (currentVNode) {
+      destroy(currentVNode);
+    }
+  };
+}
+
+// ============================================
+// v-* 指令处理函数
+// ============================================
+
+/**
+ * 类型守卫：判断元素是否有 style 属性（HTMLElement | SVGElement）
+ */
+function hasStyle(el: Element): el is HTMLElement | SVGElement {
+  return el instanceof HTMLElement || el instanceof SVGElement;
+}
+
+/**
+ * 类型守卫：判断值是否为 getter 函数 () => unknown
+ */
+function isGetterValue(value: unknown): value is () => unknown {
+  return typeof value === "function";
+}
+
+/**
+ * v-model 双向绑定
+ *
+ * 根据元素类型选择事件和属性：
+ * - input[type=checkbox]：change 事件，读写 checked（boolean）
+ * - input[type=radio]：change 事件，读 checked = (value === sig.value)，写 sig.value = input.value
+ * - input[其他]/textarea：input 事件，读写 value
+ * - select：change 事件，读写 value
+ *
+ * @param el - 目标元素
+ * @param sig - Signal（双向绑定的响应式变量）
+ * @returns 清理函数（dispose effect + 移除事件监听）
+ */
+function applyVModel(el: Element, sig: unknown): (() => void) | undefined {
+  if (!isSignalRef(sig)) {
+    if (isDev()) {
+      warn(WarnSource.MOUNT, "v-model requires a Signal as value");
+    }
+    return undefined;
+  }
+
+  // HTMLInputElement
+  if (el instanceof HTMLInputElement) {
+    const input = el;
+    const type = input.type;
+
+    // checkbox：读写 checked（boolean）
+    if (type === "checkbox") {
+      const effectDispose = effect(() => {
+        input.checked = Boolean(sig.value);
+      });
+      const handler = () => {
+        sig.value = input.checked;
+      };
+      input.addEventListener("change", handler);
+      return () => {
+        effectDispose();
+        input.removeEventListener("change", handler);
+      };
+    }
+
+    // radio：读 checked = (value === sig.value)，写 sig.value = input.value
+    if (type === "radio") {
+      const effectDispose = effect(() => {
+        input.checked = input.value === String(sig.value);
+      });
+      const handler = () => {
+        sig.value = input.value;
+      };
+      input.addEventListener("change", handler);
+      return () => {
+        effectDispose();
+        input.removeEventListener("change", handler);
+      };
+    }
+
+    // range/text/其他：读写 value
+    const effectDispose = effect(() => {
+      input.value = String(sig.value);
+    });
+    const handler = () => {
+      sig.value = input.value;
+    };
+    input.addEventListener("input", handler);
+    return () => {
+      effectDispose();
+      input.removeEventListener("input", handler);
+    };
+  }
+
+  // HTMLTextAreaElement
+  if (el instanceof HTMLTextAreaElement) {
+    const textarea = el;
+    const effectDispose = effect(() => {
+      textarea.value = String(sig.value);
+    });
+    const handler = () => {
+      sig.value = textarea.value;
+    };
+    textarea.addEventListener("input", handler);
+    return () => {
+      effectDispose();
+      textarea.removeEventListener("input", handler);
+    };
+  }
+
+  // HTMLSelectElement
+  if (el instanceof HTMLSelectElement) {
+    const select = el;
+    const effectDispose = effect(() => {
+      select.value = String(sig.value);
+    });
+    const handler = () => {
+      sig.value = select.value;
+    };
+    select.addEventListener("change", handler);
+    return () => {
+      effectDispose();
+      select.removeEventListener("change", handler);
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * v-show 显隐控制
+ *
+ * effect: val → el.style.display（true → ''，false → 'none'）
+ * 支持 Signal / getter 函数 / 普通值
+ */
+function applyVShow(el: Element, val: unknown): (() => void) | undefined {
+  if (!hasStyle(el)) return undefined;
+
+  if (isSignalRef(val)) {
+    return effect(() => {
+      el.style.display = val.value ? "" : "none";
+    });
+  }
+  if (isGetterValue(val)) {
+    return effect(() => {
+      el.style.display = val() ? "" : "none";
+    });
+  }
+  // 普通值：设置一次
+  el.style.display = val ? "" : "none";
+  return undefined;
+}
+
+/**
+ * v-text 文本绑定
+ *
+ * effect: val → el.textContent
+ * 支持 Signal / getter 函数 / 普通值
+ */
+function applyVText(el: Element, val: unknown): (() => void) | undefined {
+  if (isSignalRef(val)) {
+    return effect(() => {
+      el.textContent = String(val.value);
+    });
+  }
+  if (isGetterValue(val)) {
+    return effect(() => {
+      el.textContent = String(val());
+    });
+  }
+  // 普通值：设置一次
+  el.textContent = String(val);
+  return undefined;
+}
+
+/**
+ * v-html HTML 绑定
+ *
+ * effect: val → el.innerHTML
+ * 支持 Signal / getter 函数 / 普通值
+ */
+function applyVHtml(el: Element, val: unknown): (() => void) | undefined {
+  if (isSignalRef(val)) {
+    return effect(() => {
+      el.innerHTML = String(val.value);
+    });
+  }
+  if (isGetterValue(val)) {
+    return effect(() => {
+      el.innerHTML = String(val());
+    });
+  }
+  // 普通值：设置一次
+  el.innerHTML = String(val);
+  return undefined;
+}
+
 // 类型守卫：将 entry 收窄为 [DirectiveFn, unknown]
 function isDirectiveEntry(value: unknown): value is [DirectiveFn, unknown] {
   return (
     Array.isArray(value) && value.length >= 2 && typeof value[0] === "function"
   );
+}
+
+/**
+ * 处理响应式属性（编译期提取的动态表达式）
+ * __reactiveAttrs: { key: getter } → 每个属性注册 effect，signal 变化时自动更新
+ *
+ * mount 与 hydrate 共用此函数：
+ * - mount：materialize 创建 DOM 后首次应用
+ * - hydrate：SSR HTML 已含初始值，水合时注册 effect 建立响应式依赖，
+ *   否则水合页面上所有动态 class/style/checked 等 signal 变化后不再更新
+ *
+ * 支持的属性类型：
+ * - class/className：字符串/数组/对象（normalizeClass 处理），覆盖式更新
+ * - style：字符串/对象（normalizeStyle 处理），增量更新（清除不再存在的旧属性）
+ * - 其他属性：setAttribute 覆盖式更新
+ *
+ * effect 的 dispose 推入 cleanups，销毁时自动清理
+ *
+ * @param el - 目标 DOM 元素
+ * @param attrs - 属性对象（含编译期提取的 __reactiveAttrs）
+ * @param cleanups - 清理函数收集数组（调用方负责在销毁时统一执行）
+ */
+function applyReactiveAttrs(
+  el: Element,
+  attrs: VNodeAttrs,
+  cleanups: (() => void)[],
+): void {
+  const reactiveAttrs = attrs.__reactiveAttrs;
+  if (reactiveAttrs !== undefined) {
+    for (const rKey in reactiveAttrs) {
+      if (!Object.prototype.hasOwnProperty.call(reactiveAttrs, rKey)) continue;
+      const getter = reactiveAttrs[rKey];
+
+      /**
+       * style 增量更新需要记录上次应用的属性集合
+       * 每次 effect 重跑时清除不再存在的旧属性，避免残留
+       * 每个 rKey 独立维护一份，避免多个 style 属性互相干扰
+       */
+      let prevStyleProps: Set<string> | undefined;
+
+      const rDispose = effect(() => {
+        const val = getter();
+
+        if (rKey === "class" || rKey === "className") {
+          // class：normalizeClass 支持字符串/数组/对象，覆盖式更新（无残留问题）
+          const cls = normalizeClass(val as ClassInput);
+          if (cls) {
+            el.setAttribute("class", cls);
+          } else {
+            el.removeAttribute("class");
+          }
+        } else if (rKey === "style") {
+          // style：normalizeStyle 支持字符串/对象，增量更新
+          // 清除上次的属性，再设置新属性，避免旧属性残留
+          if (hasStyle(el)) {
+            if (prevStyleProps) {
+              for (const oldProp of prevStyleProps) {
+                el.style.removeProperty(oldProp);
+              }
+            }
+            prevStyleProps = new Set();
+            const normalized = normalizeStyle(val as StyleInput);
+            if (normalized) {
+              for (const prop in normalized) {
+                if (!Object.prototype.hasOwnProperty.call(normalized, prop)) continue;
+                const value = normalized[prop];
+                el.style.setProperty(prop, value);
+                prevStyleProps.add(prop);
+              }
+            }
+          }
+        } else {
+          // 其他属性：setAttribute 覆盖式更新
+          // null/undefined/false → 移除属性（与 Vue 的 falsy 语义一致）
+          if (val === null || val === undefined) {
+            el.removeAttribute(rKey);
+          } else if (typeof val === "boolean") {
+            if (val) {
+              el.setAttribute(rKey, "");
+            } else {
+              el.removeAttribute(rKey);
+            }
+          } else {
+            el.setAttribute(rKey, String(val));
+          }
+        }
+      });
+      cleanups.push(rDispose);
+    }
+  }
 }
 
 /**
@@ -359,7 +1114,7 @@ export function applyAttrs(
 
   /**
    * 第一步：优先处理编译期预分类的 __ref（如果存在）
-   * 编译期：vite-plugin-hili-compile 将 ref 重命名为 __ref
+   * 编译期：vite-plugin-lumina-compile 将 ref 重命名为 __ref
    * 运行时：优先读取 __ref，fallback 到 ref
    * 统一支持：回调 / 字符串模板引用 / Signal / 旧 {current} 对象
    */
@@ -367,7 +1122,7 @@ export function applyAttrs(
 
   /**
    * 第二步：优先处理编译期预分类的 __events（如果存在）
-   * 编译期：vite-plugin-hili-compile 将 onXxx 事件提取为 __events 对象
+   * 编译期：vite-plugin-lumina-compile 将 onXxx 事件提取为 __events 对象
    * 运行时：直接遍历 __events 绑定事件，跳过属性遍历中的 startsWith 判断
    */
   const eventsValue = attrs.__events;
@@ -389,7 +1144,51 @@ export function applyAttrs(
   }
 
   /**
-   * 第三步：处理其他属性
+   * 第三步：处理响应式属性（编译期提取的动态表达式）
+   * 与 hydrate 共用 applyReactiveAttrs（见上方函数注释）
+   */
+  applyReactiveAttrs(el, attrs, cleanups);
+
+  /**
+   * 第四步：处理 v-* 指令属性
+   *
+   * 内置指令：v-model / v-show / v-text / v-html
+   * 自定义指令：通过 directive(name, fn) 注册，遇到 v-xxx 时查注册表
+   * 每个指令可能返回清理函数，推入 cleanups
+   */
+  for (const key in attrs) {
+    if (!Object.prototype.hasOwnProperty.call(attrs, key)) continue;
+    if (!key.startsWith("v-")) continue;
+
+    const value = attrs[key];
+
+    if (key === "v-model") {
+      const cleanup = applyVModel(el, value);
+      if (cleanup) cleanups.push(cleanup);
+    } else if (key === "v-show") {
+      const cleanup = applyVShow(el, value);
+      if (cleanup) cleanups.push(cleanup);
+    } else if (key === "v-text") {
+      const cleanup = applyVText(el, value);
+      if (cleanup) cleanups.push(cleanup);
+    } else if (key === "v-html") {
+      const cleanup = applyVHtml(el, value);
+      if (cleanup) cleanups.push(cleanup);
+    } else {
+      // 自定义指令：v-xxx → 查注册表
+      const dirName = key.slice(2);
+      const dirFn = getDirective(dirName);
+      if (dirFn) {
+        const cleanup = dirFn(el, value);
+        if (cleanup !== undefined && typeof cleanup === "function") {
+          cleanups.push(cleanup);
+        }
+      }
+    }
+  }
+
+  /**
+   * 第五步：处理其他属性
    */
   for (const key in attrs) {
     if (!Object.prototype.hasOwnProperty.call(attrs, key)) continue;
@@ -402,7 +1201,7 @@ export function applyAttrs(
     if (value === null || value === undefined) continue;
 
     /**
-     * 跳过已处理的 ref / __ref / __events / __providers
+     * 跳过已处理的 ref / __ref / __events / __providers / v-* 指令
      * __providers 由 h()/内部函数在创建 VNode 时提取到 vnode.__providers，
      * 此处兜底跳过，防止任何路径残留的 __providers 被当作 DOM 属性设置
      */
@@ -410,7 +1209,9 @@ export function applyAttrs(
       key === "ref" ||
       key === "__ref" ||
       key === "__events" ||
-      key === "__providers"
+      key === "__providers" ||
+      key === "__reactiveAttrs" ||
+      key.startsWith("v-")
     ) continue;
 
     /**
@@ -605,6 +1406,12 @@ export function destroy(vnode: VNode | string): void {
   vnode.lifecycle?._stateCleanups?.forEach((fn) => fn());
 
   /**
+   * 执行响应式 effect 的 dispose 函数
+   * （与 useState 退订分离收集，避免 onMounted 重启 effect 时误清订阅）
+   */
+  vnode.lifecycle?._effectDisposes?.forEach((fn) => fn());
+
+  /**
    * 清空元素 ref（回调 / 字符串 / Signal / {current}）
    * 避免销毁后残留悬挂的 DOM 引用（安全稳定）
    */
@@ -619,6 +1426,23 @@ export function destroy(vnode: VNode | string): void {
    */
   for (const child of vnode.children) {
     destroy(child);
+  }
+
+  /**
+   * 移除多根静态模板的顶层节点（编译期 DOM 化阶段 1）
+   * 多根模板没有单一 el 可依赖，__tmplRoots 记录了克隆/水合时收集的顶层节点，
+   * destroy 时逐个从 DOM 移除（mount 与 hydrate 两条路径都会填充该数组）
+   */
+  if (vnode.__tmplRoots !== undefined) {
+    for (const node of vnode.__tmplRoots) {
+      if (node.parentNode !== null) {
+        try {
+          node.parentNode.removeChild(node);
+        } catch {
+          /** 节点已被手动移除，忽略错误 */
+        }
+      }
+    }
   }
 
   /**
@@ -660,28 +1484,73 @@ function processLifecycleForNode(vnode: VNode, method: keyof Lifecycle): void {
   }
 
   /**
-   * onMounted 时启动响应式 effect（signal/computed + onEffect）
-   * - 在用户 onMounted 之前启动，完成初始渲染
+   * onMounted 时启动响应式 effect（signal/computed + onEffect）与 useState 订阅
+   * - 在用户 onMounted 之前启动，完成初始渲染与状态同步
    * - 此时 ref.current / lifecycle.el 已就绪
-   * - dispose 收集到 _stateCleanups，destroy 时统一清理
+   * - effect 的 dispose 与 useState 的退订分别收集到 _effectDisposes /
+   *   _stateCleanups，destroy 时统一清理
    */
-  if (lc && method === "onMounted" && lc._effects) {
-    const effects = lc._effects;
-    lc._effects = undefined;
-    const cleanups = (lc._stateCleanups ??= []);
-    for (const startEffect of effects) {
-      const dispose = startEffect();
-      if (dispose) {
-        cleanups.push(dispose);
+  if (
+    lc &&
+    method === "onMounted" &&
+    (lc._effects || lc._stateSubscriptions)
+  ) {
+    /**
+     * ★ 不清空 _effects / _stateSubscriptions：控制流（Show/Switch）卸载→重挂
+     *   会复用同一 VNode（children 存于 __flow.children，组件 setup 在 h() 中
+     *   只执行一次），重挂时需要再次启动。先执行旧 dispose/退订（幂等，且
+     *   destroy 已跑过一遍）避免重复订阅，再启动新实例 ——
+     *   任意时刻每个 effect / 订阅只有一份活跃实例。
+     */
+    if (lc._effects) {
+      const effectDisposes = (lc._effectDisposes ??= []);
+      for (const dispose of effectDisposes) dispose();
+      effectDisposes.length = 0;
+      for (const startEffect of lc._effects) {
+        const dispose = startEffect();
+        if (dispose) {
+          effectDisposes.push(dispose);
+        }
+      }
+    }
+    /**
+     * ★ useState 订阅重建：退订函数收集到 _stateCleanups（与 effect dispose
+     *   分离 —— 此前共用一个数组导致首次挂载时 setup 期收集的订阅退订
+     *   被 effect 重启逻辑误执行，组件状态订阅在挂载瞬间全部失效）。
+     *   启动器内部会以当前值补一次同步，覆盖卸载窗口期内错过的状态变化。
+     */
+    if (lc._stateSubscriptions) {
+      const cleanups = (lc._stateCleanups ??= []);
+      for (const unsub of cleanups) unsub();
+      cleanups.length = 0;
+      for (const startSubscription of lc._stateSubscriptions) {
+        cleanups.push(startSubscription());
       }
     }
   }
 
   if (lc?.[method]) {
-    safeCall(
-      () => lc[method]!(),
-      ErrorSource.LIFECYCLE,
-      `生命周期钩子执行失败: ${method}`,
+    /**
+     * ★ untracked 隔离用户钩子内的 signal 读取（防止依赖追踪泄漏）
+     *
+     * 生命周期钩子是副作用执行点而非渲染逻辑，钩子内读取 signal
+     * 应只取快照、不建立依赖（与 Vue3 的 onMounted 语义一致）。
+     *
+     * 若不隔离：控制流（Show/Switch）effect 挂载组件的同步链会
+     * 一直延伸到钩子执行，钩子内读取的 signal（如子组件内部的
+     * 数据 signal）会被追踪为「挂载它的控制流 effect」的依赖；
+     * 一旦钩子链回写该 signal（典型：onMounted → emit → 父层回调
+     * → 子组件 rebuild API 回写内部 signal），控制流 effect 即被
+     * 通知重跑 → 无条件重挂子树 → onMounted 再次触发 → 再次回写
+     * → 同步死循环，直到 signals-core 的 set 嵌套计数（c>100）
+     * 熔断抛出 "Cycle detected"。
+     */
+    untracked(() =>
+      safeCall(
+        () => lc[method]!(),
+        ErrorSource.LIFECYCLE,
+        `Lifecycle hook execution failed: ${method}`,
+      ),
     );
   }
 
@@ -810,11 +1679,11 @@ export function hydrate(vnode: VNode | string, container: HTMLElement): void {
    *
    * hydrateNode() 会返回“下一个未消费的 DOM 节点”，
    * 这样才能按 SSR 输出顺序把整棵树完整对齐。
+   *
+   * firstChild 可能为 null（如根节点是控制流：SSR 不输出任何占位），
+   * container 作为 parent 传入，控制流仍可在其中创建锚点并渲染子树。
    */
-  const firstChild = container.firstChild;
-  if (firstChild) {
-    hydrateNode(vnode, firstChild);
-  }
+  hydrateNode(vnode, container.firstChild, container);
 
   /**
    * 触发生命周期钩子
@@ -826,15 +1695,135 @@ export function hydrate(vnode: VNode | string, container: HTMLElement): void {
 }
 
 /**
+ * 类型守卫：判断节点是否为 Text 文本节点
+ * nodeType === 3 时按 DOM 规范只可能是 Text，无需 instanceof（避免跨 realm 问题）
+ */
+function isTextNode(node: ChildNode): node is Text {
+  return node.nodeType === Node.TEXT_NODE;
+}
+
+/**
+ * 类型守卫：判断节点是否为 Comment 注释节点
+ * nodeType === 8 时按 DOM 规范只可能是 Comment
+ */
+function isCommentNode(node: ChildNode): node is Comment {
+  return node.nodeType === Node.COMMENT_NODE;
+}
+
+/**
+ * 控制流节点水合（For/Show/Switch/Dynamic）
+ *
+ * SSR 端 __flow 输出空字符串（见 ssr.ts），不再输出任何占位注释，
+ * 控制流内容全部由客户端渲染。水合时在当前位置插入不可见的空 Text 锚点，
+ * 再以该锚点运行 initFor/initShow/initSwitch/initDynamic，
+ * 动态子树渲染后插入锚点之前（与 mount 的 materialize 行为一致）。
+ *
+ * 兼容旧版 SSR 输出（游标不错位）：
+ * - <!--flow--> 注释：直接复用为锚点
+ * - <__flow> 空元素：替换为 Text 锚点后移除
+ *
+ * @param vnode - flow VNode
+ * @param el - 当前游标节点；null 表示该位置无 DOM 输出（锚点追加到 parent 末尾）
+ * @param parent - 锚点插入的父节点
+ * @returns 下一个未消费的 DOM 节点（控制流自身不消费任何 SSR 节点）
+ */
+function hydrateFlowNode(
+  vnode: VNode,
+  el: ChildNode | null,
+  parent: ParentNode,
+): ChildNode | null {
+  let anchor: FlowAnchor;
+  if (el !== null && isCommentNode(el)) {
+    // 旧版 SSR 输出的 <!--flow--> 注释：直接复用为锚点
+    anchor = el;
+  } else if (el instanceof Element && el.tagName.toLowerCase() === "__flow") {
+    // 更早期 SSR 输出的 <__flow> 空元素：替换为不可见的 Text 锚点
+    anchor = document.createTextNode("");
+    parent.insertBefore(anchor, el);
+    parent.removeChild(el);
+  } else {
+    // 现行协议：SSR 无输出，在 el 之前插入锚点（el 为 null 时追加到末尾）
+    anchor = document.createTextNode("");
+    parent.insertBefore(anchor, el);
+  }
+  vnode.el = anchor;
+
+  let dispose: (() => void) | undefined;
+  const flowType = vnode.__flow!.type;
+  if (flowType === "for") {
+    dispose = initFor(vnode, anchor);
+  } else if (flowType === "show") {
+    dispose = initShow(vnode, anchor);
+  } else if (flowType === "switch") {
+    dispose = initSwitch(vnode, anchor);
+  } else if (flowType === "dynamic") {
+    dispose = initDynamic(vnode, anchor);
+  }
+  if (dispose) {
+    if (!vnode._cleanups) vnode._cleanups = [];
+    vnode._cleanups.push(dispose);
+  }
+  return anchor.nextSibling;
+}
+
+/**
  * 递归水合单个节点
  * 将 VNode 与已有 DOM 元素关联：存储 el、绑定 ref/事件、收集清理函数
  *
  * 水合时不重新设置属性（属性已在 SSR 中设置），只绑定事件和 ref
  *
  * @param vnode - 虚拟节点
- * @param el - 对应的已有 DOM 元素
+ * @param el - 对应的已有 DOM 节点；null 表示 SSR 在该位置无输出
+ * @param parent - el 所在的父节点（el 为 null 时控制流依托它插入锚点）
  */
-function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
+function hydrateNode(
+  vnode: VNode,
+  el: ChildNode | null,
+  parent: ParentNode,
+): ChildNode | null {
+  /**
+   * el 为 null：SSR 在该位置没有任何输出。
+   * 仅控制流支持此情况（SSR 不渲染控制流初始内容、也不输出占位，
+   * 子树全部由客户端渲染，依托 parent 创建锚点）；
+   * 其它类型的 vnode 没有可对齐的 DOM，保守跳过。
+   */
+  if (el === null) {
+    if (vnode.__flow !== undefined) {
+      return hydrateFlowNode(vnode, null, parent);
+    }
+    return null;
+  }
+  /**
+   * 静态模板节点水合（编译期 DOM 化阶段 1）
+   *
+   * SSR 端 __tmpl 直接输出了模板 HTML（见 ssr.ts），客户端水合时：
+   * - 不克隆、不递归子节点（静态内容与 SSR 输出天然一致，跳过整段对齐）
+   * - 单根：采用当前 DOM 节点为 vnode.el，游标前进一个（nextSibling）
+   * - 多根：按 roots 数跳过并收集兄弟节点到 __tmplRoots（destroy 清理用），
+   *   返回最后一个节点之后的节点（与 Fragment 水合的游标语义一致）
+   * - roots === 0：SSR 未输出任何节点，游标不动（当前节点留给下一个兄弟）
+   */
+  if (vnode.__tmpl !== undefined) {
+    const roots = vnode.__tmpl.roots;
+    if (roots === 1) {
+      if (el instanceof Element) {
+        vnode.el = el;
+      }
+      return el.nextSibling;
+    }
+    if (roots === 0) {
+      return el;
+    }
+    let current: ChildNode | null = el;
+    const collected: Node[] = [];
+    for (let i = 0; i < roots && current !== null; i++) {
+      collected.push(current);
+      current = current.nextSibling;
+    }
+    vnode.__tmplRoots = collected;
+    return current;
+  }
+
   /**
    * 组件类型 VNode：组件函数已经在 h() 中执行过
    * 组件返回的 VNode 存储在 vnode 的结构中
@@ -864,10 +1853,65 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
       if (child && domChild) {
         // ★ 建立 __parent 链（与 materialize 一致），供 useTemplateRef 字符串 ref 沿链解析
         if (child.__parent === undefined) child.__parent = vnode;
-        domChild = hydrateNode(child, domChild);
+        domChild = hydrateNode(child, domChild, domChild.parentNode ?? parent);
       }
     }
     return el.nextSibling;
+  }
+
+  /**
+   * 响应式文本节点水合：
+   * 期望 DOM 对应位置是 Text 节点（SSR 端 __reactive 求值输出纯文本）。
+   * 注册 effect 建立响应式依赖，signal 变化时自动更新 textContent。
+   */
+  if (vnode.__reactive !== undefined) {
+    if (isTextNode(el)) {
+      vnode.el = el;
+      const textNode = el;
+      const dispose = effect(() => {
+        textNode.textContent = vnode.__reactive!.get();
+      });
+      if (!vnode._cleanups) vnode._cleanups = [];
+      vnode._cleanups.push(dispose);
+    }
+    // el 非 Text（SSR 版本错位）→ 保守跳过，不告警不错位扩散
+    return el.nextSibling;
+  }
+
+  /**
+   * 控制流节点水合：
+   * SSR 端 __flow 输出 <!--flow--> 注释（见 ssr.ts），控制流内容在客户端渲染。
+   * 以该注释为锚点运行 initFor/initShow/initSwitch/initDynamic，
+   * 动态子树渲染后插入锚点之前（与 mount 的 materialize 行为一致）。
+   * 若 el 是旧版 SSR 输出的 <__flow> 空元素，先替换为注释锚点再 init。
+   */
+  if (vnode.__flow !== undefined) {
+    let anchor: Comment;
+    if (isCommentNode(el)) {
+      anchor = el;
+    } else {
+      anchor = document.createComment("flow");
+      el.parentNode?.insertBefore(anchor, el);
+      el.parentNode?.removeChild(el);
+    }
+    vnode.el = anchor;
+
+    let dispose: (() => void) | undefined;
+    const flowType = vnode.__flow.type;
+    if (flowType === "for") {
+      dispose = initFor(vnode, anchor);
+    } else if (flowType === "show") {
+      dispose = initShow(vnode, anchor);
+    } else if (flowType === "switch") {
+      dispose = initSwitch(vnode, anchor);
+    } else if (flowType === "dynamic") {
+      dispose = initDynamic(vnode, anchor);
+    }
+    if (dispose) {
+      if (!vnode._cleanups) vnode._cleanups = [];
+      vnode._cleanups.push(dispose);
+    }
+    return anchor.nextSibling;
   }
 
   /**
@@ -877,15 +1921,19 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
    */
   if (String(vnode.tag).toLowerCase() === "fragment") {
     let current: ChildNode | null = el;
+    // fragment 的全部子节点共享同一父节点，控制流锚点依托它插入
+    const fragParent = el.parentNode ?? parent;
     for (const child of vnode.children || []) {
-      if (!current) break;
       if (typeof child === "string") {
-        current = current.nextSibling;
+        current = current?.nextSibling ?? null;
         continue;
       }
-      // ★ 建立 __parent 链（与 materialize 一致）
-      if (child.__parent === undefined) child.__parent = vnode;
-      current = hydrateNode(child, current);
+      // current 为 null 时仅控制流子节点继续水合（SSR 不输出占位，锚点依托父节点创建）
+      if (child && (current !== null || child.__flow !== undefined)) {
+        // ★ 建立 __parent 链（与 materialize 一致）
+        if (child.__parent === undefined) child.__parent = vnode;
+        current = hydrateNode(child, current, fragParent);
+      }
     }
     return current;
   }
@@ -908,7 +1956,7 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
     if (vnodeTag !== "fragment" && vnodeTag !== domTag) {
       if (isDev()) {
         console.warn(
-          `[HiliFramework/hydrate] 标签不匹配: VNode 标签 "${vnodeTag}" 与 DOM 标签 "${domTag}" 不一致`,
+          `[Lumina/hydrate] Tag mismatch: VNode tag "${vnodeTag}" does not match DOM tag "${domTag}"`,
         );
       }
     }
@@ -979,6 +2027,14 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
     }
 
     /**
+     * 处理响应式属性（与 mount 的 applyAttrs 逻辑一致）
+     * SSR HTML 中已序列化初始值，水合时注册 effect 建立响应式依赖，
+     * signal 变化后动态 class/style/checked 等才能自动更新；
+     * 缺失此步骤会导致水合页面上所有响应式属性停留在 SSR 初值
+     */
+    applyReactiveAttrs(el, attrs, cleanups);
+
+    /**
      * 保存清理函数到虚拟节点
      * 销毁时统一调用，移除所有事件监听和指令清理
      */
@@ -994,9 +2050,15 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
 
   /**
    * 递归水合子节点
-   * VNode 子节点与 DOM 子节点一一对应
+   * VNode 子节点与 DOM 子节点一一对应；
+   * 控制流子节点例外（SSR 不输出占位，domChild 为 null 时仍需水合，
+   * 依托当前元素创建锚点渲染子树）
    */
   const children = vnode.children || [];
+  // 子节点的父容器：el 为元素时即 el；游标错位（el 非元素）时回退到传入的 parent
+  const childParent: ParentNode = el instanceof Element
+    ? el
+    : el.parentNode ?? parent;
   let domChild = el.firstChild;
 
   for (const child of children) {
@@ -1004,10 +2066,10 @@ function hydrateNode(vnode: VNode, el: ChildNode): ChildNode | null {
       domChild = domChild?.nextSibling ?? null;
       continue;
     }
-    if (child && domChild) {
+    if (child && (domChild !== null || child.__flow !== undefined)) {
       // ★ 建立 __parent 链（与 materialize 一致），供 useTemplateRef 字符串 ref 沿链解析
       if (child.__parent === undefined) child.__parent = vnode;
-      domChild = hydrateNode(child, domChild);
+      domChild = hydrateNode(child, domChild, childParent);
     }
   }
   return el.nextSibling;

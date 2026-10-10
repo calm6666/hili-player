@@ -7,7 +7,7 @@
  * - 框架核心（h, defineComponent, useState 等）：从 @/core 源码导入
  *   框架不需要独立打包发布，demo 中通过 Vite 别名即时编译
  * - 播放器（VideoPlayer）：从 packages/player/dist/index.es.js 导入
- *   这是 vite build 构建后的 ES 模块产物，验证 hiliCompile 插件是否生效
+ *   这是 vite build 构建后的 ES 模块产物，验证 luminaCompile 插件是否生效
  * - 插件（HLS, DASH）：在 entry-client.ts 中按需从 dist 导入
  */
 
@@ -24,7 +24,7 @@ import {
 import type { Signal } from "../core/index.ts";
 
 // ★ 从构建产物导入播放器（monorepo 链接到 packages/player/dist）
-import { VideoPlayer } from "@hili-player/player";
+import { VideoPlayer } from "@lumina/nova";
 
 // ============================================
 // 全局状态：简单的计数器，用于验证 useState + hydrate
@@ -330,7 +330,7 @@ const Info = defineComponent(() => {
       },
       h("div", {}, "播放器: packages/player/dist/index.es.js"),
       h("div", {}, "插件:   packages/plugins/dist/"),
-      h("div", {}, "编译:   vite-plugin-hili-compile"),
+      h("div", {}, "编译:   vite-plugin-lumina-compile"),
       h("div", {}, "渲染:   renderToString → HTML → hydrate"),
     ),
   );
@@ -344,11 +344,11 @@ const RootLayout = defineComponent(() => {
   return h(
     "div",
     { class: "app-container" },
-    h("h1", {}, "Hili Player · 构建产物验证"),
+    h("h1", {}, "Nova Player · 构建产物验证"),
     h(
       "p",
       { class: "subtitle" },
-      "SSR + Hydration · hiliCompile 编译优化 · useTemplateRef + Signal 响应式",
+      "SSR + Hydration · luminaCompile 编译优化 · useTemplateRef + Signal 响应式",
     ),
     PlayerSection({}),
     Counter({}),

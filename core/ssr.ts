@@ -26,6 +26,8 @@ import {
   normalizeClass,
   StyleInput,
 } from "./normalize";
+import { maybeReactiveProps } from "./reactiveProps";
+import { isFlowComponent } from "./flow";
 
 /**
  * 自闭合 HTML 标签集合
@@ -59,7 +61,7 @@ const VOID_ELEMENTS = new Set([
 const SKIP_ATTRS = new Set([
   "ref",
   "__ref",
-  // 编译期预分类的事件对象（vite-plugin-hili-compile 将 onXxx 提取为 __events）
+  // 编译期预分类的事件对象（vite-plugin-lumina-compile 将 onXxx 提取为 __events）
   // 与 __ref/__providers 一样是内部字段，绝不能序列化到 HTML 中
   "__events",
   "key",
@@ -71,6 +73,7 @@ const SKIP_ATTRS = new Set([
   "svgContent",
   "innerHTML",
   "textContent",
+  "__reactiveAttrs",
 ]);
 
 /**
@@ -154,6 +157,31 @@ export function renderToString(
     return escapeHtml(vnode);
   }
 
+  /**
+   * 静态模板节点（编译期 DOM 化阶段 1）：
+   * 直接输出编译期生成的 HTML 字符串，跳过整棵 VNode 序列化。
+   * html 由编译端按 serializeAttrs 相同语义生成（内容已转义），
+   * 与客户端 <template> 克隆出的 DOM 严格一致，水合时可整段采用。
+   */
+  if (vnode.__tmpl !== undefined) {
+    return vnode.__tmpl.html;
+  }
+
+  /** 响应式文本节点：SSR 直接调用 getter 获取当前值（无 effect 追踪） */
+  if (vnode.__reactive !== undefined) {
+    return escapeHtml(vnode.__reactive.get());
+  }
+
+  /**
+   * 控制流节点：SSR 不输出任何占位（控制流内容在客户端渲染），
+   * 客户端 hydrateNode 遇到 __flow 时在当前位置插入不可见的空 Text 锚点，
+   * 再以该锚点调用 initFor/initShow 等动态渲染子树
+   * （水合端保留对旧版 <!--flow--> 注释占位的兼容）
+   */
+  if (vnode.__flow !== undefined) {
+    return "";
+  }
+
   /** 处理组件类型的 VNode */
   if (typeof vnode.tag === "function") {
     return renderComponentToString(vnode);
@@ -225,7 +253,7 @@ function renderElementToString(vnode: VNode): string {
  * 渲染组件为字符串
  * 调用组件函数获取其返回的 VNode，然后递归序列化
  *
- * 与 h.ts 的 getComponentType 不同，这里也优先读取编译期 __hili_type 标记，
+ * 与 h.ts 的 getComponentType 不同，这里也优先读取编译期 __lumina_type 标记，
  * 避免每次 SSR 都执行完整的 Object.getOwnPropertyDescriptor 反射判断
  *
  * @param vnode - 组件虚拟节点
@@ -234,6 +262,16 @@ function renderElementToString(vnode: VNode): string {
 function renderComponentToString(vnode: VNode): string {
   const tag = vnode.tag;
   const attrs = vnode.attrs || {};
+
+  /**
+   * ★ 响应式 props：手工构建的组件 VNode 直连此路径（编译路径已在
+   * _createComp 内完成包装）。Signal / _rp thunk 存在时包装为惰性代理，
+   * SSR 同步渲染期间读取即得到当前值；控制流组件豁免（toGetter
+   * 需要 Signal/getter 本体）
+   */
+  const compProps = isFlowComponent(tag)
+    ? attrs
+    : maybeReactiveProps(attrs);
 
   /**
    * 设置待注入的 Provider
@@ -249,12 +287,12 @@ function renderComponentToString(vnode: VNode): string {
   // try/finally 确保 provider 清理始终执行，消除之前 5 处重复的清理代码
   try {
     if (typeof tag === "function") {
-      // ★ 优先读取编译期 __hili_type 标记（与 h.ts getComponentType 保持一致）
-      // 编译期：vite-plugin-hili-compile 在 defineComponent 和 class 组件后注入
+      // ★ 优先读取编译期 __lumina_type 标记（与 h.ts getComponentType 保持一致）
+      // 编译期：vite-plugin-lumina-compile 在 defineComponent 和 class 组件后注入
       // O(1) 属性读取，跳过完整的反射判断
       const compType = (
-        tag as unknown as { __hili_type?: "fn" | "class" }
-      ).__hili_type;
+        tag as unknown as { __lumina_type?: "fn" | "class" }
+      ).__lumina_type;
 
       if (compType === "fn" || (compType === undefined && isFnComponent(tag))) {
         /**
@@ -264,12 +302,12 @@ function renderComponentToString(vnode: VNode): string {
         const fn = tag as unknown as (props: Record<string, unknown>) => VNode;
         let result: VNode;
         try {
-          result = fn(attrs);
+          result = fn(compProps);
         } catch (e) {
           const error = e instanceof Error ? e : new Error(String(e));
           reportError(
             ErrorSource.SSR,
-            `SSR 函数组件渲染失败: ${tag.name || "Anonymous"}`,
+            `SSR function component render failed: ${tag.name || "Anonymous"}`,
             error,
           );
           throw e;
@@ -278,7 +316,7 @@ function renderComponentToString(vnode: VNode): string {
       }
 
       if (compType === "class" || (compType === undefined && isClassComponent(tag))) {
-        const instance = new (tag as ClassComponent)(attrs);
+        const instance = new (tag as ClassComponent)(compProps);
         let result: VNode;
         try {
           result = instance.render();
@@ -286,7 +324,7 @@ function renderComponentToString(vnode: VNode): string {
           const error = e instanceof Error ? e : new Error(String(e));
           reportError(
             ErrorSource.SSR,
-            `SSR 类组件渲染失败: ${tag.name || "Anonymous"}`,
+            `SSR class component render failed: ${tag.name || "Anonymous"}`,
             error,
           );
           throw e;
@@ -379,6 +417,20 @@ function serializeAttrs(attrs: VNodeAttrs): string {
     /** 普通属性 */
     const htmlAttr = DOM_PROPERTY_TO_HTML_ATTR[key] ?? key;
     parts.push(` ${htmlAttr}="${escapeHtml(String(value))}"`);
+  }
+
+  /** 处理响应式属性：SSR 直接调用 getter 获取当前值（无 effect 追踪） */
+  const reactiveAttrs = attrs.__reactiveAttrs;
+  if (reactiveAttrs !== undefined) {
+    for (const rKey in reactiveAttrs) {
+      if (!Object.prototype.hasOwnProperty.call(reactiveAttrs, rKey)) continue;
+      const val = reactiveAttrs[rKey]();
+      if (rKey === "class" || rKey === "className") {
+        if (val) parts.push(` class="${escapeHtml(val)}"`);
+      } else {
+        parts.push(` ${rKey}="${escapeHtml(val)}"`);
+      }
+    }
   }
 
   return parts.join("");

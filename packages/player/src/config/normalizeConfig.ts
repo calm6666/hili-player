@@ -19,6 +19,7 @@ import type {
   ControlsConfig,
   DanmakuConfigSpace,
   EventListeners,
+  I18nPlayerConfig,
   InteractionConfig,
   KeyboardStepConfig,
   LegacyPlayerConfig,
@@ -38,7 +39,7 @@ import type {
   SubtitleConfigSpace,
   UiConfig,
 } from '@/types';
-import type { Plugin } from '@/hili-player/core/plugin';
+import type { Plugin } from '@/nova/core/plugin';
 import { isDev, WarnSource, warn } from '@/core/warning';
 
 /**
@@ -125,6 +126,7 @@ type NormalizeInput = {
   ssr?: SsrConfig | SSRConfig;
   advanced?: AdvancedConfig;
   callbacks?: EventListeners;
+  i18n?: I18nPlayerConfig;
 
   // 旧扁平键
   autoplay?: boolean;
@@ -246,13 +248,14 @@ export function normalizeConfig(
   }
   if (Object.keys(quality).length > 0) out.quality = quality;
 
-  // ── progress：progressSegments → segments ──
+  // ── progress：progressSegments → segments；previewProvider / energyProvider 直接透传 ──
   const progress: ProgressConfig = { ...(input.progress ?? {}) };
   if (progress.segments === undefined && input.progressSegments !== undefined) {
     warnMigrate('progressSegments', LEGACY_KEY_MAP.progressSegments);
     progress.segments = input.progressSegments;
   }
-  if (progress.segments !== undefined) out.progress = progress;
+  // 分段 / 预览提供者 / 高能提供者任一存在即保留 progress 命名空间（白名单式拷贝）
+  if (Object.keys(progress).length > 0) out.progress = progress;
 
   // ── danmaku：source → url（其余字段同名）──
   const dn = input.danmaku;
@@ -264,6 +267,9 @@ export function normalizeConfig(
     if (dn.speed !== undefined) danmaku.speed = dn.speed;
     if (dn.fontSize !== undefined) danmaku.fontSize = dn.fontSize;
     if (dn.area !== undefined) danmaku.area = dn.area;
+    // provider / onSend：弹幕数据获取与发送确认的 Provider 通道（函数引用直接透传）
+    if (dn.provider !== undefined) danmaku.provider = dn.provider;
+    if (dn.onSend !== undefined) danmaku.onSend = dn.onSend;
     if (dn.url !== undefined) {
       danmaku.url = dn.url;
     } else if (dn.source !== undefined) {
@@ -305,6 +311,9 @@ export function normalizeConfig(
 
   // ── callbacks：同名，直接透传 ──
   if (input.callbacks !== undefined) out.callbacks = input.callbacks;
+
+  // ── i18n：国际化配置，直接透传（浅拷贝一层，messages 映射保持原引用）──
+  if (input.i18n !== undefined) out.i18n = { ...input.i18n };
 
   return out;
 }

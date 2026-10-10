@@ -22,8 +22,8 @@ export default defineConfig({
       { find: /^@\/directives$/, replacement: path.resolve(__dirname, 'directives/index.ts') },
 
       // ===== 子路径正则（从具体到一般排序）=====
-      { find: /^@\/hili-player\/plugins\/(.*)/, replacement: path.resolve(__dirname, 'packages/plugins/src/$1') },
-      { find: /^@\/hili-player\/(.*)/, replacement: path.resolve(__dirname, 'packages/player/src/$1') },
+      { find: /^@\/lumina\/plugins\/(.*)/, replacement: path.resolve(__dirname, 'packages/plugins/src/$1') },
+      { find: /^@\/nova\/(.*)/, replacement: path.resolve(__dirname, 'packages/player/src/$1') },
       { find: /^@\/core\/(.*)/, replacement: path.resolve(__dirname, 'core/$1') },
       { find: /^@\/types\/(.*)/, replacement: path.resolve(__dirname, 'types/$1') },
       { find: /^@\/utils\/(.*)/, replacement: path.resolve(__dirname, 'utils/$1') },

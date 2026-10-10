@@ -8,7 +8,7 @@
  * @module types/plugin
  */
 
-import type { VideoPlayer } from '@hili-player/player';
+import type { VideoPlayer } from '@lumina/nova';
 
 /** 插件通用选项 */
 export interface PluginOptions {

@@ -5,7 +5,7 @@
  * 定义播放器所需的所有类型、接口和枚举
  */
 
-import type { Signal } from "@preact/signals-core";
+import type { Signal } from "../core/signalsCore";
 
 // ============================================
 // 虚拟节点相关类型
@@ -98,10 +98,14 @@ export interface ComponentLifecycle extends Lifecycle {
   _ref?: Ref<unknown> | Signal<unknown>;
   /** 组件通过 expose() 暴露的 API 对象 */
   _exposed?: unknown;
-  /** useState 订阅的取消订阅函数数组，销毁时统一调用 */
+  /** useState 订阅的取消订阅函数数组（onMounted 启动订阅时收集，销毁时统一调用） */
   _stateCleanups?: Array<() => void>;
-  /** 响应式 effect 启动器列表（onEffect 收集），挂载时统一启动，返回的 dispose 收集到 _stateCleanups */
+  /** useState 订阅启动器列表（useState 收集）：组件 setup 只执行一次，订阅须可重放以支持控制流重挂 */
+  _stateSubscriptions?: Array<() => () => void>;
+  /** 响应式 effect 启动器列表（onEffect 收集），挂载时统一启动，返回的 dispose 收集到 _effectDisposes */
   _effects?: Array<() => (() => void) | void>;
+  /** 响应式 effect 的 dispose 函数数组（挂载时启动收集；与 useState 退订分离，避免误清订阅） */
+  _effectDisposes?: Array<() => void>;
   /** 模板引用注册表（useTemplateRef 收集）：字符串 key → 对应的 Signal，销毁时自动清空为 null */
   _templateRefs?: Map<string, Signal<unknown>>;
   /** 注册回调函数 */
@@ -126,7 +130,9 @@ export interface TypedComponentLifecycle<
   _ref?: Ref<unknown>;
   _exposed?: unknown;
   _stateCleanups?: Array<() => void>;
+  _stateSubscriptions?: Array<() => () => void>;
   _effects?: Array<() => (() => void) | void>;
+  _effectDisposes?: Array<() => void>;
   _templateRefs?: Map<string, Signal<unknown>>;
   on?: TypedOn<E>;
   emit?: TypedEmit<E>;
@@ -155,12 +161,76 @@ export interface VNodeAttrs extends Record<string, unknown> {
   class?: string;
   /** 内联样式 */
   style?: Record<string, string | number>;
+  /** 响应式属性：key → getter，mount 时注册 effect 自动更新属性值（编译期提取的动态表达式） */
+  __reactiveAttrs?: Record<string, () => string>;
 }
 
 /**
+ * 响应式文本 getter（显式 getter 协议）
+ *
+ * 在 h() 子节点位置书写零参箭头函数，即声明该子节点为响应式文本：
+ * - 编译期：vite-plugin-lumina-compile 将其包装为 _reactiveText(fn)
+ * - 运行时（未编译路径）：h() 的 flattenChildren 将其规范化为 __reactive_text VNode
+ * - mount 创建 Text 节点并注册 effect，内部读取的 signal 变化时自动更新 textContent
+ *
+ * 与 Solid 的 {() => expr} 模式一致；用于「返回字符串的函数调用」子节点
+ * （如 formatTime(signal.value)）获得响应式能力。
+ */
+export type ReactiveTextGetter = () => string | number;
+
+/**
  * 虚拟节点子元素类型
+ *
+ * 注意：函数类型的子节点（ReactiveTextGetter）只在 h() 入口（HChild）被接受，
+ * 进入 VNode 树前已被规范化为 __reactive_text VNode，故 children 数组中不出现函数。
  */
 export type VNodeChild = VNode | string;
+
+/**
+ * 控制流运行时数据
+ *
+ * 由 For/Show/Switch/Match/Dynamic 控制流组件设置，
+ * materialize() 识别 __flow 后创建注释锚点并注册 effect，
+ * 动态管理子 DOM 的 mount/destroy/move（key-based 精准更新）。
+ *
+ * 与 __reactive 处理模式一致：mount 时注册 effect，destroy 时 dispose。
+ */
+export interface FlowData {
+  /** 控制流类型 */
+  type: 'for' | 'show' | 'switch' | 'dynamic';
+
+  // ===== For 专用字段 =====
+  /** 列表数据 getter（返回当前数组） */
+  each?: () => readonly unknown[];
+  /** key 提取函数，缺省时按 item 引用作为 Map key（Solid <For> 语义） */
+  key?: (item: unknown, index: number) => string | number | object;
+  /** 渲染函数：(item, index) => VNode，每个 key 只调用一次 */
+  render?: (item: unknown, index: number) => VNode;
+
+  // ===== Show 专用字段 =====
+  /** 条件 getter（返回 boolean） */
+  when?: () => boolean;
+  /** 条件为 false 时渲染的 fallback VNode */
+  fallback?: VNode;
+
+  // ===== Dynamic 专用字段 =====
+  /** 动态组件 getter（返回当前组件，undefined 时无组件） */
+  component?: () => Component<unknown> | undefined;
+  /** 动态组件的 props */
+  props?: Record<string, unknown>;
+
+  // ===== Switch 专用字段 =====
+  /** Switch 的分支列表：每项包含 when getter 和 children */
+  matches?: Array<{ when: () => boolean; children: VNodeChild[] }>;
+
+  // ===== 子内容（Show 的 content） =====
+  /** 子 VNode 或子 VNode 数组（Show 的 content / Switch 的 Match 列表） */
+  children?: VNodeChild[];
+
+  // ===== 运行时内部状态（由 mount.ts 的 initFn 维护，destroy 时使用） =====
+  /** 当前存活的子 VNode 列表（For 的 key→vnode 映射值，Show 的当前分支等） */
+  _alive?: VNode[];
+}
 
 /**
  * 虚拟节点接口
@@ -173,8 +243,8 @@ export interface VNode {
   attrs: VNodeAttrs;
   /** 子节点数组，可以是 VNode 或字符串 */
   children: VNodeChild[];
-  /** 挂载后对应的真实 DOM 节点引用（HTMLElement / SVGElement / Text） */
-  el?: Element | Text;
+  /** 挂载后对应的真实 DOM 节点引用（HTMLElement / SVGElement / Text / Comment 锚点） */
+  el?: Element | Text | Comment;
   /** 生命周期对象引用（扩展版本，支持内部回调） */
   lifecycle?: ComponentLifecycle;
   /** 清理函数数组，用于移除事件监听和指令 */
@@ -185,8 +255,36 @@ export interface VNode {
   __providers?: Array<{ contextId: symbol; value: unknown }>;
   /** 父 VNode 引用（由 mount() 设置，用于 useContext 向上查找） */
   __parent?: VNode;
+  /** 响应式文本标记：存在时表示这是一个响应式文本节点，mount 时注册 effect 自动更新 textContent */
+  __reactive?: { get: () => string };
+  /** 控制流标记：For/Show/Switch/Dynamic 的运行时数据，mount 时识别并注册 effect 动态管理子 DOM */
+  __flow?: FlowData;
+  /** 静态模板标记：编译期模板化的静态子树，mount 直接克隆 DOM，SSR 直拼 html，水合直接采用 SSR DOM */
+  __tmpl?: TmplData;
+  /**
+   * 多根静态模板克隆出的顶层节点列表（仅 roots > 1 时存在，mount/水合两种路径都会填充）
+   * destroy 时逐个从 DOM 移除（多根无单一 el 可依赖）
+   */
+  __tmplRoots?: Node[];
   /** 内部标记：是否已挂载（开发环境检测重复挂载） */
   _mounted?: boolean;
+}
+
+/**
+ * 静态模板数据（编译期 DOM 化：静态子树 → HTML 字符串 + 运行时 cloneNode）
+ *
+ * 由 vite-plugin-lumina-compile 的 _tmpl(html, roots) 工厂生成：
+ * - mount：调用 clone() 从惰性 <template> 克隆真实 DOM（跳过整棵 VNode 解释）
+ * - SSR：renderToString 直接输出 html 字符串（跳过 VNode 序列化）
+ * - 水合：不调用 clone，直接采用 SSR 已输出的 DOM 段（零克隆成本）
+ */
+export interface TmplData {
+  /** 模板 HTML 字符串（与 SSR 序列化语义严格一致） */
+  html: string;
+  /** 顶层节点数（fragment 多根时 > 1，水合时按数跳过兄弟节点） */
+  roots: number;
+  /** 克隆函数：惰性创建 <template> 后 cloneNode，仅客户端 mount 路径调用 */
+  clone: () => Node;
 }
 
 // ============================================
@@ -220,9 +318,31 @@ export type VNodeInternalAttrs = {
   __providers?: Array<{ contextId: symbol; value: unknown }>;
 };
 
+/**
+ * props 的响应式形态：直接值或 Signal
+ *
+ * h(Comp, { visible: showSignal }) 与 h(Comp, { visible: showSignal.value })
+ * 两种写法均合法：前者由 props 代理解包 .value，后者由编译插件包装为
+ * _rp thunk 后同样经代理解包。组件内部读取 props.visible 时始终得到当前值，
+ * 在 effect / 响应式 getter 中访问即建立信号依赖（细粒度更新，不重渲染组件）。
+ */
+export type MaybeSignal<T> = T | Signal<T>;
+
+/**
+ * 调用侧 attrs 类型的响应式拓宽（仅用于 h() 的 attrs 参数类型）
+ *
+ * 将 props 类型 P 的每个字段拓宽为 MaybeSignal<P[K]>，组件内部仍接收 P
+ * （运行时由 props 代理透明解包，源码中的组件逻辑无需感知 Signal）。
+ * P 为非对象类型（unknown / 字符串等）时原样保留，避免 mapped 类型
+ * 对原始类型 keyof string 产生方法映射的错误形态。
+ */
+export type Signalify<P> = P extends object
+  ? { [K in keyof P]: MaybeSignal<P[K]> }
+  : P;
+
 export type ComponentAttrs<P, E> = E extends void
-  ? P & VNodeInternalAttrs
-  : P & EventCallbacks<E> & VNodeInternalAttrs;
+  ? Signalify<P> & VNodeInternalAttrs
+  : Signalify<P> & EventCallbacks<E> & VNodeInternalAttrs;
 
 export type ExposedComponent<P = unknown, E = void> = FnComponent<P> & {
   __exposed?: E;
@@ -340,9 +460,21 @@ export enum PlayMode {
   SHUFFLE = "shuffle",
 }
 
-import type { Plugin } from "@/hili-player/core/plugin";
+import type { Plugin } from "@/nova/core/plugin";
 import type { LogLevel } from "@/utils";
 import type { MediaManifestSource, QualityLevel } from "@/types/streamPlugin";
+// 弹幕 Provider 契约（纯类型，零运行时依赖）
+import type {
+  DanmakuListProvider,
+  DanmakuSendProvider,
+} from "@/types/danmaku";
+// 阶段 C.1：插槽类型（ControlSlotItem / EndingSlot / SlotContext / ControlSlotPosition）
+import type {
+  ControlSlotItem,
+  EndingSlot,
+} from "@/nova/types/slots";
+// 沿用 slots.ts 中已定义的同名类型，避免在此重复声明导致类型漂移
+export type { ControlSlotItem, EndingSlot } from "@/nova/types/slots";
 
 // ============================================
 // 播放器配置接口（命名空间化）
@@ -444,6 +576,12 @@ export interface PlaybackConfig {
   loop?: boolean;
   /** 播放模式（列表连播策略） */
   playMode?: PlayMode;
+  /** 镜像画面（水平翻转） */
+  mirror?: boolean;
+  /** 音量均衡模式（0 关闭 / 1 标准 / 2 高动态） */
+  loudness?: number;
+  /** 播完暂停（不自动切集，对应 handoff=2） */
+  pauseAfterEnd?: boolean;
   /** 预加载策略 */
   preload?: 'none' | 'metadata' | 'auto';
   /** 移动端内联播放 */
@@ -473,6 +611,13 @@ export interface UiConfig {
   title?: string;
   /** 控制条开关（单一来源） */
   controls?: ControlsConfig;
+  /**
+   * 控制栏插槽列表
+   *
+   * 阶段 C.2：每项按 position 注入对应位置，按 order 升序排列。
+   * 框架无响应式：列表在挂载期读取一次，运行时变更需通过 setConfig 重渲染。
+   */
+  slots?: ControlSlotItem[];
 }
 
 /**
@@ -500,11 +645,74 @@ export interface QualityConfig {
 }
 
 /**
+ * 进度条预览帧（预览图 Provider 的返回值）
+ *
+ * 由外部开发者实现获取逻辑（雪碧图裁切 / 逐帧 URL / 服务端接口皆可），
+ * 播放器只消费 url 与可选样式字段，不做任何数据获取。
+ */
+export interface ProgressPreviewFrame {
+  /** 图片地址（普通 URL 或 data URL） */
+  url: string;
+  /** 雪碧图模式：裁切窗口宽（如 '160px'）；逐帧模式缺省 */
+  width?: string;
+  /** 雪碧图模式：裁切窗口高（如 '90px'）；逐帧模式缺省 */
+  height?: string;
+  /** 雪碧图模式：img 的 object-fit 样式（'none'）；逐帧模式缺省 */
+  objectFit?: string;
+  /** 雪碧图模式：img 的 object-position 样式（如 '-320px -90px'）；逐帧模式缺省 */
+  objectPosition?: string;
+}
+
+/**
+ * 预览图提供者
+ *
+ * 进度条悬停时按「悬停时间 + 总时长」询问外部预览帧，
+ * 支持同步或异步（Promise）返回；null 表示该时间点无预览。
+ */
+export type ProgressPreviewProvider = (
+  time: number,
+  duration: number,
+) => ProgressPreviewFrame | null | Promise<ProgressPreviewFrame | null>;
+
+/**
+ * 高能进度条数据（外部 energyProvider 的返回值）
+ *
+ * 纯数据结构：播放器内部只做「采样点 → SVG 曲线」的纯换算，
+ * 数据获取（接口请求 / 归一化）由外部完成。
+ */
+export interface EnergyProgressData {
+  /** 采样间隔（秒） */
+  stepSec: number;
+  /** 采样点（0-1，首点对应 0 秒） */
+  data: number[];
+  /** 总时长（秒），用于把播放进度换算成采样点下标 */
+  duration?: number;
+}
+
+/**
+ * 高能进度条数据提供者
+ *
+ * 支持同步或异步（Promise）返回；null 表示无高能数据（不绘制曲线）。
+ */
+export type EnergyProgressProvider =
+  | (() => EnergyProgressData | null)
+  | (() => Promise<EnergyProgressData | null>);
+
+/**
  * 进度条配置
  */
 export interface ProgressConfig {
   /** 进度条分段数据 */
   segments?: ProgressSegment[];
+  /**
+   * 预览图提供者（进度条悬停时按时间获取预览帧）
+   *
+   * 数据获取逻辑由外部实现（如雪碧图下标裁切、逐帧 URL、服务端接口），
+   * 播放器不内置任何预览数据获取。
+   */
+  previewProvider?: ProgressPreviewProvider;
+  /** 高能进度条数据提供者（外部获取，播放器只负责绘制曲线） */
+  energyProvider?: EnergyProgressProvider;
 }
 
 /**
@@ -513,8 +721,27 @@ export interface ProgressConfig {
 export interface DanmakuConfigSpace {
   /** 是否启用弹幕能力 */
   enabled?: boolean;
-  /** 弹幕数据源 URL（原 source） */
+  /**
+   * 弹幕数据提供者（推荐，与 progress.previewProvider 同一模式）
+   *
+   * 数据获取逻辑（接口请求 / 本地过滤 / 分片缓存）由外部实现，
+   * 播放器按 30 秒时间窗分段调用；配置了 provider 时优先于 url。
+   */
+  provider?: DanmakuListProvider;
+  /**
+   * 弹幕数据源 URL（便捷通道）
+   *
+   * 指向 JSON 数组（DanmakuItem[]）；播放器内部将其包装为一次性拉取的 provider，
+   * 与 provider 同时配置时以 provider 为准。
+   */
   url?: string;
+  /**
+   * 弹幕发送确认提供者（服务端确认模式）
+   *
+   * 配置后：面板提交 → 外部确认（服务器校验/落库）→ 返回确认弹幕才上屏；
+   * 缺省：本地直接上屏。等价于 DanmakuPlugin({ callbacks: { onSend } })。
+   */
+  onSend?: DanmakuSendProvider;
   /** 是否显示弹幕 */
   visible?: boolean;
   /** 弹幕透明度 (0-1) */
@@ -580,6 +807,23 @@ export interface AdvancedConfig {
 }
 
 /**
+ * i18n 国际化配置
+ *
+ * 独立定义以避免公共类型文件导入业务逻辑（core/i18n.ts）。
+ * 结构与 core/i18n.ts 的 I18nConfig 保持一致。
+ */
+export interface I18nPlayerConfig {
+  /** 是否启用 i18n（默认 false，未启用时 t() 走零开销路径） */
+  enabled?: boolean;
+  /** 初始语言（默认 'en-US'） */
+  locale?: string;
+  /** fallback 语言（默认 'en-US'） */
+  fallbackLocale?: string;
+  /** 初始语言包映射（locale → { key → text }，结构与 core/i18n.ts 的 I18nConfig.messages 一致） */
+  messages?: Record<string, Record<string, string>>;
+}
+
+/**
  * 播放器配置（命名空间形态）
  *
  * 顶层只保留资源类三项，其余按功能分组。
@@ -609,9 +853,16 @@ export type PlayerConfig = {
   quality?: QualityConfig;
   /** 进度条 */
   progress?: ProgressConfig;
-  /** 弹幕 */
+  /**
+   * 弹幕 / 字幕配置（命名空间形态）
+   *
+   * 阶段 B.2：弹幕与字幕的运行时能力由 DanmakuPlugin / SubtitlePlugin 提供，
+   * 默认配置不再包含 danmaku / subtitle 顶层字段。下列可选字段保留是为兼容
+   * 旧调用方在配置层传递弹幕 URL / 字幕轨道列表（normalizePlaylist 会读取），
+   * 以及 setSubtitleList / setDanmakuSource 等运行时 API 写回props 之用。
+   */
   danmaku?: DanmakuConfigSpace;
-  /** 字幕 */
+  /** 字幕配置（命名空间形态，与 danmaku 同理保留） */
   subtitle?: SubtitleConfigSpace;
   /** 插件 */
   plugins?: PluginsConfig;
@@ -621,8 +872,16 @@ export type PlayerConfig = {
   ssr?: SsrConfig;
   /** 高级 */
   advanced?: AdvancedConfig;
+  /**
+   * 片尾页面插槽
+   *
+   * 阶段 C.2：传入 ending.content 即整页替换默认 Ending 组件渲染。
+   */
+  ending?: EndingSlot;
   /** 配置式事件回调 */
   callbacks?: EventListeners;
+  /** i18n 国际化配置（未配置时 t() 走零开销英文字面量路径） */
+  i18n?: I18nPlayerConfig;
 };
 
 /**
@@ -930,6 +1189,13 @@ export interface PlayerEvents extends Record<string, (...args: any[]) => void> {
   webFullscreenChange: (payload: { isWebFullscreen: boolean }) => void;
   /** 宽屏状态变化 */
   wideScreenChange: (payload: { isWideScreen: boolean }) => void;
+  /**
+   * 显示模式变化
+   *
+   * 阶段 D.1：normal / web / wide / mini 之间的切换会触发，
+   * 与 webFullscreenChange / wideScreenChange 同时发出（互不替代）。
+   */
+  displayModeChange: (payload: { mode: DisplayMode }) => void;
 
   // 错误
   /** 错误恢复 */
@@ -958,8 +1224,15 @@ export interface PlayerEvents extends Record<string, (...args: any[]) => void> {
   subtitleLangChange: (lang: string) => void;
   /** 字幕切换 */
   subtitleSwitch: (payload: { lang: string }) => void;
-  /** 字幕列表变化 */
-  subtitleListChange: (payload: { count: number }) => void;
+  /**
+   * 字幕列表变化
+   * - count：字幕条数（loading / error 时为 0）
+   * - status：AI 字幕加载状态（可选，未提供则表示普通列表更新）
+   *   - 'loading'：AI 字幕请求中
+   *   - 'ready'：AI 字幕已就绪
+   *   - 'error'：AI 字幕加载失败
+   */
+  subtitleListChange: (payload: { count: number; status?: 'loading' | 'ready' | 'error' }) => void;
 
   // 播放列表 / 多 P
   /** 当前播放条目变化 */

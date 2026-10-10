@@ -1,6 +1,6 @@
-.player-container {
-  .player-dm-setting-wrap {
-    .player-dm-setting-box {
+.nova-player-container {
+  .nova-player-dm-setting-wrap {
+    .nova-player-dm-setting-box {
       bottom: 0;
       position: absolute;
       right: 0;
@@ -63,14 +63,14 @@
         pointer-events: auto;
       }
 
-      .player-dm-setting-left {
+      .nova-player-dm-setting-left {
         -webkit-box-sizing: border-box;
         box-sizing: border-box;
         height: 100%;
         padding: 12px 20px;
         width: 100%;
 
-        .player-dm-setting-left-radio {
+        .nova-player-dm-setting-left-radio {
           -webkit-box-pack: justify;
           -ms-flex-pack: justify;
           display: -webkit-box;
@@ -79,9 +79,9 @@
           justify-content: space-between;
           margin-bottom: 12px;
 
-          .player-dm-setting-left-fs,
-          .player-dm-setting-left-ps,
-          .player-dm-setting-left-mask {
+          .nova-player-dm-setting-left-fs,
+          .nova-player-dm-setting-left-ps,
+          .nova-player-dm-setting-left-mask {
             -webkit-box-align: center;
             -ms-flex-align: center;
             align-items: center;
@@ -99,12 +99,12 @@
           }
         }
 
-        .player-dm-setting-left-block {
+        .nova-player-dm-setting-left-block {
           margin-bottom: 12px;
           overflow: hidden;
           width: 100%;
 
-          .player-dm-setting-left-block-title {
+          .nova-player-dm-setting-left-block-title {
             color: #fff;
             font-size: 12px;
             height: 16px;
@@ -115,7 +115,7 @@
             width: 61px;
           }
 
-          .player-dm-setting-left-block-content {
+          .nova-player-dm-setting-left-block-content {
             -webkit-box-sizing: border-box;
             box-sizing: border-box;
             cursor: pointer;
@@ -126,7 +126,7 @@
             overflow: hidden;
             position: relative;
 
-            .player-block-filter-type {
+            .nova-player-block-filter-type {
               -webkit-box-sizing: border-box;
               box-sizing: border-box;
               color: hsla(0, 0%, 100%, 0.8);
@@ -141,7 +141,7 @@
                 pointer-events: none;
               }
 
-              .player-block-filter-image {
+              .nova-player-block-filter-image {
                 color: hsla(0, 0%, 100%, 0.8);
                 fill: hsla(0, 0%, 100%, 0.8);
                 display: inline-block;
@@ -162,7 +162,7 @@
                 }
               }
 
-              .player-block-filter-label {
+              .nova-player-block-filter-label {
                 bottom: -2px;
                 -webkit-box-sizing: border-box;
                 box-sizing: border-box;
@@ -181,35 +181,35 @@
               }
 
               &:hover {
-                .player-block-filter-image {
+                .nova-player-block-filter-image {
                   color: #fff;
                   fill: #fff;
                 }
 
-                .player-block-filter-label {
+                .nova-player-block-filter-label {
                   color: #fff;
                 }
               }
 
-              &.player-block-filter-type-selected {
-                .player-block-filter-image {
+              &.nova-player-block-filter-type-selected {
+                .nova-player-block-filter-image {
                   color: #00a1d6;
-                  color: var(--player-fn-color, #00a1d6);
+                  color: var(--nova-player-fn-color, #00a1d6);
                   fill: #00a1d6;
-                  fill: var(--player-fn-color, #00a1d6);
+                  fill: var(--nova-player-fn-color, #00a1d6);
                 }
 
-                .player-block-filter-label {
+                .nova-player-block-filter-label {
                   color: #00a1d6;
-                  color: var(--player-fn-color, #00a1d6);
+                  color: var(--nova-player-fn-color, #00a1d6);
                 }
               }
 
               &[data-type="typeSpecial"] {
-                .player-block-filter-label {
+                .nova-player-block-filter-label {
                   left: -6px;
 
-                  .player-block-advanced-more {
+                  .nova-player-block-advanced-more {
                     display: inline-block;
                     height: 14px;
                     left: 28px;
@@ -233,7 +233,7 @@
           }
         }
 
-        .player-dm-setting-left-block-word {
+        .nova-player-dm-setting-left-block-word {
           -webkit-box-pack: justify;
           -ms-flex-pack: justify;
           display: -webkit-box;
@@ -245,8 +245,8 @@
           text-align: center;
           width: 100%;
 
-          .player-dm-setting-left-block-add,
-          .player-dm-setting-left-block-sync {
+          .nova-player-dm-setting-left-block-add,
+          .nova-player-dm-setting-left-block-sync {
             background: hsla(0, 0%, 100%, 0.3);
             border-radius: 2px;
             cursor: pointer;
@@ -258,7 +258,7 @@
           }
         }
 
-        .player-dm-setting-left-dmDensity {
+        .nova-player-dm-setting-left-dmDensity {
           -webkit-box-align: center;
           -ms-flex-align: center;
           -webkit-box-pack: justify;
@@ -279,7 +279,7 @@
           margin-bottom: 16px;
           width: 100%;
 
-          .player-dm-setting-left-dmDensity-left-area {
+          .nova-player-dm-setting-left-dmDensity-left-area {
             -webkit-box-align: center;
             -ms-flex-align: center;
             -webkit-box-pack: center;
@@ -295,7 +295,7 @@
             user-select: none;
           }
 
-          .player-dm-setting-left-dmDensity-right-area {
+          .nova-player-dm-setting-left-dmDensity-right-area {
             -webkit-box-align: center;
             -ms-flex-align: center;
             align-items: center;
@@ -304,7 +304,7 @@
             display: flex;
             height: 100%;
 
-            .player-dm-setting-density {
+            .nova-player-dm-setting-density {
               -webkit-box-align: center;
               -ms-flex-align: center;
               -webkit-box-pack: center;
@@ -339,16 +339,16 @@
 
               &.active {
                 color: #00a1d6;
-                color: var(--player-primary-color, #00a1d6);
+                color: var(--nova-player-primary-color, #00a1d6);
               }
             }
           }
         }
 
-        .player-dm-setting-left-area,
-        .player-dm-setting-left-fontsize,
-        .player-dm-setting-left-opacity,
-        .player-dm-setting-left-speedplus {
+        .nova-player-dm-setting-left-area,
+        .nova-player-dm-setting-left-fontsize,
+        .nova-player-dm-setting-left-opacity,
+        .nova-player-dm-setting-left-speedplus {
           -webkit-box-align: center;
           -ms-flex-align: center;
           align-items: center;
@@ -360,10 +360,10 @@
           margin-bottom: 12px;
           width: 100%;
 
-          .player-dm-setting-left-area-title,
-          .player-dm-setting-left-fontsize-title,
-          .player-dm-setting-left-opacity-title,
-          .player-dm-setting-left-speedplus-title {
+          .nova-player-dm-setting-left-area-title,
+          .nova-player-dm-setting-left-fontsize-title,
+          .nova-player-dm-setting-left-opacity-title,
+          .nova-player-dm-setting-left-speedplus-title {
             color: #fff;
             font-size: 12px;
             height: 16px;
@@ -373,10 +373,10 @@
             width: 61px;
           }
 
-          .player-dm-setting-left-area-content,
-          .player-dm-setting-left-fontsize-content,
-          .player-dm-setting-left-opacity-content,
-          .player-dm-setting-left-speedplus-content {
+          .nova-player-dm-setting-left-area-content,
+          .nova-player-dm-setting-left-fontsize-content,
+          .nova-player-dm-setting-left-opacity-content,
+          .nova-player-dm-setting-left-speedplus-content {
             -webkit-box-flex: 1;
             -ms-flex: 1;
             flex: 1;
@@ -386,7 +386,7 @@
           }
         }
 
-        .player-dm-setting-left-more {
+        .nova-player-dm-setting-left-more {
           border-top: 1px solid hsla(0, 0%, 100%, 0.1);
           clear: left;
           color: #fff;
@@ -398,14 +398,14 @@
           position: relative;
           text-align: left;
 
-          .player-dm-setting-left-more-text {
+          .nova-player-dm-setting-left-more-text {
             display: inline-block;
             -webkit-transition: color 0.3s;
             transition: color 0.3s;
             vertical-align: middle;
           }
 
-          .player-dm-setting-left-more-senior-text {
+          .nova-player-dm-setting-left-more-senior-text {
             color: hsla(0, 0%, 100%, 0.6);
             display: none;
             float: right;
@@ -428,14 +428,14 @@
 
           &:hover {
             color: #00a1d6;
-            color: var(--player-fn-color, #00a1d6);
+            color: var(--nova-player-fn-color, #00a1d6);
             fill: #00a1d6;
-            fill: var(--player-fn-color, #00a1d6);
+            fill: var(--nova-player-fn-color, #00a1d6);
           }
         }
       }
 
-      .player-dm-setting-right {
+      .nova-player-dm-setting-right {
         -webkit-box-sizing: border-box;
         box-sizing: border-box;
         height: 100%;
@@ -443,13 +443,13 @@
         width: 100%;
 
         .ui-select,
-        .player-dm-setting-right-more {
+        .nova-player-dm-setting-right-more {
           display: -webkit-box;
           display: -ms-flexbox;
           display: flex;
         }
 
-        .player-dm-setting-right-more {
+        .nova-player-dm-setting-right-more {
           color: #fff;
           cursor: pointer;
           fill: #fff;
@@ -457,7 +457,7 @@
           line-height: 32px;
           text-align: left;
 
-          .player-dm-setting-right-more-text {
+          .nova-player-dm-setting-right-more-text {
             display: inline-block;
             -webkit-transition: color 0.3s;
             transition: color 0.3s;
@@ -480,20 +480,20 @@
 
           &:hover {
             color: #00a1d6;
-            color: var(--player-fn-color, #00a1d6);
+            color: var(--nova-player-fn-color, #00a1d6);
             fill: #00a1d6;
-            fill: var(--player-fn-color, #00a1d6);
+            fill: var(--nova-player-fn-color, #00a1d6);
           }
         }
 
-        .player-dm-setting-right-separator {
+        .nova-player-dm-setting-right-separator {
           border-bottom: 1px solid rgba(229, 233, 239, 0.1);
           position: relative;
           right: 20px;
           width: 305px;
         }
 
-        .player-dm-setting-right-speedsync {
+        .nova-player-dm-setting-right-speedsync {
           height: 16px;
           line-height: 16px;
           margin-bottom: 12px;
@@ -509,14 +509,14 @@
           }
         }
 
-        .player-dm-setting-right-font {
+        .nova-player-dm-setting-right-font {
           margin-bottom: 12px;
 
-          .player-dm-setting-right-font-content {
+          .nova-player-dm-setting-right-font-content {
             float: left;
             margin-bottom: 12px;
 
-            .player-dm-setting-right-font-content-fontfamily {
+            .nova-player-dm-setting-right-font-content-fontfamily {
               width: 164px;
 
               .ui-select-wrap {
@@ -612,14 +612,14 @@
 
                   &.ui-select-item-active {
                     color: #00a1d6;
-                    color: var(--player-primary-color, #00a1d6);
+                    color: var(--nova-player-primary-color, #00a1d6);
                   }
                 }
               }
             }
           }
 
-          .player-dm-setting-right-font-bold {
+          .nova-player-dm-setting-right-font-bold {
             color: #212121;
             float: left;
             height: 16px;
@@ -639,21 +639,21 @@
             &:hover {
               .ui-checkbox-name {
                 color: #00a1d6;
-                color: var(--player-primary-color, #00a1d6);
+                color: var(--nova-player-primary-color, #00a1d6);
               }
             }
           }
         }
 
-        .player-dm-setting-right-fontborder {
+        .nova-player-dm-setting-right-fontborder {
           clear: left;
           line-height: 14px;
           margin-bottom: 12px;
 
-          .player-dm-setting-right-fontborder-content {
+          .nova-player-dm-setting-right-fontborder-content {
             width: 100%;
 
-            .player-radio-wrap-button {
+            .nova-player-radio-wrap-button {
               -webkit-box-pack: justify;
               -ms-flex-pack: justify;
               display: -webkit-box;
@@ -687,7 +687,7 @@
 
                 &.active {
                   background: #00a1d6;
-                  background: var(--player-primary-color, #00a1d6);
+                  background: var(--nova-player-primary-color, #00a1d6);
                   color: #fff;
                 }
               }
@@ -695,8 +695,8 @@
           }
         }
 
-        .player-dm-setting-right-font-title,
-        .player-dm-setting-right-fontborder-title {
+        .nova-player-dm-setting-right-font-title,
+        .nova-player-dm-setting-right-fontborder-title {
           clear: left;
           color: #fff;
           height: 16px;
@@ -705,7 +705,7 @@
           text-align: left;
         }
 
-        .player-dm-setting-right-reset {
+        .nova-player-dm-setting-right-reset {
           height: 30px;
           line-height: 30px;
 

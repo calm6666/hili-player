@@ -1,10 +1,10 @@
-.player-tooltip-item {
+.nova-player-tooltip-item {
   word-wrap: break-word;
   background-color: #000;
-  background-color: var(--player-tooltip-bgcolor, #000);
+  background-color: var(--nova-player-tooltip-bgcolor, #000);
   border-radius: 2px;
   color: #fff;
-  color: var(--player-tooltip-color, #fff);
+  color: var(--nova-player-tooltip-color, #fff);
   cursor: default;
   font-size: 12px;
   line-height: 1.5;
@@ -45,7 +45,7 @@
   -moz-transform: translate(0, 20px);
   transform: translate(0, 20px);
 }
-.player-context-area {
+.nova-player-context-area {
   height: 100%;
   left: 0;
   pointer-events: none;
@@ -54,7 +54,7 @@
   width: 100%;
   z-index: 1000;
 }
-.player-contextmenu {
+.nova-player-contextmenu {
   background: rgba(33, 33, 33, 0.9);
   border-radius: 4px;
   color: #eee;
@@ -74,7 +74,7 @@
   z-index: 80;
 }
 
-.player-contextmenu > li {
+.nova-player-contextmenu > li {
   color: #eee;
   cursor: pointer;
   font-size: 12px;
@@ -91,7 +91,7 @@
   }
 }
 
-.player-contextmenu.player-active {
+.nova-player-contextmenu.nova-player-active {
   opacity: 1;
   visibility: visible;
 }

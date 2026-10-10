@@ -1,12 +1,12 @@
-.player-docker {
-  .player-control-wrap {
+.nova-player-docker {
+  .nova-player-control-wrap {
     bottom: 0;
     left: 0;
     position: absolute;
     width: 100%;
     z-index: 75;
 
-    .player-control-mask {
+    .nova-player-control-mask {
       background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADGCAYAAAAT+OqFAAAAdklEQVQoz42QQQ7AIAgEF/T/D+kbq/RWAlnQyyazA4aoAB4FsBSA/bFjuF1EOL7VbrIrBuusmrt4ZZORfb6ehbWdnRHEIiITaEUKa5EJqUakRSaEYBJSCY2dEstQY7AuxahwXFrvZmWl2rh4JZ07z9dLtesfNj5q0FU3A5ObbwAAAABJRU5ErkJggg==)
         repeat-x bottom;
       bottom: 0;
@@ -21,7 +21,7 @@
     }
 
     .state-active {
-      .player-progress-popup {
+      .nova-player-progress-popup {
         display: block;
       }
     }
@@ -34,7 +34,7 @@
     }
   }
 
-  .player-control-top {
+  .nova-player-control-top {
     bottom: 44px;
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
@@ -48,35 +48,35 @@
     visibility: visible;
   }
 
-  .player-progress-area {
+  .nova-player-progress-area {
     position: relative;
 
     &:hover {
-      .player-progress-wrap {
-        .player-progress {
-          .player-progress-schedule-wrap {
-            -webkit-transform: scaleY(1.5);
-            -ms-transform: scaleY(1.5);
-            transform: scaleY(1.5);
-          }
+      // .nova-player-progress-wrap {
+      // .nova-player-progress {
+      .nova-player-progress-schedule-wrap {
+        -webkit-transform: scaleY(1.5);
+        -ms-transform: scaleY(1.5);
+        transform: scaleY(1.5);
+      }
 
-          .player-progress-thumb {
-            .player-progress-thumb-active {
-              -webkit-transform: scale(1);
-              transform: scale(1);
-            }
-          }
-
-          .player-progress-move-indicator {
-            opacity: 1;
-            visibility: visible;
-          }
+      .nova-player-progress-thumb {
+        .nova-player-progress-thumb-active {
+          -webkit-transform: scale(1);
+          transform: scale(1);
         }
       }
+
+      .nova-player-progress-move-indicator {
+        opacity: 1;
+        visibility: visible;
+      }
+      // }
+      // }
     }
   }
 
-  .player-progress-wrap {
+  .nova-player-progress-wrap {
     -webkit-box-align: end;
     -ms-flex-align: end;
     align-items: flex-end;
@@ -87,12 +87,12 @@
     padding-bottom: 6px;
   }
 
-  .player-progress-schedule-wrap {
+  .nova-player-progress-schedule-wrap {
     height: 100%;
     position: absolute;
     width: 100%;
 
-    .player-progress-schedule {
+    .nova-player-progress-schedule {
       background-color: hsla(0, 0%, 100%, 0.2);
       border-radius: 1.5px;
       bottom: 0;
@@ -102,8 +102,8 @@
       right: 0;
       top: 0;
 
-      .player-progress-schedule-buffer,
-      .player-progress-schedule-current {
+      .nova-player-progress-schedule-buffer,
+      .nova-player-progress-schedule-current {
         bottom: 0;
         left: 0;
         position: absolute;
@@ -115,17 +115,17 @@
         transform-origin: 0 0;
       }
 
-      .player-progress-schedule-buffer {
+      .nova-player-progress-schedule-buffer {
         background-color: hsla(0, 0%, 100%, 0.3);
       }
 
-      .player-progress-schedule-current {
+      .nova-player-progress-schedule-current {
         background-color: #00a1d6;
-        background-color: var(--player-primary-color, #00aeec);
+        background-color: var(--nova-player-primary-color, #00aeec);
       }
     }
 
-    .player-progress-schedule.player-progress-schedule-segment {
+    .nova-player-progress-schedule.nova-player-progress-schedule-segment {
       border-radius: 0;
       -webkit-transition: -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
       transition: -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
@@ -135,13 +135,13 @@
         -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
     }
 
-    .player-progress-schedule.player-progress-schedule-segment.hover {
+    .nova-player-progress-schedule.nova-player-progress-schedule-segment.hover {
       -webkit-transform: scaleY(1.8);
       -ms-transform: scaleY(1.8);
       transform: scaleY(1.8);
     }
 
-    .player-progress-schedule-padding {
+    .nova-player-progress-schedule-padding {
       bottom: 0;
       height: 14px;
       position: absolute;
@@ -150,7 +150,7 @@
     }
   }
 
-  .player-progress {
+  .nova-player-progress {
     -webkit-box-align: center;
     -ms-flex-align: center;
     align-items: center;
@@ -167,7 +167,7 @@
       -webkit-transform 0.1s cubic-bezier(0, 0, 0.2, 1);
     width: 100%;
 
-    .player-progress-point-wrap {
+    .nova-player-progress-point-wrap {
       height: 100%;
       left: 0;
       pointer-events: none;
@@ -177,12 +177,12 @@
     }
   }
 
-  .player-progress-thumb {
+  .nova-player-progress-thumb {
     height: 20px;
     pointer-events: none;
     width: 20px;
 
-    .player-progress-thumb-icon {
+    .nova-player-progress-thumb-icon {
       height: 100%;
       line-height: 12px;
       -webkit-transform: scale(0);
@@ -199,7 +199,7 @@
     }
   }
 
-  .player-progress-move-indicator {
+  .nova-player-progress-move-indicator {
     height: 16px;
     margin-left: -4px;
     opacity: 0;
@@ -211,28 +211,30 @@
     visibility: hidden;
     width: 8px;
 
-    .player-progress-move-indicator-down {
+    .nova-player-progress-move-indicator-down {
       border-color: #00a1d6 transparent transparent;
-      border-color: var(--player-primary-color, #00a1d6) transparent transparent;
+      border-color: var(--nova-player-primary-color, #00a1d6) transparent
+        transparent;
       border-width: 4px 4px 0;
     }
 
-    .player-progress-move-indicator-up {
+    .nova-player-progress-move-indicator-up {
       border-color: transparent transparent #00a1d6;
-      border-color: transparent transparent var(--player-primary-color, #00a1d6);
+      border-color: transparent transparent
+        var(--nova-player-primary-color, #00a1d6);
       border-width: 0 4px 4px;
       margin-top: 8px;
     }
   }
 
-  .player-progress-move-indicator > div {
+  .nova-player-progress-move-indicator > div {
     border-style: solid;
     height: 0;
     position: relative;
     width: 0;
   }
 
-  .player-progress-popup {
+  .nova-player-progress-popup {
     background-color: transparent;
     border-radius: 2px;
     bottom: 22px;
@@ -246,12 +248,12 @@
     -webkit-transition: left linear;
     transition: left linear;
 
-    .player-progress-preview {
+    .nova-player-progress-preview {
       height: 90px;
       position: relative;
       width: 160px;
 
-      .player-progress-preview-image {
+      .nova-player-progress-preview-image {
         height: 100%;
         margin: 0 auto;
         position: relative;
@@ -259,7 +261,7 @@
         width: 100%;
       }
 
-      .player-progress-preview-time {
+      .nova-player-progress-preview-time {
         background-color: hsla(0, 0%, 8%, 0.9);
         border-radius: 2px;
         bottom: 0;
@@ -277,7 +279,7 @@
       }
     }
 
-    .player-progress-hotspot {
+    .nova-player-progress-hotspot {
       background-color: hsla(0, 0%, 8%, 0.9);
       -webkit-box-sizing: border-box;
       box-sizing: border-box;
@@ -291,17 +293,18 @@
       word-break: break-all;
     }
 
-    .player-progress-hotspot:empty {
+    .nova-player-progress-hotspot:empty {
       display: none;
     }
   }
 
-  .player-progress-scaleplate {
+  .nova-player-progress-scaleplate {
     bottom: 0;
     left: 0;
     position: absolute;
     right: 0;
     top: 0;
+    pointer-events: none;
 
     > div {
       background: hsla(0, 0%, 100%, 0.35);
@@ -310,16 +313,16 @@
       width: 1px;
     }
 
-    .player-progress-scaleplate-1m {
+    .nova-player-progress-scaleplate-1m {
       height: 50%;
     }
 
-    .player-progress-scaleplate-2m {
+    .nova-player-progress-scaleplate-2m {
       height: 75%;
     }
   }
 
-  .player-progress-pull-indicator {
+  .nova-player-progress-pull-indicator {
     height: 18px;
     line-height: 18px;
     position: absolute;
@@ -334,7 +337,7 @@
     }
   }
 
-  .player-progress-cursor {
+  .nova-player-progress-cursor {
     background-color: #fff;
     border-radius: 5px;
     height: 10px;
@@ -347,7 +350,7 @@
     width: 10px;
   }
 
-  .player-control-bottom {
+  .nova-player-control-bottom {
     -webkit-box-pack: justify;
     -ms-flex-pack: justify;
     -webkit-box-sizing: border-box;
@@ -365,16 +368,16 @@
     width: 100%;
 
     .state-muted {
-      .player-ctrl-volume-icon {
+      .nova-player-ctrl-volume-icon {
         display: none;
       }
 
-      .player-ctrl-muted-icon {
+      .nova-player-ctrl-muted-icon {
         display: block;
       }
     }
 
-    .player-sending-bar {
+    .nova-player-sending-bar {
       background: none;
       border: none;
       height: 34px !important;
@@ -386,7 +389,7 @@
       width: 100%;
       font-size: 13px;
 
-      .player-video-inputbar {
+      .nova-player-video-inputbar {
         height: 34px !important;
         max-width: 729px;
         border-radius: 8px;
@@ -400,55 +403,55 @@
       }
     }
     .state-show {
-      .player-ctrl-quality-menu-wrap {
-        .player-ctrl-quality-menu {
+      .nova-player-ctrl-quality-menu-wrap {
+        .nova-player-ctrl-quality-menu {
           display: block;
         }
       }
 
-      .player-ctrl-eplist-menu-wrap {
+      .nova-player-ctrl-eplist-menu-wrap {
         opacity: 1;
         visibility: visible;
       }
 
-      .player-ctrl-playbackrate-menu-wrap {
-        .player-ctrl-playbackrate-menu {
+      .nova-player-ctrl-playbackrate-menu-wrap {
+        .nova-player-ctrl-playbackrate-menu {
           display: block;
         }
       }
 
-      .player-ctrl-volume-box {
+      .nova-player-ctrl-volume-box {
         display: block;
       }
 
-      .player-ctrl-setting-box {
+      .nova-player-ctrl-setting-box {
         display: block;
       }
     }
   }
 
-  .player-control-bottom-left {
+  .nova-player-control-bottom-left {
     -webkit-box-flex: 0;
     display: -webkit-inline-box;
     display: -ms-inline-flexbox;
     display: inline-flex;
-    -ms-flex: none;
-    flex: none;
+    -ms-flex: 1;
+    flex: 1;
 
-    .player-ctrl-prev .player-ctrl-btn-icon {
+    .nova-player-ctrl-prev .nova-player-ctrl-btn-icon {
       -webkit-transform: rotate(180deg);
       transform: rotate(180deg);
     }
 
-    .player-ctrl-play {
-      .player-ctrl-btn-icon {
+    .nova-player-ctrl-play {
+      .nova-player-ctrl-btn-icon {
         -webkit-transition: all 0.2s;
         transition: all 0.2s;
       }
     }
 
-    .player-ctrl-time {
-      .player-ctrl-time-seek {
+    .nova-player-ctrl-time {
+      .nova-player-ctrl-time-seek {
         background: hsla(0, 0%, 100%, 0.2);
         border: 1px solid transparent;
         color: inherit;
@@ -462,30 +465,30 @@
         top: 0;
         width: 60px;
       }
-      .player-ctrl-time-label {
+      .nova-player-ctrl-time-label {
         height: 100%;
         position: absolute;
         text-align: center;
         white-space: nowrap;
         width: 100%;
 
-        .player-ctrl-time-divide {
+        .nova-player-ctrl-time-divide {
           padding: 0 2px;
         }
       }
     }
   }
 
-  .player-dm-switch {
+  .nova-player-dm-switch {
     fill: hsla(0, 0%, 100%, 0.9);
   }
 
-  .player-dm-setting {
+  .nova-player-dm-setting {
     fill: hsla(0, 0%, 100%, 0.9);
     color: hsla(0, 0%, 100%, 0.9);
   }
 
-  .player-control-bottom-right {
+  .nova-player-control-bottom-right {
     -webkit-box-pack: end;
     -ms-flex-pack: end;
     display: -webkit-box;
@@ -494,17 +497,17 @@
     justify-content: flex-end;
   }
 
-  .player-ctrl-eplist {
+  .nova-player-ctrl-eplist {
     font-size: 14px;
     visibility: hidden;
     width: 0;
-    .player-ctrl-eplist-result {
+    .nova-player-ctrl-eplist-result {
       cursor: pointer;
       font-weight: 600;
       width: 100%;
     }
 
-    .player-ctrl-eplist-menu-wrap {
+    .nova-player-ctrl-eplist-menu-wrap {
       background-color: hsla(0, 0%, 8%, 0.9);
       border-radius: 2px;
       bottom: 41px;
@@ -521,20 +524,20 @@
       visibility: hidden;
       width: 320px;
 
-      .player-ctrl-eplist-section {
+      .nova-player-ctrl-eplist-section {
         padding: 0;
         width: 100%;
 
-        .player-ctrl-eplist-section-bottom {
+        .nova-player-ctrl-eplist-section-bottom {
           max-height: 520px;
           overflow: hidden;
           position: relative;
 
-          .player-ctrl-eplist-section-content {
+          .nova-player-ctrl-eplist-section-content {
             margin: 0;
             padding: 0;
 
-            .player-ctrl-eplist-multi-menu-item {
+            .nova-player-ctrl-eplist-multi-menu-item {
               -webkit-box-align: center;
               -ms-flex-align: center;
               align-items: center;
@@ -550,14 +553,14 @@
 
               .common-svg-icon {
                 fill: #00a1d6;
-                fill: var(--player-primary-color, #00a1d6);
+                fill: var(--nova-player-primary-color, #00a1d6);
                 -ms-flex-negative: 0;
                 flex-shrink: 0;
                 margin-right: 4px;
                 width: 12px;
               }
 
-              .player-ctrl-eplist-multi-menu-item-text {
+              .nova-player-ctrl-eplist-multi-menu-item-text {
                 -webkit-box-flex: 1;
                 -ms-flex-positive: 1;
                 flex-grow: 1;
@@ -574,7 +577,7 @@
 
             .state-multi-active-item {
               color: #00a1d6;
-              color: var(--player-primary-color, #00a1d6);
+              color: var(--nova-player-primary-color, #00a1d6);
             }
           }
         }
@@ -582,12 +585,12 @@
     }
   }
 
-  .player-ctrl-volume {
-    .player-ctrl-muted-icon {
+  .nova-player-ctrl-volume {
+    .nova-player-ctrl-muted-icon {
       display: none;
     }
 
-    .player-ctrl-volume-box {
+    .nova-player-ctrl-volume-box {
       background: hsla(0, 0%, 8%, 0.9);
       border-radius: 2px;
       bottom: 41px;
@@ -598,7 +601,7 @@
       position: absolute;
       width: 32px;
 
-      .player-ctrl-volume-number {
+      .nova-player-ctrl-volume-number {
         color: #e5e9ef;
         font-size: 12px;
         height: 28px;
@@ -608,7 +611,7 @@
         width: 100%;
       }
 
-      .player-ctrl-volume-progress {
+      .nova-player-ctrl-volume-progress {
         height: 60px;
         margin: 0 auto;
         -webkit-box-pack: center !important;
@@ -638,7 +641,7 @@
 
             .slider-bar {
               background: #00a1d6;
-              background: var(--player-fn-color, #00a1d6);
+              background: var(--nova-player-fn-color, #00a1d6);
               bottom: 0;
               left: 0;
               position: absolute;
@@ -659,20 +662,20 @@
               -ms-flex-align: center;
               align-items: center;
               background-color: #00a1d6;
-              background-color: var(--player-fn-color, #00a1d6);
+              background-color: var(--nova-player-fn-color, #00a1d6);
               border-radius: 50%;
               display: -webkit-box;
               display: -ms-flexbox;
               display: flex;
               height: 12px;
-              height: var(--player-ui-font-size, 12px);
+              height: var(--nova-player-ui-font-size, 12px);
               -webkit-transform: translateZ(0);
               transform: translateZ(0);
               -webkit-transition: all 0.2s;
               transition: all 0.2s;
               vertical-align: middle;
               width: 12px;
-              width: var(--player-ui-font-size, 12px);
+              width: var(--nova-player-ui-font-size, 12px);
               cursor: pointer;
             }
           }
@@ -681,83 +684,86 @@
     }
   }
 
-  .player-ctrl-setting-handoff,
-  .player-ctrl-setting-aspect,
-  .player-ctrl-setting-codec {
+  .nova-player-ctrl-setting-handoff,
+  .nova-player-ctrl-setting-aspect,
+  .nova-player-ctrl-setting-codec {
     width: 100%;
     color: #ffffff;
     margin-bottom: 8px;
   }
 
-  .player-ctrl-setting-handoff-title,
-  .player-ctrl-setting-aspect-title,
-  .player-ctrl-setting-codec-title {
+  .nova-player-ctrl-setting-handoff-title,
+  .nova-player-ctrl-setting-aspect-title,
+  .nova-player-ctrl-setting-codec-title {
     height: 16px;
     line-height: 16px;
     font-size: 12px;
     margin-bottom: 8px;
   }
 
-  .player-ctrl-setting-handoff-content,
-  .player-ctrl-setting-aspect-content,
-  .player-ctrl-setting-codec-content {
+  .nova-player-ctrl-setting-handoff-content,
+  .nova-player-ctrl-setting-aspect-content,
+  .nova-player-ctrl-setting-codec-content {
     height: 24px;
     width: 100%;
   }
 
-  .player-control-wrap {
-    .player-control-bottom {
-      .player-dm-switch {
+  .nova-player-control-wrap {
+    .nova-player-control-bottom {
+      .nova-player-dm-switch {
         color: #fff;
         &:not(.disabled):hover {
           fill: #00a1d6;
-          fill: var(--player-primary-color, #00a1d6);
+          fill: var(--nova-player-primary-color, #00a1d6);
         }
       }
 
-      .player-dm-setting {
+      .nova-player-dm-setting {
         color: #fff;
         &:hover {
           fill: #00a1d6;
-          fill: var(--player-primary-color, #00a1d6);
+          fill: var(--nova-player-primary-color, #00a1d6);
         }
       }
 
-      .player-video-inputbar {
-        .player-video-btn-dm {
+      .nova-player-video-inputbar {
+        .nova-player-video-btn-dm {
           fill: hsla(0, 0%, 100%, 0.9);
           color: #fff;
 
           &:hover {
             fill: #00a1d6;
-            fill: var(--player-primary-color, #00a1d6);
+            fill: var(--nova-player-primary-color, #00a1d6);
           }
         }
 
-        .player-video-inputbar-wrap {
-          .player-dm-input:focus {
+        .nova-player-video-inputbar-wrap {
+          .nova-player-dm-input:focus {
             caret-color: #fff;
             color: #fff;
           }
 
-          .player-dm-input {
+          .nova-player-dm-input {
             color: #fff;
-          }
 
-          .player-dm-input::-webkit-input-placeholder {
-            color: #fff;
-          }
-
-          .player-dm-input::-moz-placeholder {
-            color: #fff;
-          }
-
-          .player-dm-input::-ms-input-placeholder {
-            color: #fff;
-          }
-
-          .player-dm-input::placeholder {
-            color: #fff;
+            &::-webkit-input-placeholder {
+              color: #fff;
+            }
+            &::-moz-placeholder {
+              color: #fff;
+            }
+            &:-ms-input-placeholder {
+              color: #fff;
+            }
+            &::-ms-input-placeholder {
+              color: #fff;
+            }
+            &::placeholder {
+              color: #fff;
+            }
+            &::placeholder {
+              color: #fff;
+            }
           }
         }
       }

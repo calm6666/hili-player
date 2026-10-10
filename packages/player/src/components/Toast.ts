@@ -2,21 +2,30 @@
  * ============================================
  * Toast 提示组件
  * ============================================
+ * 提供自动消失的短暂提示和带跳转功能的固定提示两种模式
+ *
+ * 声明式响应式版本：两类提示的可见性与文本由内部 signal 驱动，
+ * 外层容器（.nova-player-toast-wrap）的可见性由两个可见性 signal 派生，
+ * 渲染层零 DOM 操作（style 由编译器自动包装为 __reactiveAttrs）。
+ *
+ * 对外保留 showAutoToast/hideAutoToast/showFixedToast/hideFixedToast
+ * 命令式 API 契约不变（父组件经 toastMounted 持有引用，零改动）；
+ * API 内部仅写 signal，不再触碰 DOM。
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
-import { Close } from '@/hili-player/components/icons';
-import type { ComponentLifecycle } from '@/types';
+import { h, defineComponent, signal, t } from "@/core";
+import { Close } from "@/nova/components/icons";
+import type { ComponentLifecycle } from "@/types";
 
 /**
  * Toast 组件 Props 接口
  */
 export interface ToastProps {
-  /** 是否显示 Toast 提示 */
+  /** 是否显示 Toast 提示（保留字段：原实现初始即隐藏，此字段不参与初值） */
   visible?: boolean;
-  /** 提示文本内容 */
+  /** 提示文本内容（仅作初值快照，运行时由 showFixedToast 更新） */
   text?: string;
-  /** 跳转目标时间点，格式为 "mm:ss" */
+  /** 跳转目标时间点，格式为 "mm:ss"（仅作初值快照） */
   jumpTime?: string;
   /** 关闭固定提示时的回调函数 */
   onClose?: () => void;
@@ -26,173 +35,182 @@ export interface ToastProps {
 
 /**
  * Toast 提示组件
- * 提供自动消失的短暂提示和带跳转功能的固定提示两种模式
  */
-export const Toast = defineComponent<ToastProps>((props, lifecycle: ComponentLifecycle) => {
-  // ============================================
-  // DOM 引用
-  // ============================================
+export const Toast = defineComponent<ToastProps>(
+  (props, lifecycle: ComponentLifecycle) => {
+    // ============================================
+    // 响应式状态（渲染层唯一数据源）
+    // ============================================
 
-  /** 自动消失提示的 DOM 容器引用 */
-  const autoToastRef = useTemplateRef<HTMLDivElement>(lifecycle, 'autoToastRef');
+    /**
+     * 自动消失提示是否可见
+     * 初值 false：与原实现 onMounted 调用 hideAutoToast() 的初始隐藏语义一致
+     */
+    const autoVisibleSig = signal<boolean>(false);
 
-  /** 固定提示的 DOM 容器引用 */
-  const fixedToastRef = useTemplateRef<HTMLDivElement>(lifecycle, 'fixedToastRef');
+    /** 自动消失提示文本 */
+    const autoTextSig = signal<string>("");
 
-  /** 固定提示中的文本元素引用 */
-  const fixedTextRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'fixedTextRef');
+    /**
+     * 固定提示是否可见
+     * 初值 false：与原实现 onMounted 调用 hideFixedToast() 的初始隐藏语义一致
+     */
+    const fixedVisibleSig = signal<boolean>(false);
 
-  /** 固定提示中的时间元素引用 */
-  const fixedTimeRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'fixedTimeRef');
+    /**
+     * 固定提示文本（null 表示未设置，渲染时回落到既有 i18n 文案）
+     * 保留 null 回落结构：getter 内 t() 读取 localeSignal，
+     * 语言动态切换时文案精准更新（原实现为一次性快照，此处行为兼容且增强）
+     */
+    const fixedTextSig = signal<string | null>(props.text ?? null);
 
-  // ============================================
-  // 事件处理函数
-  // ============================================
+    /** 固定提示跳转时间（null 表示未设置，渲染时回落 "00:00"） */
+    const fixedTimeSig = signal<string | null>(props.jumpTime ?? null);
 
-  /** 自动隐藏定时器，用于控制自动提示的延迟消失 */
-  let autoToastTimer: ReturnType<typeof setTimeout> | null = null;
+    // ============================================
+    // 事件处理函数
+    // ============================================
 
-  /** 关闭固定提示并触发 onClose 回调 */
-  const handleClose = (): void => {
-    hideFixedToast();
-    props.onClose?.();
-  };
+    /** 自动隐藏定时器，用于控制自动提示的延迟消失（时序行为，保留命令式） */
+    let autoToastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** 触发跳转回调，跳转到指定时间点 */
-  const handleJump = (): void => {
-    props.onJump?.();
-  };
+    /** 关闭固定提示并触发 onClose 回调 */
+    const handleClose = (): void => {
+      hideFixedToast();
+      props.onClose?.();
+    };
 
-  // ============================================
-  // 手动 DOM 更新函数
-  // ============================================
+    /** 触发跳转回调，跳转到指定时间点 */
+    const handleJump = (): void => {
+      props.onJump?.();
+    };
 
-  /**
-   * 同步外层容器（.player-toast-wrap）的可见性
-   *
-   * scss 中 `.player-toast-wrap` 默认 `display: none`，仅设置内部节点 display
-   * 不足以显示提示，故需在任一提示可见时把容器切回 flex。
-   */
-  const updateWrapVisibility = (): void => {
-    const wrap =
-      autoToastRef.value?.parentElement ?? fixedToastRef.value?.parentElement;
-    if (!wrap) return;
-    const autoVisible =
-      autoToastRef.value !== null && autoToastRef.value.style.display !== 'none';
-    const fixedVisible =
-      fixedToastRef.value !== null &&
-      fixedToastRef.value.style.display !== 'none';
-    wrap.style.display = autoVisible || fixedVisible ? 'flex' : 'none';
-  };
+    // ============================================
+    // 对外命令式 API（契约与原实现完全一致）
+    // ——内部仅写 signal，容器/提示的可见性与文本由渲染层自动同步
+    // ============================================
 
-  /**
-   * 显示自动消失的短暂提示
-   * @param text - 提示文本内容
-   * @param duration - 显示持续时间（毫秒），默认 3000ms
-   */
-  const showAutoToast = (text: string, duration?: number): void => {
-    if (autoToastRef.value) {
-      autoToastRef.value.textContent = text;
-      autoToastRef.value.style.display = '';
-    }
-    updateWrapVisibility();
-    // 清除之前的定时器
-    if (autoToastTimer !== null) {
-      clearTimeout(autoToastTimer);
-      autoToastTimer = null;
-    }
-    /** 自动隐藏的延迟时间（毫秒） */
-    const timeout = duration ?? 3000;
-    autoToastTimer = setTimeout(() => {
-      hideAutoToast();
-    }, timeout);
-  };
+    /**
+     * 显示自动消失的短暂提示
+     * @param text - 提示文本内容
+     * @param duration - 显示持续时间（毫秒），默认 3000ms
+     */
+    const showAutoToast = (text: string, duration?: number): void => {
+      autoTextSig.value = text;
+      autoVisibleSig.value = true;
+      // 清除之前的定时器
+      if (autoToastTimer !== null) {
+        clearTimeout(autoToastTimer);
+        autoToastTimer = null;
+      }
+      /** 自动隐藏的延迟时间（毫秒） */
+      const timeout = duration ?? 3000;
+      autoToastTimer = setTimeout(() => {
+        hideAutoToast();
+      }, timeout);
+    };
 
-  /** 隐藏自动消失的短暂提示 */
-  const hideAutoToast = (): void => {
-    if (autoToastRef.value) {
-      autoToastRef.value.style.display = 'none';
-    }
-    updateWrapVisibility();
-    if (autoToastTimer !== null) {
-      clearTimeout(autoToastTimer);
-      autoToastTimer = null;
-    }
-  };
+    /** 隐藏自动消失的短暂提示 */
+    const hideAutoToast = (): void => {
+      autoVisibleSig.value = false;
+      if (autoToastTimer !== null) {
+        clearTimeout(autoToastTimer);
+        autoToastTimer = null;
+      }
+    };
 
-  /**
-   * 显示固定提示（带关闭和跳转功能）
-   * @param text - 提示文本内容
-   * @param jumpTime - 跳转目标时间点字符串
-   */
-  const showFixedToast = (text: string, jumpTime: string): void => {
-    if (fixedTextRef.value) {
-      fixedTextRef.value.textContent = text;
-    }
-    if (fixedTimeRef.value) {
-      fixedTimeRef.value.textContent = jumpTime;
-    }
-    if (fixedToastRef.value) {
-      fixedToastRef.value.style.display = '';
-    }
-    updateWrapVisibility();
-  };
+    /**
+     * 显示固定提示（带关闭和跳转功能）
+     * @param text - 提示文本内容
+     * @param jumpTime - 跳转目标时间点字符串
+     */
+    const showFixedToast = (text: string, jumpTime: string): void => {
+      fixedTextSig.value = text;
+      fixedTimeSig.value = jumpTime;
+      fixedVisibleSig.value = true;
+    };
 
-  /** 隐藏固定提示 */
-  const hideFixedToast = (): void => {
-    if (fixedToastRef.value) {
-      fixedToastRef.value.style.display = 'none';
-    }
-    updateWrapVisibility();
-  };
+    /** 隐藏固定提示 */
+    const hideFixedToast = (): void => {
+      fixedVisibleSig.value = false;
+    };
 
-  // ============================================
-  // 生命周期钩子
-  // ============================================
+    // ============================================
+    // 生命周期钩子
+    // ============================================
 
-  /** 组件挂载后初始化提示状态并对外暴露控制方法 */
-  lifecycle.onMounted = (): void => {
-    // 初始状态：隐藏所有提示
-    hideAutoToast();
-    hideFixedToast();
+    /** 组件挂载后对外暴露控制方法（初始隐藏已由 signal 初值覆盖） */
+    lifecycle.onMounted = (): void => {
+      lifecycle.emit?.("toastMounted", {
+        showAutoToast,
+        hideAutoToast,
+        showFixedToast,
+        hideFixedToast,
+      });
+    };
 
-    lifecycle.emit?.('toastMounted', {
-      showAutoToast,
-      hideAutoToast,
-      showFixedToast,
-      hideFixedToast,
-    });
-  };
+    /** 组件销毁前清理定时器 */
+    lifecycle.onBeforeDestroy = (): void => {
+      // 清理定时器
+      if (autoToastTimer !== null) {
+        clearTimeout(autoToastTimer);
+        autoToastTimer = null;
+      }
+    };
 
-  /** 组件销毁前清理定时器 */
-  lifecycle.onBeforeDestroy = (): void => {
-    // 清理定时器
-    if (autoToastTimer !== null) {
-      clearTimeout(autoToastTimer);
-      autoToastTimer = null;
-    }
-  };
+    // ============================================
+    // 声明式渲染（零 DOM 操作）：
+    // - 外层容器可见性 = 任一提示可见（flex/none），
+    //   与原 updateWrapVisibility 的语义一致
+    // - 各提示的 display 由自身可见性 signal 驱动
+    // - 文本使用显式 getter 协议（signal + t() 内的 localeSignal 双依赖）
+    // ============================================
 
-  // ============================================
-  // 主渲染函数
-  // ============================================
-
-  return h(
-    'div',
-    { class: 'player-toast-wrap' },
-    h('div', { class: 'player-toast-auto', ref: 'autoToastRef' }),
-    h(
-      'div',
-      { class: 'player-toast-fixed', ref: 'fixedToastRef' },
+    return h(
+      "div",
+      {
+        class: "nova-player-toast-wrap",
+        style: {
+          display:
+            autoVisibleSig.value || fixedVisibleSig.value ? "flex" : "none",
+        },
+      },
       h(
-        'div',
-        { class: 'player-toast-close', onClick: handleClose },
-        // 关闭图标使用既有实现 icons 的 Close SVG（禁止用 unicode 字符当图标）
-        h('span', { class: 'common-svg-icon' }, Close())
+        "div",
+        {
+          class: "nova-player-toast-auto",
+          style: { display: autoVisibleSig.value ? "" : "none" },
+        },
+        () => autoTextSig.value,
       ),
-      h('span', { class: 'player-toast-text', ref: 'fixedTextRef' }, props.text ?? '记忆你上次看到'),
-      h('span', { class: 'player-toast-time', ref: 'fixedTimeRef' }, props.jumpTime ?? '00:00'),
-      h('span', { class: 'player-toast-jump', onClick: handleJump }, '跳转')
-    )
-  );
-});
+      h(
+        "div",
+        {
+          class: "nova-player-toast-fixed",
+          style: { display: fixedVisibleSig.value ? "" : "none" },
+        },
+        h(
+          "div",
+          { class: "nova-player-toast-close", onClick: handleClose },
+          // 关闭图标使用既有实现 icons 的 Close SVG（禁止用 unicode 字符当图标）
+          h("span", { class: "common-svg-icon" }, Close()),
+        ),
+        h(
+          "span",
+          { class: "nova-player-toast-text" },
+          () => fixedTextSig.value ?? t("player.ui.toast.last_seen"),
+        ),
+        h(
+          "span",
+          { class: "nova-player-toast-time" },
+          () => fixedTimeSig.value ?? "00:00",
+        ),
+        h(
+          "span",
+          { class: "nova-player-toast-jump", onClick: handleJump },
+          t("player.ui.toast.jump"),
+        ),
+      ),
+    );
+  },
+);

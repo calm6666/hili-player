@@ -305,7 +305,7 @@ install(ctx: PluginContext): void {
 ### 6.1 最小化插件
 
 ```typescript
-import type { Plugin } from '@hili-player/player';
+import type { Plugin } from '@lumina/nova';
 
 const myPlugin: Plugin = {
   name: 'my-plugin',
@@ -329,7 +329,7 @@ const player = new VideoPlayer({ plugins: [myPlugin] });
 ### 6.2 工厂函数模式（推荐）
 
 ```typescript
-import type { Plugin, PluginOptions } from '@hili-player/player';
+import type { Plugin, PluginOptions } from '@lumina/nova';
 
 interface MyPluginConfig {
   /** 自定义选项 */
@@ -385,7 +385,7 @@ const player = new VideoPlayer({
 流媒体插件需要额外实现 `StreamPlugin` 接口，会被 `PluginManager` 自动检测并注册到流媒体中间件。
 
 ```typescript
-import type { Plugin } from '@hili-player/player';
+import type { Plugin } from '@lumina/nova';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel } from '@/types/streamPlugin';
 
 class MyStreamPlugin implements StreamPlugin {

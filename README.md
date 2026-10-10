@@ -17,7 +17,7 @@
 | 能力 | 说明 |
 | --- | --- |
 | **零 diff 运行时** | 挂载期由 `h()` 生成 VNode，一次性 `materialize` 成真实 DOM；运行期不 diff、不重渲染、不做响应式依赖收集，性能与手写原生 JS 等价 |
-| **编译期优化** | `vite-plugin-hili-compile` 用 babel + MagicString 把 `h()` 改写为 `_createEl` / `_createStaticEl` / `_createSvgEl` / `_createFragment` / `_createComp`，生产构建额外做静态提升（`_cloneHoisted`）；dev 模式零开销 |
+| **编译期优化** | `vite-plugin-lumina-compile` 用 babel + MagicString 把 `h()` 改写为 `_createEl` / `_createStaticEl` / `_createSvgEl` / `_createFragment` / `_createComp`，生产构建额外做静态提升（`_cloneHoisted`）；dev 模式零开销 |
 | **三套流媒体** | HLS（内置 fork 版 hls.js，支持 URL 与清单对象注入）、DASH（dashjs）、FLV（flv.js） |
 | **完整画质链路** | 原生多文件 / HLS / DASH 三源统一档位模型；`auto` / `manual` 双模式、ABR、切换生命周期（requested → rendered / failed，10s 超时兜底） |
 | **弹幕双引擎** | DOM 与 Canvas 可切换，含轨道管理、对象池、增量调度与预取 |
@@ -59,7 +59,7 @@ hili-player/
 │   └── plugin.ts  danmaku.ts  subtitle.ts  callbacks.ts
 ├── utils/  directives/  events/  error/     # 工具、指令、事件、错误处理
 ├── packages/
-│   ├── player/                 # @hili-player/player —— 播放器本体
+│   ├── player/                 # @lumina/nova —— 播放器本体
 │   │   └── src/
 │   │       ├── player/VideoPlayer.ts   # 核心类
 │   │       ├── components/             # 37 个 UI 组件
@@ -69,7 +69,7 @@ hili-player/
 │   │       ├── utils/                  # media 监控、浏览器能力检测、tooltip
 │   │       ├── types/                  # 播放器侧类型
 │   │       └── styles/                 # 25 个 SCSS
-│   └── plugins/                # @hili-player/plugins —— 官方插件集合
+│   └── plugins/                # @lumina/plugins —— 官方插件集合
 │       └── src/
 │           ├── danmaku/        #   DanmakuPlugin + DOM / Canvas 引擎
 │           ├── subtitle/       #   SubtitlePlugin + SRT / ASS / VTT 解析
@@ -77,7 +77,7 @@ hili-player/
 │           ├── interaction/    #   Guide / Vote / Score / Link 子插件
 │           ├── vendor/         #   清单解析（HLS / DASH）
 │           └── stream/         #   流媒体插件共享类型与枚举
-├── plugins/vite-plugin-hili-compile/   # 编译期 h() 改写插件
+├── plugins/vite-plugin-lumina-compile/   # 编译期 h() 改写插件
 ├── demo/  demo-prod/           # SSR + Hydration 演示（含 Express 服务端）
 └── docs/                       # 设计与分析文档
 ```
@@ -89,7 +89,7 @@ hili-player/
 | `core/`（框架） | 15 | 4,152 |
 | `packages/player/src` | 70 | 20,520 |
 | `packages/plugins/src` | 54 | 17,467 |
-| `plugins/vite-plugin-hili-compile` | 4 | 939 |
+| `plugins/vite-plugin-lumina-compile` | 4 | 939 |
 | `types` / `utils` / `media` / `error` / `events` / `directives` | 26 | 5,949 |
 | `packages/player/src/styles`（SCSS） | 25 | 9,113 |
 
@@ -124,8 +124,8 @@ pnpm build:plugins
 ### 基础用法
 
 ```ts
-import { VideoPlayer } from '@hili-player/player';
-import '@hili-player/player/style.css';
+import { VideoPlayer } from '@lumina/nova';
+import '@lumina/nova/style.css';
 
 const player = new VideoPlayer({
   src: 'https://example.com/video.mp4',
@@ -189,10 +189,10 @@ const player = new VideoPlayer({
 ### 插件
 
 ```ts
-import { VideoPlayer } from '@hili-player/player';
+import { VideoPlayer } from '@lumina/nova';
 import {
   DanmakuPlugin, SubtitlePlugin, HlsPlugin, DashPlugin, FlvPlugin, InteractionPlugin,
-} from '@hili-player/plugins';
+} from '@lumina/plugins';
 
 const player = new VideoPlayer({ src: 'video.m3u8' });
 
@@ -215,7 +215,7 @@ player.mount(el);
 清单对象注入（跳过 URL 探测，直接把解析好的清单喂给播放器）：
 
 ```ts
-import { HlsPlugin, DashPlugin } from '@hili-player/plugins';
+import { HlsPlugin, DashPlugin } from '@lumina/plugins';
 
 // 清单对象作为 src 传入（MediaManifestSource），插件按类型谓词自动识别
 const player = new VideoPlayer({ src: parsedManifest });
@@ -322,12 +322,12 @@ player.destroy();         // 卸载并清理全部监听、插件与订阅
 不会触碰 DOM。渲染时取其 VNode，或使用 `isServer()` / `createSSRConfig()`：
 
 ```ts
-import { isServer, createSSRConfig, VideoPlayer } from '@hili-player/player';
+import { isServer, createSSRConfig, VideoPlayer } from '@lumina/nova';
 
 const config = {
   src: videoUrl,
   poster: posterUrl,
-  ssr: createSSRConfig({ enabled: isServer(), placeholder: '<div class="hili-player-placeholder">视频加载中…</div>' }),
+  ssr: createSSRConfig({ enabled: isServer(), placeholder: '<div class="nova-player-placeholder">视频加载中…</div>' }),
 };
 
 const player = new VideoPlayer(config);
@@ -389,7 +389,7 @@ const off = state.subscribe('player.volume', (next) => {
 ```
 挂载期：h() → VNode（普通对象） → materialize() 递归 createElement → 真实 DOM
                             ↑
-                 编译期 hiliCompile 把 h() 改写为 _createEl / _createStaticEl / …
+                 编译期 luminaCompile 把 h() 改写为 _createEl / _createStaticEl / …
 
 运行期：state.set() → effect / 订阅回调 → 业务代码直接改真实 DOM
         （框架不重渲染、不做 key diff、不做依赖收集）
@@ -416,8 +416,8 @@ const off = state.subscribe('player.volume', (next) => {
 
 | 包 | 产物 |
 | --- | --- |
-| `@hili-player/player` | `dist/index.es.js`（约 1.3 MB）、`dist/index.umd.js`（约 675 KB）、`dist/style.css`（约 393 KB）、`dist/index.d.ts`、lottie 独立 chunk（动态 import 自动分包） |
-| `@hili-player/plugins` | `dist/{index,danmaku,subtitle,dash,hls,flv}.js` + `interaction/`，`preserveModules` 保留模块结构，`dashjs` / `flv.js` / `@hili-player/player` 为 external |
+| `@lumina/nova` | `dist/index.es.js`（约 1.3 MB）、`dist/index.umd.js`（约 675 KB）、`dist/style.css`（约 393 KB）、`dist/index.d.ts`、lottie 独立 chunk（动态 import 自动分包） |
+| `@lumina/plugins` | `dist/{index,danmaku,subtitle,dash,hls,flv}.js` + `interaction/`，`preserveModules` 保留模块结构，`dashjs` / `flv.js` / `@lumina/nova` 为 external |
 
 ---
 

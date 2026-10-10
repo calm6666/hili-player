@@ -423,7 +423,7 @@ export interface SSRConfig {
  */
 export const defaultSSRConfig: SSRConfig = {
   enabled: false,
-  placeholder: '<div class="hili-player-placeholder"></div>',
+  placeholder: '<div class="nova-player-placeholder"></div>',
   deferHydration: false,
 };
 

@@ -4,7 +4,7 @@
  * ============================================
  * 对应配置 `storage: { enabled?: boolean; prefix?: string }`：
  *   - enabled 默认 true（与既有实现一致），false 时完全不读写；
- *   - key 自动加 `prefix`（默认 'hili-player:'）；
+ *   - key 自动加 `prefix`（默认 'nova-player:'）；
  *   - SSR 安全：isBrowser() 守卫，服务端直接返回默认值 / 静默跳过；
  *   - 隐私模式（localStorage 读写抛异常）下 try/catch 静默降级。
  *
@@ -17,13 +17,13 @@
 import { isBrowser } from '@/utils';
 
 /** 默认 key 前缀 */
-export const DEFAULT_STORAGE_PREFIX = 'hili-player:';
+export const DEFAULT_STORAGE_PREFIX = 'nova-player:';
 
 /** 存储配置（与 PlayerConfig.storage 一致） */
 export interface StorageOptions {
   /** 是否启用持久化（默认 true） */
   enabled?: boolean;
-  /** key 前缀（默认 'hili-player:'） */
+  /** key 前缀（默认 'nova-player:'） */
   prefix?: string;
 }
 

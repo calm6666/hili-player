@@ -8,20 +8,15 @@ import {
   DanmakuSpeed,
   DanmakuArea,
   ScreenMode,
-} from '@/types/danmaku';
-import type {
-  DanmakuItem,
-  DanmakuFilter,
-} from '@/types/danmaku';
-import type {
-  DanmakuRenderItem,
-  DanmakuMaskConfig,
-} from './types';
-import { DanmakuItemPool } from './objectPool';
-import { TrackManager } from './trackManager';
-import { rafTimeout, cancelRaf, createLogger, isBrowser } from '@/utils';
-import { calculateFontSize } from './scaleHelper';
-const logger = createLogger('CanvasEngine');
+  type DanmakuItem,
+  type DanmakuRenderItem,
+  type DanmakuFilter,
+  type DanmakuMaskConfig,
+} from "./types";
+import { DanmakuItemPool } from "./objectPool";
+import { TrackManager } from "./trackManager";
+import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
+import { calculateScale, calculateTrackHeight } from "./scaleHelper";
 
 /** Canvas引擎配置 */
 interface CanvasEngineConfig {
@@ -31,6 +26,8 @@ interface CanvasEngineConfig {
   baseFontSize: number;
   /** 字体大小缩放 */
   fontSizeScale: number;
+  /** 屏幕自适应因子（resize 时按容器宽度计算，与用户字号缩放彻底分离） */
+  screenScale: number;
   /** 阴影模糊 */
   shadowBlur: number;
   /** 阴影颜色 */
@@ -43,8 +40,10 @@ interface CanvasEngineConfig {
   opacity: number;
   /** 速度档位 */
   speed: DanmakuSpeed;
-  /** 区域档位 */
-  area: DanmakuArea;
+  /** 速度倍率（连续值，优先于 speed 档位查表） */
+  speedMultiplier?: number;
+  /** 区域占比（0-1 连续值，兼容 DanmakuArea 档位枚举值） */
+  area: number;
   /** 是否开启抗锯齿 */
   antialias: boolean;
   /** 过滤器 */
@@ -67,14 +66,12 @@ const SPEED_MULTIPLIERS: Record<DanmakuSpeed, number> = {
 };
 
 export class CanvasEngine {
-  private canvas: HTMLCanvasElement | null = null;
-  private ctx: CanvasRenderingContext2D | null = null;
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
   private container: HTMLElement;
   private config: CanvasEngineConfig;
   private itemPool: DanmakuItemPool;
   private trackManager: TrackManager;
-  private isAttached = false;
-  private mouseEventsBound = false;
 
   // 渲染状态
   private renderItems: Map<string, DanmakuRenderItem> = new Map();
@@ -87,22 +84,27 @@ export class CanvasEngine {
   private fps = 60;
 
   // 性能优化
-  private offscreenCanvas: HTMLCanvasElement | null = null;
-  private offscreenCtx: CanvasRenderingContext2D | null = null;
+  private offscreenCanvas: HTMLCanvasElement;
+  private offscreenCtx: CanvasRenderingContext2D;
   private textMeasureCache: Map<string, TextMetrics> = new Map();
+  // 文本精灵缓存：把每段弹幕文字预渲染成离屏 canvas，每帧 drawImage 代替 fillText，
+  // 省掉重复的字体栅格化（这是 fillText 最贵的部分）。
+  private textSpriteCache: Map<string, HTMLCanvasElement> = new Map();
+  private textSpriteCacheMax = 400;
 
   // 尺寸
   private width = 0;
   private height = 0;
-  private dpr = 1;
+  private dpr = window.devicePixelRatio || 1;
   private isResizing = false;
-
-  // 双缓冲快照（resize 时防止闪烁）
-  private lastSnapshot: ImageData | null = null;
+  private resizeOverlay: HTMLCanvasElement | null = null;
 
   // 鼠标悬停回调
   private onDanmakuHover:
-    | ((danmaku: DanmakuRenderItem | null, position: { x: number; y: number } | null) => void)
+    | ((
+        danmaku: DanmakuRenderItem | null,
+        position: { x: number; y: number } | null,
+      ) => void)
     | null = null;
 
   // 暂停的弹幕
@@ -120,25 +122,31 @@ export class CanvasEngine {
   private maskTempCanvas: HTMLCanvasElement | null = null;
   private maskTempCtx: CanvasRenderingContext2D | null = null;
   // 缓存的计算结果
-  private maskDrawParams: { x: number; y: number; width: number; height: number } | null = null;
+  private maskDrawParams: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null = null;
 
   constructor(
     container: HTMLElement,
     itemPool: DanmakuItemPool,
     trackManager: TrackManager,
-    config: Partial<CanvasEngineConfig> = {}
+    config: Partial<CanvasEngineConfig> = {},
   ) {
     this.container = container;
     this.itemPool = itemPool;
     this.trackManager = trackManager;
     this.config = {
-      fontFamily: 'Microsoft YaHei, PingFang SC, sans-serif',
+      fontFamily: "Microsoft YaHei, PingFang SC, sans-serif",
       baseFontSize: 18,
       fontSizeScale: 1,
+      screenScale: 1,
       shadowBlur: 2,
-      shadowColor: 'rgba(0, 0, 0, 0.8)',
+      shadowColor: "rgba(0, 0, 0, 0.8)",
       strokeWidth: 1,
-      strokeColor: '#000000',
+      strokeColor: "#000000",
       opacity: 1,
       speed: DanmakuSpeed.NORMAL,
       area: DanmakuArea.FULL,
@@ -148,65 +156,41 @@ export class CanvasEngine {
       ...config,
     };
 
+    this.canvas = document.createElement("canvas");
+    // 样式由 danmaku.scss 的 .danmaku-canvas 提供（定位/尺寸/硬件加速），不在 TS 内联
+    this.canvas.className = "danmaku-canvas";
+
+    // 启用硬件加速的 Canvas 上下文配置
+    const ctx = this.canvas.getContext("2d", {
+      alpha: true,
+      desynchronized: true, // 启用去同步渲染，减少延迟
+    });
+    if (!ctx) {
+      throw new Error("Failed to get canvas context");
+    }
+    this.ctx = ctx;
+
+    // 离屏Canvas - 用于双缓冲渲染
+    this.offscreenCanvas = document.createElement("canvas");
+    const offscreenCtx = this.offscreenCanvas.getContext("2d", {
+      alpha: true,
+    });
+    if (!offscreenCtx) {
+      throw new Error("Failed to get offscreen canvas context");
+    }
+    this.offscreenCtx = offscreenCtx;
+
+    container.appendChild(this.canvas);
+
+    // 绑定鼠标事件
+    this.bindMouseEvents();
+
     // 初始化防挡遮罩
     if (this.config.maskConfig?.enabled && this.config.maskConfig.maskImage) {
       this.loadMaskImage(this.config.maskConfig.maskImage);
     }
-  }
 
-  /** 仅在 Canvas 模式时调用 — 创建 Canvas 并插入 DOM */
-  ensureCanvas(): HTMLCanvasElement | null {
-    if (!isBrowser()) {
-      return null;
-    }
-
-    if (!this.canvas) {
-      this.canvas = document.createElement('canvas');
-      this.canvas.className = 'hili-danmaku-canvas';
-      this.canvas.style.cssText =
-        'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50';
-
-      const ctx = this.canvas.getContext('2d', {
-        alpha: true,
-        desynchronized: true,
-      });
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-      this.ctx = ctx;
-
-      // 启用 CSS 硬件加速
-      this.canvas.style.willChange = 'transform';
-      this.canvas.style.transform = 'translateZ(0)';
-
-      // 离屏Canvas - 用于双缓冲渲染
-      this.offscreenCanvas = document.createElement('canvas');
-      const offscreenCtx = this.offscreenCanvas.getContext('2d', {
-        alpha: true,
-      });
-      if (!offscreenCtx) {
-        throw new Error('Failed to get offscreen canvas context');
-      }
-      this.offscreenCtx = offscreenCtx;
-    }
-    if (!this.isAttached) {
-      this.container.appendChild(this.canvas);
-      this.isAttached = true;
-      // 绑定鼠标事件（仅首次挂载时）
-      if (!this.mouseEventsBound) {
-        this.bindMouseEvents();
-        this.mouseEventsBound = true;
-      }
-      // 首次挂载时调整尺寸
-      this.resize();
-    }
-    return this.canvas;
-  }
-
-  /** DOM 模式时移除 Canvas */
-  detachCanvas(): void {
-    this.canvas?.remove();
-    this.isAttached = false;
+    this.resize();
   }
 
   /**
@@ -215,19 +199,27 @@ export class CanvasEngine {
    * @param originalWidth 遮罩原始宽度（可选）
    * @param originalHeight 遮罩原始高度（可选）
    */
-  private loadMaskImage(url: string, originalWidth?: number, originalHeight?: number): void {
-    if (!isBrowser()) return;
-
+  private loadMaskImage(
+    url: string,
+    originalWidth?: number,
+    originalHeight?: number,
+  ): void {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = (): void => {
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
       this.maskImage = img;
       // 保存原始尺寸，如果没有提供则使用图片实际尺寸
       this.maskOriginalWidth = originalWidth || img.naturalWidth || img.width;
-      this.maskOriginalHeight = originalHeight || img.naturalHeight || img.height;
+      this.maskOriginalHeight =
+        originalHeight || img.naturalHeight || img.height;
+      // 关键：换新遮罩图时清空缓存的临时画布，否则会复用上一帧的旧 mask，
+      // 导致人物移动了但镂空位置还停在第一帧（对不齐）。
+      this.maskTempCanvas = null;
+      this.maskTempCtx = null;
+      this.maskDrawParams = null;
       this.createMaskCanvas();
     };
-    img.onerror = (): void => {
+    img.onerror = () => {
       // 静默处理错误
     };
     img.src = url;
@@ -237,17 +229,18 @@ export class CanvasEngine {
    * 创建遮罩Canvas
    */
   private createMaskCanvas(): void {
-    if (!isBrowser()) return;
-
     if (!this.maskImage) return;
 
-    this.maskCanvas = document.createElement('canvas');
-    this.maskCanvas.width = this.width;
-    this.maskCanvas.height = this.height;
+    this.maskCanvas = document.createElement("canvas");
+    // 遮罩画布要和主画布一样按 DPR 建立，否则遮罩被放大后边缘模糊、和人物对不齐
+    this.maskCanvas.width = Math.round(this.width * this.dpr);
+    this.maskCanvas.height = Math.round(this.height * this.dpr);
 
-    const ctx = this.maskCanvas.getContext('2d');
+    const ctx = this.maskCanvas.getContext("2d");
     if (!ctx) return;
     this.maskCtx = ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(this.dpr, this.dpr);
 
     this.updateMaskCanvas();
   }
@@ -260,14 +253,17 @@ export class CanvasEngine {
    * 最终 maskCanvas：透明=切除弹幕(不显示)，黑色=保留弹幕(显示)
    */
   private updateMaskCanvas(): void {
-    if (!isBrowser()) return;
-
     if (!this.maskImage || !this.maskCtx || !this.maskCanvas) return;
 
     // 使用遮罩原始尺寸或图片实际尺寸计算比例
-    const imgWidth = this.maskOriginalWidth || this.maskImage.naturalWidth || this.maskImage.width;
+    const imgWidth =
+      this.maskOriginalWidth ||
+      this.maskImage.naturalWidth ||
+      this.maskImage.width;
     const imgHeight =
-      this.maskOriginalHeight || this.maskImage.naturalHeight || this.maskImage.height;
+      this.maskOriginalHeight ||
+      this.maskImage.naturalHeight ||
+      this.maskImage.height;
 
     if (imgWidth === 0 || imgHeight === 0) return;
 
@@ -290,9 +286,10 @@ export class CanvasEngine {
       this.maskDrawParams.width !== drawWidth ||
       this.maskDrawParams.height !== drawHeight;
 
-    // 步骤1：先把整个 maskCanvas 填充为黑色（显示弹幕）
-    this.maskCtx.fillStyle = '#000000';
-    this.maskCtx.fillRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+    // 步骤1：先把整个 maskCanvas 填充为黑色（显示弹幕）。
+    // maskCtx 已按 DPR 缩放，这里用逻辑尺寸 this.width/this.height。
+    this.maskCtx.fillStyle = "#000000";
+    this.maskCtx.fillRect(0, 0, this.width, this.height);
 
     // 步骤2：检查是否需要重新处理遮罩数据
     let tempCanvas: HTMLCanvasElement;
@@ -307,10 +304,10 @@ export class CanvasEngine {
         this.maskTempCanvas.width !== drawWidth ||
         this.maskTempCanvas.height !== drawHeight
       ) {
-        this.maskTempCanvas = document.createElement('canvas');
+        this.maskTempCanvas = document.createElement("canvas");
         this.maskTempCanvas.width = drawWidth;
         this.maskTempCanvas.height = drawHeight;
-        this.maskTempCtx = this.maskTempCanvas.getContext('2d');
+        this.maskTempCtx = this.maskTempCanvas.getContext("2d");
       }
 
       tempCanvas = this.maskTempCanvas;
@@ -319,7 +316,12 @@ export class CanvasEngine {
       if (this.maskTempCtx != null) {
         this.maskTempCtx.drawImage(this.maskImage, 0, 0, drawWidth, drawHeight);
         // 获取像素数据并处理（只处理一次，后续复用）
-        const imageData = this.maskTempCtx.getImageData(0, 0, drawWidth, drawHeight);
+        const imageData = this.maskTempCtx.getImageData(
+          0,
+          0,
+          drawWidth,
+          drawHeight,
+        );
         const data = imageData.data;
         const len = data.length;
 
@@ -349,19 +351,63 @@ export class CanvasEngine {
     }
 
     // 步骤3：使用 destination-out 将镂空区域（白色）从黑色背景中切除
-    this.maskCtx.globalCompositeOperation = 'destination-out';
+    this.maskCtx.globalCompositeOperation = "destination-out";
     this.maskCtx.drawImage(tempCanvas, x, y);
-    this.maskCtx.globalCompositeOperation = 'source-over';
+    this.maskCtx.globalCompositeOperation = "source-over";
   }
 
   /**
    * 调整Canvas尺寸
    */
+  beginResizeTransition(): void {
+    if (this.resizeOverlay || this.canvas.width <= 0 || this.canvas.height <= 0)
+      return;
+
+    const overlay = document.createElement("canvas");
+    overlay.width = this.canvas.width;
+    overlay.height = this.canvas.height;
+    const overlayCtx = overlay.getContext("2d");
+    if (overlayCtx) overlayCtx.drawImage(this.canvas, 0, 0);
+    overlay.className = "danmaku-canvas-resize-overlay";
+    // 样式由 danmaku.scss 的 .danmaku-canvas-resize-overlay 提供，不在 TS 内联
+    this.container.appendChild(overlay);
+    this.resizeOverlay = overlay;
+  }
+
+  /**
+   * 计算当前有效字号（基础字号 × 用户缩放 × 屏幕自适应因子）
+   *
+   * 与 DOMEngine 同一公式：screenScale（resize 计算）与 fontSizeScale（用户设置）
+   * 彻底分离，autoScale 关闭时屏幕因子不乘入。
+   * @param itemFontSize 弹幕数据自带字号（缺省用引擎基础字号）
+   */
+  private getEffectiveFontSize(itemFontSize?: number): number {
+    const base = itemFontSize || this.config.baseFontSize;
+    const factor = this.config.autoScale ? this.config.screenScale : 1;
+    return base * this.config.fontSizeScale * factor;
+  }
+
+  /**
+   * 同步轨道高度并重建轨道
+   *
+   * 轨道高度必须随有效字号缩放（calculateTrackHeight 覆盖文本盒高度
+   * 并预留呼吸空间），字号缩放 / 屏幕自适应开关 / resize 时均须调用。
+   */
+  private syncTrackMetrics(): void {
+    if (this.width <= 0 || this.height <= 0) return;
+    const fontPx = this.getEffectiveFontSize();
+    this.trackManager.updateConfig({
+      trackHeight: calculateTrackHeight(fontPx),
+    });
+    // 重建轨道时回填在飞弹幕占用（详见 TrackManager.initTracks 注释）：
+    // 与 DOMEngine 同一策略，防止字号缩放 / resize 后占用蒸发导致弹幕重叠
+    const inFlight = Array.from(this.renderItems.values()).filter(
+      (item) => item.isRendering,
+    );
+    this.trackManager.initTracks(this.width, this.height, this.config.area, inFlight);
+  }
+
   resize(): void {
-    if (!isBrowser()) return;
-
-    if (!this.canvas || !this.ctx) return;
-
     // 使用getBoundingClientRect获取尺寸，它比clientWidth更实时
     const rect = this.container.getBoundingClientRect();
 
@@ -375,19 +421,31 @@ export class CanvasEngine {
     }
 
     this.isResizing = true;
+    const oldWidth = this.width;
+    const oldHeight = this.height;
+    // 迁移前的有效字号因子（用于在飞弹幕的尺寸缩放迁移）
+    const oldFontFactor =
+      this.config.fontSizeScale *
+      (this.config.autoScale ? this.config.screenScale : 1);
 
-    // Step 1: 保存当前快照（防止 resize 闪烁）
-    try {
-      this.lastSnapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-    } catch { /* canvas not initialized */ }
-
+    // backing store 重建会清空主画布；快照应在 fullscreenchange 的第一时间创建。
+    this.beginResizeTransition();
+    // 先保存逻辑进度，不能在全屏切换时简单沿用旧像素坐标。
+    const scrollProgress = new Map<string, number>();
+    if (oldWidth > 0) {
+      for (const item of this.renderItems.values()) {
+        if (item.type !== DanmakuType.SCROLL || !item.isRendering) continue;
+        const oldDistance = oldWidth + item.width;
+        scrollProgress.set(item.renderId, (oldWidth - item.x) / oldDistance);
+      }
+    }
     this.width = newWidth;
     this.height = newHeight;
 
     // 限制DPR最大为2，避免在高DPR屏幕上渲染过大的画布
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-    // Step 2: 设置Canvas实际尺寸
+    // 设置Canvas实际尺寸
     this.canvas.width = this.width * this.dpr;
     this.canvas.height = this.height * this.dpr;
 
@@ -396,43 +454,28 @@ export class CanvasEngine {
     this.canvas.style.height = `${this.height}px`;
 
     // 缩放上下文
-    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.scale(this.dpr, this.dpr);
 
     // 离屏Canvas
-    if (this.offscreenCanvas && this.offscreenCtx) {
-      this.offscreenCanvas.width = this.width * this.dpr;
-      this.offscreenCanvas.height = this.height * this.dpr;
-      this.offscreenCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    }
+    this.offscreenCanvas.width = this.width * this.dpr;
+    this.offscreenCanvas.height = this.height * this.dpr;
+    this.offscreenCtx.setTransform(1, 0, 0, 1, 0, 0);
+    this.offscreenCtx.scale(this.dpr, this.dpr);
 
-    // Step 3: 立即恢复快照（防止白屏闪烁）
-    if (this.lastSnapshot) {
-      this.ctx.putImageData(this.lastSnapshot, 0, 0);
-    }
+    // 屏幕自适应因子：无条件按容器宽度计算并更新。
+    // autoScale 仅在 getEffectiveFontSize 中控制是否乘入，
+    // 与用户字号缩放（fontSizeScale）彻底分离，互不覆盖
+    // （旧实现的 updateConfig({ fontSizeScale: scale }) 同时承载两个语义，
+    //  与 setFontSizeScale 互相覆盖是「弹幕不缩放」的根因）。
+    this.config.screenScale = calculateScale(this.width);
 
-    // Step 4: 下一帧清除快照引用
-    requestAnimationFrame(() => { this.lastSnapshot = null; });
-
-    // 初始化轨道（保持当前区域档位）
-    this.trackManager.initTracks(this.width, this.height, this.config.area);
-
-    // 根据autoScale决定是否自动缩放字体
-    if (this.config.autoScale) {
-      // 使用新的缩放辅助函数，根据播放器大小和系统缩放计算
-      const fontSize = calculateFontSize(
-        this.config.baseFontSize,
-        1, // 基础缩放为1，calculateFontSize内部会计算响应式缩放
-        this.width,
-        true
-      );
-      // 计算相对于baseFontSize的缩放比例
-      const scale = fontSize / this.config.baseFontSize;
-      this.updateConfig({ fontSizeScale: scale });
-    }
-    // 如果autoScale为false，保持当前的fontSizeScale不变
+    // 同步轨道高度并重建轨道（保持当前区域档位）
+    this.syncTrackMetrics();
 
     // 清空缓存
     this.textMeasureCache.clear();
+    this.textSpriteCache.clear();
 
     // 如果启用了防挡遮罩，重新创建遮罩Canvas
     if (this.maskImage && this.config.maskConfig?.enabled) {
@@ -441,17 +484,49 @@ export class CanvasEngine {
 
     // 更新遮罩canvas尺寸
     if (this.maskCanvas && this.maskImage) {
-      this.maskCanvas.width = this.width;
-      this.maskCanvas.height = this.height;
+      this.maskCanvas.width = Math.round(this.width * this.dpr);
+      this.maskCanvas.height = Math.round(this.height * this.dpr);
+      this.maskCtx?.setTransform(1, 0, 0, 1, 0, 0);
+      this.maskCtx?.scale(this.dpr, this.dpr);
       // 尺寸变化，清除缓存的绘制参数，强制重新计算
       this.maskDrawParams = null;
       this.updateMaskCanvas();
     }
 
-    // 注意：不处理已存在弹幕的位置，避免全屏切换时性能问题
-    // 已存在的弹幕会继续按原来的位置和速度移动，新的弹幕会使用新的尺寸
+    // 在飞弹幕的缩放迁移比：新/旧「有效字号因子」的比值
+    // （fontSizeScale 与 screenScale 的乘积，autoScale 关闭时屏幕因子不参与）
+    const newFontFactor =
+      this.config.fontSizeScale *
+      (this.config.autoScale ? this.config.screenScale : 1);
+    const fontScaleRatio = oldFontFactor > 0 ? newFontFactor / oldFontFactor : 1;
+    const heightScale = oldHeight > 0 ? this.height / oldHeight : 1;
+
+    // 字体缩放后同步更新已有弹幕的测量尺寸和轨道位置，避免旧尺寸/新尺寸混用。
+    for (const item of this.renderItems.values()) {
+      item.y *= heightScale;
+      item.width *= fontScaleRatio;
+      item.height *= fontScaleRatio;
+      const progress = scrollProgress.get(item.renderId);
+      if (item.type === DanmakuType.SCROLL && progress !== undefined) {
+        item.x = this.width - (this.width + item.width) * progress;
+      }
+      if (item.type === DanmakuType.TOP || item.type === DanmakuType.BOTTOM) {
+        item.x = (this.width - item.width) / 2;
+      }
+    }
 
     this.isResizing = false;
+    // resize 会重置 backing store；立即绘制当前帧，避免出现空白帧。
+    if (this.isPlaying) this.draw();
+    if (this.resizeOverlay) {
+      const overlay = this.resizeOverlay;
+      requestAnimationFrame(() => {
+        if (this.resizeOverlay === overlay) {
+          overlay.remove();
+          this.resizeOverlay = null;
+        }
+      });
+    }
   }
 
   /**
@@ -467,17 +542,20 @@ export class CanvasEngine {
     }
 
     // 过滤固定弹幕（顶部+底部）
-    if (filter.fixed && (item.type === DanmakuType.TOP || item.type === DanmakuType.BOTTOM)) {
+    if (
+      filter.fixed &&
+      (item.type === DanmakuType.TOP || item.type === DanmakuType.BOTTOM)
+    ) {
       return true;
     }
 
     // 过滤彩色弹幕（非白色）
     if (filter.colorful) {
-      const color = item.color || '#ffffff';
+      const color = item.color || "#ffffff";
       const isWhite =
-        color.toLowerCase() === '#ffffff' ||
-        color.toLowerCase() === 'white' ||
-        color.toLowerCase() === '#fff';
+        color.toLowerCase() === "#ffffff" ||
+        color.toLowerCase() === "white" ||
+        color.toLowerCase() === "#fff";
       if (!isWhite) {
         return true;
       }
@@ -492,7 +570,11 @@ export class CanvasEngine {
    * @param currentTime 当前时间
    * @returns 是否成功添加
    */
-  addDanmaku(item: DanmakuItem, currentTime: number, videoTime?: number): boolean {
+  addDanmaku(
+    item: DanmakuItem,
+    currentTime: number,
+    videoTime?: number,
+  ): boolean {
     // 检查是否被过滤
     if (this.isFiltered(item)) {
       return false;
@@ -500,7 +582,9 @@ export class CanvasEngine {
 
     // 如果正在resize，延迟添加弹幕
     if (this.isResizing) {
-      requestAnimationFrame(() => this.addDanmaku(item, currentTime, videoTime));
+      requestAnimationFrame(() =>
+        this.addDanmaku(item, currentTime, videoTime),
+      );
       return true;
     }
 
@@ -513,14 +597,24 @@ export class CanvasEngine {
     // 根据屏幕宽度调整基础速度，确保全屏时弹幕不会太慢
     // 窗口模式(800px)约150px/s，全屏模式(1920px)约200px/s
     const baseSpeed = Math.min(200, 120 + (this.width / 1920) * 80);
-    // 应用速度档位倍率：优先使用弹幕数据中的speed，否则使用当前配置的速度档位
-    const speedToUse = item.speed !== undefined ? item.speed : this.config.speed;
-    const speedMultiplier = SPEED_MULTIPLIERS[speedToUse];
+    // 速度倍率双轨：优先使用弹幕数据中的 speed 档位倍率；
+    // 否则用当前配置 speedMultiplier（连续值，面板滑杆直连），
+    // speedMultiplier 未设置时回退到 speed 档位查表
+    const speedToUse =
+      item.speed !== undefined ? item.speed : this.config.speed;
+    const speedMultiplier =
+      item.speed !== undefined
+        ? (SPEED_MULTIPLIERS[speedToUse] ?? 1)
+        : (this.config.speedMultiplier ??
+          SPEED_MULTIPLIERS[speedToUse] ??
+          1);
     const adjustedSpeed = baseSpeed * speedMultiplier;
-    const scrollDuration = item.type === DanmakuType.SCROLL ? (distance / adjustedSpeed) * 1000 : 0;
+    const scrollDuration =
+      item.type === DanmakuType.SCROLL ? (distance / adjustedSpeed) * 1000 : 0;
     // 固定弹幕显示4秒
     const fixedDuration = 4000;
-    const duration = item.type === DanmakuType.SCROLL ? scrollDuration : fixedDuration;
+    const duration =
+      item.type === DanmakuType.SCROLL ? scrollDuration : fixedDuration;
 
     // 计算弹幕已经经过的时间（用于快进后恢复显示）
     let elapsedTime = 0;
@@ -535,7 +629,8 @@ export class CanvasEngine {
       y: 0,
       width,
       height,
-      speed: item.type === DanmakuType.SCROLL ? distance / (duration / 1000) : 0,
+      speed:
+        item.type === DanmakuType.SCROLL ? distance / (duration / 1000) : 0,
       duration,
       isRendering: true,
       scrollDistance: item.type === DanmakuType.SCROLL ? distance : undefined,
@@ -546,7 +641,10 @@ export class CanvasEngine {
     }
 
     // 获取可用轨道
-    const trackIndex = this.trackManager.getAvailableTrack(renderItem, currentTime);
+    const trackIndex = this.trackManager.getAvailableTrack(
+      renderItem,
+      currentTime,
+    );
     if (trackIndex === -1) {
       this.itemPool.release(renderItem.renderId);
       return false;
@@ -584,7 +682,11 @@ export class CanvasEngine {
    * @param items 弹幕列表
    * @param currentTime 当前时间
    */
-  addDanmakuBatch(items: DanmakuItem[], currentTime: number, videoTime?: number): void {
+  addDanmakuBatch(
+    items: DanmakuItem[],
+    currentTime: number,
+    videoTime?: number,
+  ): void {
     // 按时间排序
     const sortedItems = items.sort((a, b) => a.time - b.time);
 
@@ -600,12 +702,16 @@ export class CanvasEngine {
    * @param fontSize 字体大小
    * @returns 尺寸
    */
-  private measureText(text: string, fontSize?: number): { width: number; height: number } {
-    const size = (fontSize || this.config.baseFontSize) * this.config.fontSizeScale;
+  private measureText(
+    text: string,
+    fontSize?: number,
+  ): { width: number; height: number } {
+    // 有效字号 = 弹幕自带字号（或基础字号）× 用户缩放 × 屏幕自适应因子
+    const size = this.getEffectiveFontSize(fontSize);
     const cacheKey = `${text}_${size}`;
 
     let metrics = this.textMeasureCache.get(cacheKey);
-    if (!metrics && this.offscreenCtx) {
+    if (!metrics) {
       // 使用离屏Canvas进行文本测量，避免影响主Canvas
       this.offscreenCtx.font = `bold ${size}px ${this.config.fontFamily}`;
       metrics = this.offscreenCtx.measureText(text);
@@ -613,7 +719,7 @@ export class CanvasEngine {
     }
 
     return {
-      width: metrics?.width ?? 0,
+      width: metrics.width,
       height: size * 1.2,
     };
   }
@@ -623,8 +729,6 @@ export class CanvasEngine {
    */
   start(): void {
     if (this.isPlaying) return;
-    if (!isBrowser()) return;
-    this.ensureCanvas();
     this.isPlaying = true;
     this.lastFrameTime = performance.now();
     this.renderLoop();
@@ -645,9 +749,8 @@ export class CanvasEngine {
    * 暂停渲染（视频暂停时调用）
    */
   pauseAnimations(): void {
+    // Canvas 引擎由 rAF 循环驱动，暂停只需置标志位，无需任何样式类
     this.isPaused = true;
-    // 添加暂停类名到容器（用于样式标记）
-    this.canvas?.classList.add('is-paused');
   }
 
   /**
@@ -655,9 +758,14 @@ export class CanvasEngine {
    */
   resumeAnimations(): void {
     this.isPaused = false;
-    // 移除暂停类名
-    this.canvas?.classList.remove('is-paused');
     this.lastFrameTime = performance.now();
+  }
+
+  /**
+   * 设置弹幕整体显隐（样式由 danmaku.scss 的 .danmaku-x-hide 提供，不在 TS 内联）
+   */
+  setVisible(visible: boolean): void {
+    this.canvas.classList.toggle("danmaku-x-hide", !visible);
   }
 
   /**
@@ -676,12 +784,16 @@ export class CanvasEngine {
    * 清空弹幕
    */
   clear(): void {
+    if (this.resizeOverlay) {
+      this.resizeOverlay.remove();
+      this.resizeOverlay = null;
+    }
     this.renderItems.forEach((item) => {
       this.itemPool.release(item.renderId);
     });
     this.renderItems.clear();
     this.trackManager.reset();
-    this.ctx?.clearRect(0, 0, this.width, this.height);
+    this.ctx.clearRect(0, 0, this.width, this.height);
   }
 
   /**
@@ -758,7 +870,7 @@ export class CanvasEngine {
    * 渲染循环
    */
   private renderLoop = (): void => {
-    if (!this.isPlaying || !isBrowser()) return;
+    if (!this.isPlaying) return;
 
     const currentTime = performance.now();
 
@@ -848,8 +960,6 @@ export class CanvasEngine {
    * 绘制弹幕
    */
   private draw(): void {
-    if (!this.ctx) return;
-
     // 优化：使用透明填充代替clearRect，在某些浏览器上更快
     this.ctx.clearRect(0, 0, this.width, this.height);
 
@@ -865,26 +975,8 @@ export class CanvasEngine {
     // 如果没有可见弹幕，直接返回
     if (visibleItems.length === 0) return;
 
-    // 按字体大小排序，减少font设置次数
-    visibleItems.sort(
-      (a, b) => (a.fontSize || this.config.baseFontSize) - (b.fontSize || this.config.baseFontSize)
-    );
-
-    // 批量绘制 - 使用局部变量缓存配置
-    const fontFamily = this.config.fontFamily;
-    const fontSizeScale = this.config.fontSizeScale;
-    const baseFontSize = this.config.baseFontSize;
-    let currentFontSize = 0;
-
+    // 每帧只贴精灵位图（drawImage），不再逐条 fillText，字体已在精灵里栅格化好了
     for (const item of visibleItems) {
-      const size = (item.fontSize || baseFontSize) * fontSizeScale;
-
-      // 只在字体大小变化时设置font
-      if (size !== currentFontSize) {
-        this.ctx.font = `bold ${size}px ${fontFamily}`;
-        currentFontSize = size;
-      }
-
       this.drawItem(item);
     }
 
@@ -896,49 +988,87 @@ export class CanvasEngine {
    * 应用防挡遮罩
    */
   private applyMask(): void {
-    if (!this.ctx || !this.maskImage || !this.maskCanvas || !this.config.maskConfig?.enabled) {
+    if (
+      !this.maskImage ||
+      !this.maskCanvas ||
+      !this.config.maskConfig?.enabled
+    ) {
       return;
     }
 
     // 使用 destination-in 模式：只保留 maskCanvas 中不透明（黑色）区域的弹幕
     // maskCanvas: 黑色=显示弹幕, 透明=不显示弹幕
     // destination-in: 保留源（已绘制弹幕）和目标（maskCanvas）都重叠的不透明区域
-    this.ctx.globalCompositeOperation = 'destination-in';
-    this.ctx.drawImage(this.maskCanvas, 0, 0);
-    this.ctx.globalCompositeOperation = 'source-over';
+    // 注意：maskCanvas 是设备像素尺寸，主 ctx 已 scale(dpr)，这里必须显式指定
+    // 逻辑尺寸 this.width/this.height，否则会被当成 dpr² 放大、遮罩和视频错位。
+    this.ctx.globalCompositeOperation = "destination-in";
+    this.ctx.drawImage(this.maskCanvas, 0, 0, this.width, this.height);
+    this.ctx.globalCompositeOperation = "source-over";
   }
 
   /**
    * 绘制单个弹幕
    * @param item 弹幕项
    */
-  private drawItem(item: DanmakuRenderItem): void {
-    if (!this.ctx) return;
+  /**
+   * 获取（或创建）弹幕文本的「精灵」canvas：把文字预渲染成位图。
+   * 每帧用 drawImage 贴图代替 fillText，避免重复的字体栅格化（fillText 最贵的部分）。
+   */
+  private getTextSprite(item: DanmakuRenderItem): HTMLCanvasElement {
+    const isSelf = item.uid === 1 || item.uid === "1";
+    // 有效字号 = 弹幕自带字号（或基础字号）× 用户缩放 × 屏幕自适应因子
+    const size = this.getEffectiveFontSize(item.fontSize);
+    const color = item.color || "#ffffff";
+    const key = `${item.text}|${size.toFixed(1)}|${color}|${isSelf}`;
 
-    const { text, x, y, height, color, width, uid } = item;
+    const cached = this.textSpriteCache.get(key);
+    if (cached) return cached;
 
-    this.ctx.textBaseline = 'middle';
-    const drawY = y + height / 2;
+    const padding = isSelf ? 4 : 0;
+    const halfPad = isSelf ? 2 : 0;
+    const spriteW = Math.max(1, Math.ceil(item.width) + padding * 2);
+    const spriteH = Math.max(1, Math.ceil(item.height) + halfPad * 2);
 
-    // 判断是否为自己发布的弹幕（uid为1表示本人），添加白色边框
-    const isSelf = uid === 1 || uid === '1';
-
-    if (isSelf) {
-      // 绘制白色边框背景
-      this.ctx.save();
-      this.ctx.strokeStyle = '#ffffff';
-      this.ctx.lineWidth = 2;
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      const padding = 4;
-      this.ctx.fillRect(x - padding, y - padding / 2, width + padding * 2, height + padding);
-      this.ctx.strokeRect(x - padding, y - padding / 2, width + padding * 2, height + padding);
-      this.ctx.restore();
+    const sprite = document.createElement("canvas");
+    sprite.width = spriteW;
+    sprite.height = spriteH;
+    const ctx = sprite.getContext("2d");
+    if (ctx) {
+      ctx.textBaseline = "middle";
+      ctx.font = `bold ${size}px ${this.config.fontFamily}`;
+      if (isSelf) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, spriteW, spriteH);
+        ctx.strokeRect(1, 1, spriteW - 2, spriteH - 2);
+      }
+      ctx.fillStyle = color;
+      ctx.fillText(item.text, padding, spriteH / 2);
     }
 
-    // 简化渲染：关闭阴影和描边以提高性能
-    // 填充文字
-    this.ctx.fillStyle = color || '#ffffff';
-    this.ctx.fillText(text, x, drawY);
+    // 容量控制：超过上限清掉前一半，避免弹幕文本很多时内存膨胀
+    if (this.textSpriteCache.size >= this.textSpriteCacheMax) {
+      let removed = 0;
+      for (const k of this.textSpriteCache.keys()) {
+        this.textSpriteCache.delete(k);
+        if (++removed >= this.textSpriteCacheMax / 2) break;
+      }
+    }
+    this.textSpriteCache.set(key, sprite);
+    return sprite;
+  }
+
+  /**
+   * 绘制单个弹幕（贴精灵位图，替代逐帧 fillText）
+   */
+  private drawItem(item: DanmakuRenderItem): void {
+    const isSelf = item.uid === 1 || item.uid === "1";
+    const padding = isSelf ? 4 : 0;
+    const halfPad = isSelf ? 2 : 0;
+    const sprite = this.getTextSprite(item);
+    // 精灵左上角对齐到弹幕项左上角（本人弹幕已包含边框 padding）
+    this.ctx.drawImage(sprite, item.x - padding, item.y - halfPad);
   }
 
   /**
@@ -946,8 +1076,7 @@ export class CanvasEngine {
    * @param _mode 屏幕模式（已废弃，保留参数用于兼容性）
    */
   switchScreenMode(_mode: ScreenMode): void {
-    // 只调整Canvas尺寸，不再切换轨道模式（现在只有一个统一的状态）
-    this.resize();
+    // 尺寸由 DanmakuManager 在 fullscreen layout 稳定后统一提交，避免重复 resize。
   }
 
   /**
@@ -959,10 +1088,24 @@ export class CanvasEngine {
 
     Object.assign(this.config, config);
     this.textMeasureCache.clear();
+    this.textSpriteCache.clear();
 
-    // 如果区域档位变化，重新初始化轨道
+    // 如果区域档位变化，重新初始化轨道（回填在飞占用，防止新弹幕叠进在飞 y）
     if (config.area !== undefined && config.area !== oldArea) {
-      this.trackManager.initTracks(this.width, this.height, config.area);
+      const inFlight = Array.from(this.renderItems.values()).filter(
+        (item) => item.isRendering,
+      );
+      this.trackManager.initTracks(this.width, this.height, config.area, inFlight);
+    }
+
+    // 字号相关配置变化（用户字号缩放 / 屏幕自适应因子 / 自动缩放开关）时，
+    // 轨道高度必须随有效字号重建，否则文本盒超高导致相邻轨道弹幕重叠
+    if (
+      config.fontSizeScale !== undefined ||
+      config.screenScale !== undefined ||
+      config.autoScale !== undefined
+    ) {
+      this.syncTrackMetrics();
     }
 
     // 如果防挡配置变化，更新遮罩
@@ -1018,23 +1161,35 @@ export class CanvasEngine {
   }
 
   /**
+   * 清除当前防挡遮罩（弹幕恢复全部显示）
+   */
+  private clearMask(): void {
+    this.maskImage = null;
+    this.maskCanvas = null;
+    this.maskCtx = null;
+    this.maskTempCanvas = null;
+    this.maskTempCtx = null;
+    this.maskDrawParams = null;
+  }
+
+  /**
    * 启动遮罩自动更新
    */
   private startMaskAutoUpdate(config: DanmakuMaskConfig): void {
     const updateInterval = config.updateInterval || 1000;
     let lastTimeKey = -1;
 
-    const updateMask = async (): Promise<void> => {
+    const updateMask = async () => {
       if (!config.maskLoader) {
         return;
       }
 
       // 通过回调获取当前视频时间
       const currentTime = config.getCurrentTime ? config.getCurrentTime() : 0;
-      const timeKey = Math.floor(currentTime);
 
-      // 如果视频暂停且时间没有变化，跳过请求，但继续定时检查
-      if (timeKey === lastTimeKey) {
+      // 只有视频暂停（时间基本没变）才跳过，播放中按 updateInterval 采样。
+      // 之前用 Math.floor(currentTime) 按「秒」去重，把采样率卡死在 1 次/秒。
+      if (Math.abs(currentTime - lastTimeKey) < 0.01) {
         // 继续下一次更新
         if (config.enabled) {
           this.maskUpdateTimer = rafTimeout(updateMask, updateInterval);
@@ -1042,17 +1197,18 @@ export class CanvasEngine {
         return;
       }
 
-      lastTimeKey = timeKey;
+      lastTimeKey = currentTime;
 
       try {
         const result = await config.maskLoader(currentTime);
 
-        // 返回 null 表示该时间没有遮罩，不设置
+        // 返回 null 表示该时间没有遮罩：保持现状，继续下一轮
         if (result === null) {
-          return;
-        }
-
-        if (result.maskImageElement) {
+          // no-op
+        } else if (result.clearMask) {
+          // 明确要求清除遮罩（例如该帧没有人，不应用 mask CSS）
+          this.clearMask();
+        } else if (result.maskImageElement) {
           this.maskImage = result.maskImageElement;
           // 保存原始尺寸
           this.maskOriginalWidth =
@@ -1065,10 +1221,14 @@ export class CanvasEngine {
             result.maskImageElement.height;
           this.createMaskCanvas();
         } else if (result.maskImage) {
-          this.loadMaskImage(result.maskImage, result.originalWidth, result.originalHeight);
+          this.loadMaskImage(
+            result.maskImage,
+            result.originalWidth,
+            result.originalHeight,
+          );
         }
       } catch (error) {
-        logger.error('Mask request failed:', error);
+        console.error(`[CanvasEngine] Mask request failed:`, error);
       }
 
       // 继续下一次更新
@@ -1078,9 +1238,7 @@ export class CanvasEngine {
     };
 
     // 立即执行一次
-    updateMask().catch(error => {
-      logger.error('updateMask 执行失败:', error);
-    });
+    updateMask();
   }
 
   /**
@@ -1105,7 +1263,10 @@ export class CanvasEngine {
    * @param callback 回调函数，参数为弹幕项和位置（悬停时为数据，离开时为空）
    */
   setOnDanmakuHover(
-    callback: (danmaku: DanmakuRenderItem | null, position: { x: number; y: number } | null) => void
+    callback: (
+      danmaku: DanmakuRenderItem | null,
+      position: { x: number; y: number } | null,
+    ) => void,
   ): void {
     this.onDanmakuHover = callback;
   }
@@ -1114,17 +1275,17 @@ export class CanvasEngine {
    * 绑定鼠标事件
    */
   private bindMouseEvents(): void {
-    if (!this.canvas) return;
-
     // 当前悬停的弹幕
     let hoveredItem: DanmakuRenderItem | null = null;
     // 自动恢复定时器
     let autoResumeTimer: { id: number } | null = null;
+    let lastMouseMoveTime = 0;
 
-    const canvas = this.canvas;
-
-    canvas.addEventListener('mousemove', (e) => {
-      const rect = canvas.getBoundingClientRect();
+    this.canvas.addEventListener("mousemove", (e) => {
+      const now = performance.now();
+      if (now - lastMouseMoveTime < 50) return;
+      lastMouseMoveTime = now;
+      const rect = this.canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
@@ -1193,7 +1354,7 @@ export class CanvasEngine {
       }
     });
 
-    canvas.addEventListener('mouseleave', () => {
+    this.canvas.addEventListener("mouseleave", () => {
       // 清除自动恢复定时器
       if (autoResumeTimer) {
         cancelRaf(autoResumeTimer);
@@ -1214,11 +1375,10 @@ export class CanvasEngine {
   destroy(): void {
     this.stop();
     this.clear();
-    this.detachCanvas();
-    this.canvas = null;
-    this.ctx = null;
-    this.offscreenCanvas = null;
-    this.offscreenCtx = null;
+    this.canvas.remove();
+    this.resizeOverlay?.remove();
+    this.resizeOverlay = null;
     this.textMeasureCache.clear();
+    this.textSpriteCache.clear();
   }
 }

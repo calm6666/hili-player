@@ -7,7 +7,7 @@
 
 import { StreamType } from '../types/index';
 import type { MediaManifest } from '../types/index';
-import { detectManifestProtocol } from '@/hili-player/utils/media/manifestProtocol';
+import { detectManifestProtocol } from '@/nova/utils/media/manifestProtocol';
 
 /**
  * 从 URL 字符串自动检测流类型

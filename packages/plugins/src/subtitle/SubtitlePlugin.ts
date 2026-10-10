@@ -3,26 +3,53 @@
  * 字幕插件 (SubtitlePlugin)
  * ============================================
  * 字幕功能插件，通过 PlayerEventEnum 事件实现跨组件通信
- * 在 MOUNTED 时查找 .player-subtitle-wrap 容器（不自行创建容器）
+ * 在 MOUNTED 时查找 .nova-player-subtitle-wrap 容器（不自行创建容器）
  * 使用 RAF (requestAnimationFrame) 驱动字幕更新循环
  * 使用二分查找进行字幕时间定位
  * 集成 @/utils/subtitle 解析器
  *
+ * 双模式架构（docs/subtitle-dual-mode-design.md）：
+ * - 模式 A（localAi）：本地 AI 实时识别——采集链 → VAD → AsrEngine →
+ *   onCue 推送 → 增量有序 append（负数 id）→ 现有 RAF 渲染管线
+ * - 模式 B（remoteProvider / 旧 aiBackend）：服务端返回——拉取型 Provider，
+ *   支持多轨与增量窗口；旧 aiBackend 自动映射为单轨 Provider
+ * - 两种模式统一归一到 SubtitleItem[]，渲染层（RAF + 二分查找）零改动
+ * - 降级链：模式 A 失败自动降级模式 B（文档 6.5），
+ *   降级原因经 SUBTITLE_AI_STATUS 广播
+ *
  * 使用方式：
- * import { SubtitlePlugin } from '@hili-player/plugins';
+ * import { SubtitlePlugin } from '@lumina/plugins';
  *
  * plugins: [
  *   SubtitlePlugin({
  *     sources: [
  *       { src: 'subtitles/cn.srt', lang: 'zh', label: '中文' },
  *       { src: 'subtitles/en.srt', lang: 'en', label: 'English' }
- *     ]
+ *     ],
+ *     localAi: { engines: { zh: myEngine }, defaultLang: 'zh' },
+ *     remoteProvider: myRemoteProvider
  *   })
  * ]
  */
 
 import type { Plugin, PluginOptions } from '@/types/plugin';
-import type { SubtitleItem, ParsedSubtitle, SubtitleSource, SubtitleStyle } from '@/types/subtitle';
+import type {
+  SubtitleItem,
+  ParsedSubtitle,
+  SubtitleSource,
+  SubtitleStyle,
+  LocalAiSubtitleConfig,
+  LocalAiSubtitleProvider,
+  RemoteSubtitleProvider,
+  RemoteSubtitleTrack,
+  SubtitleTrackInfo,
+  SubtitleAiStatusPayload,
+  SubtitleCueEvent,
+  SubtitleEngineContext,
+  AsrEngine,
+  AiSubtitleEntry,
+} from '@/types/subtitle';
+import { SubtitleFormat } from '@/types/subtitle';
 
 export type { SubtitleSource } from '@/types/subtitle';
 import type { VideoPlayer } from '../../../player/src/player/VideoPlayer';
@@ -30,9 +57,27 @@ import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { PlayerEventEnum } from '@/core/events';
 import { parseSubtitle } from '@/utils/subtitle';
 import { isBrowser, createLogger } from '@/utils';
+import type { AiSubtitleBackendConfig } from './aiSubtitleConfig';
+import { aiSubtitleEntriesToItems } from './aiSubtitleConfig';
+import { AiSubtitleFetcher } from './AiSubtitleFetcher';
+import { AudioCapture } from './asr/audioCapture';
+import { createLocalAiProvider, LOCAL_AI_TRACK_ID } from './asr/localAiProvider';
+import { createLegacyRemoteProvider, LEGACY_REMOTE_TRACK_ID } from './remoteProvider';
 
 /** 字幕插件日志（仅 error 级别的加载失败诊断） */
 const logger = createLogger('SubtitlePlugin');
+
+/** 翻译行样式类（双语拼装：原文 + 译文次级样式，设计文档 5.1） */
+export const SUBTITLE_TRANSLATION_CLASS = 'subtitle-translation';
+
+/** 本地识别 partial 灰显样式类 */
+const SUBTITLE_PARTIAL_CLASS = 'subtitle-partial';
+
+/** 增量拉取窗口（秒） */
+const REMOTE_WINDOW_SECONDS = 60;
+
+/** 增量预取提前量（秒）：播放头距已加载区间末尾不足该值时预取下一窗口 */
+const REMOTE_PREFETCH_AHEAD = 15;
 
 // ============================================
 // 类型定义
@@ -62,6 +107,22 @@ export interface SubtitlePluginConfig {
   position?: 'bottom' | 'top' | 'middle';
   /** 底部偏移（px） */
   bottomOffset?: number;
+  /**
+   * AI 字幕后端接口配置（模式 B 旧路径，启用 AI 字幕模式时必填）
+   * 与 remoteProvider 二选一：Provider 优先；旧配置自动映射为单轨 Provider
+   */
+  aiBackend?: AiSubtitleBackendConfig;
+  /**
+   * AI 字幕的视频 ID
+   * 可静态字符串，或动态获取函数（推荐：从路由 / props 解析）
+   */
+  aiVideoId?: string | (() => string | undefined);
+  /** 是否启用 AI 字幕模式（默认 false，启用后由 refreshAiSubtitle 拉取） */
+  aiEnabled?: boolean;
+  /** 模式 A：本地 AI 实时识别配置（传入即启用该模式的可用性，运行期经 startLocalAi/stopLocalAi 控制） */
+  localAi?: LocalAiSubtitleConfig;
+  /** 模式 B：服务端字幕 Provider（与 aiBackend 二选一，Provider 优先） */
+  remoteProvider?: RemoteSubtitleProvider;
 }
 
 /** 字幕插件已解析配置 */
@@ -100,7 +161,7 @@ export interface SubtitlePluginAPI extends Plugin {
   getCurrentSubtitle(): SubtitleItem | null;
   /** 跳转时更新字幕 */
   seek(time: number): void;
-  /** 切换字幕语言 */
+  /** 切换字幕语言（语言代码或轨道 id） */
   switchLanguage(lang: string): Promise<void>;
   /** 切换字幕开关 */
   toggle(): boolean;
@@ -127,7 +188,37 @@ export interface SubtitlePluginAPI extends Plugin {
     position: string;
     itemCount: number;
     timeOffset: number;
+    /** 当前字幕来源维度（设计文档 6.4） */
+    source: 'file' | 'remote' | 'local-ai' | null;
   };
+  // ==================== AI 字幕 API（旧路径） ====================
+  /** 启用 AI 字幕模式（启用后自动拉取一次） */
+  enableAi(): void;
+  /** 禁用 AI 字幕模式 */
+  disableAi(): void;
+  /** 查询 AI 字幕模式是否启用 */
+  isAiEnabled(): boolean;
+  /** 重新拉取 AI 字幕（后端未配置时静默 no-op） */
+  refreshAiSubtitle(): Promise<void>;
+  // ==================== 模式 A：本地实时识别 ====================
+  /** 启动本地实时识别（幂等；模型懒加载，进度经 SUBTITLE_AI_STATUS 广播） */
+  startLocalAi(lang?: string): Promise<void>;
+  /** 停止本地识别并释放引擎资源（保留已识别字幕条目） */
+  stopLocalAi(): void;
+  /** 切换识别语言（换模型重启引擎，在途 partial 丢弃） */
+  switchLocalAiLanguage(lang: string): Promise<void>;
+  /** 获取本地识别完整转写（已保留的识别条目，含停止前的内容） */
+  getFullTranscript(): SubtitleItem[];
+  // ==================== 轨道注册表（模式 A/B/文件统一） ====================
+  /** 列出可用字幕轨道（文件源 + 服务端轨 + 本地轨的并集） */
+  listTracks(): SubtitleTrackInfo[];
+  /** 激活某轨道（多轨并存时主字幕轨切换；local-ai 会启动本地识别） */
+  activateTrack(trackId: string): Promise<void>;
+  /** 设置翻译轨（双语拼装：主轨 + 译文轨叠加展示；null 清除） */
+  setTranslationTrack(trackId: string | null): Promise<void>;
+  // ==================== 模式 B：增量拉取 ====================
+  /** 拉取指定时间区间的服务端字幕（增量窗口；整段 Provider 忽略区间） */
+  refreshRange(from: number, to: number): Promise<void>;
 }
 
 // ============================================
@@ -137,7 +228,7 @@ export interface SubtitlePluginAPI extends Plugin {
 class SubtitlePluginClass implements SubtitlePluginAPI {
   readonly name = 'subtitle';
   readonly version = '1.0.0';
-  readonly description = '字幕渲染插件';
+  readonly description = 'Subtitle rendering plugin';
   readonly options?: PluginOptions;
 
   private video: HTMLVideoElement | null = null;
@@ -157,6 +248,74 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
   // 事件取消订阅
   private unsubscribers: Array<() => void> = [];
 
+  // ==================== AI 字幕（旧路径）相关 ====================
+  /** 播放器事件总线引用（用于在 AI 字幕加载流程中向上广播状态） */
+  private eventBus: PlayerEventBus | null = null;
+  /** AI 字幕后端配置；为空表示未对接 */
+  private aiBackend: AiSubtitleBackendConfig | null;
+  /** AI 字幕 videoId 解析器（从字符串或函数归一） */
+  private aiVideoIdResolver: (() => string | undefined) | null;
+  /** AI 字幕模式开关 */
+  private aiEnabled: boolean;
+  /** AI 字幕获取器实例（懒构造，按需创建） */
+  private aiFetcher: AiSubtitleFetcher | null = null;
+  /** AI 字幕请求是否进行中（防并发刷新） */
+  private aiLoading = false;
+
+  // ==================== 模式 A（本地实时识别）相关 ====================
+  /** 本地识别配置；为空表示模式 A 不可用 */
+  private localAiConfig: LocalAiSubtitleConfig | null;
+  /** 当前运行中的本地识别 Provider */
+  private localAiProvider: LocalAiSubtitleProvider | null = null;
+  /** 音频采集会话（AudioContext/Source 全实例复用） */
+  private capture: AudioCapture | null = null;
+  /** 当前识别语言 */
+  private localAiLang = '';
+  /** 本地识别是否运行中 */
+  private localAiActive = false;
+  /** 本地轨状态点（downloading/loading/ready/error，菜单状态点用） */
+  private localAiStatus: SubtitleAiStatusPayload['phase'] | undefined = undefined;
+  /** 本地轨字幕条目（负数 id 自增；停止后保留，切轨回来继续可用） */
+  private localAiItems: SubtitleItem[] = [];
+  /** 本地轨 id 序列（--seq 产出 -1, -2, …） */
+  private localAiIdSeq = 0;
+  /** 当前灰显中的 partial（不入 items，RAF 渲染时叠加） */
+  private partialCue: SubtitleItem | null = null;
+
+  // ==================== 模式 B（服务端）相关 ====================
+  /** 使用方注入的 Provider（优先） */
+  private readonly remoteProviderInjected: RemoteSubtitleProvider | null;
+  /** 归一后的 Provider（注入的 或 旧 aiBackend 包装的；懒构造） */
+  private remoteProvider: RemoteSubtitleProvider | null = null;
+  /** 服务端轨道列表（listTracks 拉取后填充） */
+  private remoteTracks: RemoteSubtitleTrack[] = [];
+  /** 当前激活的服务端轨道 */
+  private remoteActiveTrack: RemoteSubtitleTrack | null = null;
+  /** 服务端主轨字幕条目（正数 id 自增） */
+  private remoteItems: SubtitleItem[] = [];
+  /** 服务端轨 id 序列（正数自增） */
+  private remoteItemIdSeq = 0;
+  /** 增量已加载区间 */
+  private remoteLoadedRange: { from: number; to: number } | null = null;
+  /** 主轨请求序号（竞态守卫：过期响应丢弃） */
+  private remoteRequestId = 0;
+  /** 主轨请求是否进行中 */
+  private remoteLoading = false;
+
+  // ==================== 翻译轨（双语拼装）====================
+  /** 翻译轨字幕条目（整段拉取后按时间叠加到主轨条目下方） */
+  private translationItems: SubtitleItem[] = [];
+  /** 翻译轨 id 序列 */
+  private translationItemIdSeq = 0;
+  /** 翻译轨请求序号（竞态守卫） */
+  private translationRequestId = 0;
+
+  // ==================== 轨道注册表 =====================
+  /** 当前激活的轨道 id（file:<lang> / remote:<trackId> / local-ai） */
+  private activeTrackId: string | null = null;
+  /** 渲染去重 key（RAF 逐帧调用，key 不变则跳过 DOM 写入） */
+  private lastRenderedKey = '';
+
   constructor(config?: SubtitlePluginConfig) {
     this.config = {
       sources: config?.sources ?? [],
@@ -172,12 +331,30 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     };
     this.isVisible = this.config.visible;
     this.options = config?.options;
+
+    // AI 字幕配置归一
+    this.aiBackend = config?.aiBackend ?? null;
+    if (typeof config?.aiVideoId === 'function') {
+      this.aiVideoIdResolver = config.aiVideoId;
+    } else if (typeof config?.aiVideoId === 'string') {
+      const staticId = config.aiVideoId;
+      this.aiVideoIdResolver = (): string => staticId;
+    } else {
+      this.aiVideoIdResolver = null;
+    }
+    this.aiEnabled = config?.aiEnabled ?? false;
+
+    // 双模式配置归一
+    this.localAiConfig = config?.localAi ?? null;
+    this.remoteProviderInjected = config?.remoteProvider ?? null;
   }
 
   install(player: VideoPlayer): void {
     if (!isBrowser()) return;
 
     const events: PlayerEventBus = player.events;
+    // 持有总线引用，供 AI 字幕加载流程向上广播 loading/ready/error
+    this.eventBus = events;
 
     const unsubMounted = events.on(PlayerEventEnum.MOUNTED, (data): void => {
       if (data.video) {
@@ -185,8 +362,8 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
       }
 
       if (data.container) {
-        // 查找 .player-subtitle-wrap 容器（SubtitleLayer 组件渲染的容器）
-        this.subtitleWrap = data.container.querySelector('.player-subtitle-wrap') ?? null;
+        // 查找 .nova-player-subtitle-wrap 容器（SubtitleLayer 组件渲染的容器）
+        this.subtitleWrap = data.container.querySelector('.nova-player-subtitle-wrap') ?? null;
 
         // 在容器内创建字幕 DOM 元素
         if (this.subtitleWrap) {
@@ -212,28 +389,56 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
 
       // 启动 RAF 更新循环
       this.startUpdateLoop();
+
+      // 已启用 AI 字幕模式：自动拉取一次
+      // 后端未对接时 refreshAiSubtitle 会静默 no-op，不影响后续切换
+      if (this.aiEnabled && this.aiBackend) {
+        void this.refreshAiSubtitle();
+      }
+
+      // 模式 B：服务端轨列表异步加载（完成后广播 SUBTITLE_TRACKS_CHANGE）
+      void this.loadRemoteTracks();
+
+      // 广播初始轨道集合（文件源轨；本地轨/服务端轨就绪后会再次广播）
+      this.broadcastTracksChange();
     });
     this.unsubscribers.push(unsubMounted);
 
-    // 订阅 TIME_UPDATE 事件：字幕更新由 RAF 循环驱动，此事件仅用于通知
-    const unsubTimeUpdate = events.on(PlayerEventEnum.TIME_UPDATE, (): void => {
-      // RAF 循环会自动处理字幕更新
+    // 订阅 TIME_UPDATE 事件：字幕更新由 RAF 循环驱动；
+    // 此事件用于增量拉取的播放头预取判断（模式 B）
+    const unsubTimeUpdate = events.on(PlayerEventEnum.TIME_UPDATE, (data): void => {
+      if (data && typeof data.time === 'number') {
+        this.maybePrefetchNextRange(data.time);
+      }
     });
     this.unsubscribers.push(unsubTimeUpdate);
 
     // 订阅 SEEK_END 事件：跳转时更新字幕
     const unsubSeekEnd = events.on(PlayerEventEnum.SEEK_END, (): void => {
       this.currentIndex = -1; // 重置索引，强制下次更新刷新字幕
+      // 采集链时间锚点失效：seek 后下一音频块重新锚定（设计文档 4.7）
+      this.capture?.reanchor();
     });
     this.unsubscribers.push(unsubSeekEnd);
 
-    // 订阅 SUBTITLE_TOGGLE 事件：切换字幕可见性
-    const unsubToggle = events.on(PlayerEventEnum.SUBTITLE_TOGGLE, (): void => {
-      this.toggle();
+    // 订阅 RATE_CHANGE 事件：采集链时间换算依赖倍速，变化后重锚点
+    const unsubRateChange = events.on(PlayerEventEnum.RATE_CHANGE, (): void => {
+      this.capture?.reanchor();
+    });
+    this.unsubscribers.push(unsubRateChange);
+
+    // 订阅 SUBTITLE_TOGGLE 事件：同步字幕可见性
+    // payload 携带目标值（VideoPlayer.setSubtitleVisible 的「设置」语义），
+    // 必须按 payload 应用而非翻转——初始化状态同步也会走此事件，
+    // 若误用翻转语义会把字幕意外关闭（isVisible 错位）
+    const unsubToggle = events.on(PlayerEventEnum.SUBTITLE_TOGGLE, (data): void => {
+      if (data && typeof data.visible === 'boolean') {
+        this.setVisible(data.visible);
+      }
     });
     this.unsubscribers.push(unsubToggle);
 
-    // 订阅 SUBTITLE_SWITCH 事件：切换字幕语言
+    // 订阅 SUBTITLE_SWITCH 事件：切换字幕语言（语言代码或轨道 id）
     const unsubSwitch = events.on(PlayerEventEnum.SUBTITLE_SWITCH, (data): void => {
       void this.switchLanguage(data.lang);
     });
@@ -258,6 +463,31 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     this.video = null;
     this.currentSubtitle = null;
     this.currentSource = null;
+
+    // 清理本地识别运行态（停止识别 + 释放采集链）
+    this.stopLocalAi();
+    this.capture?.dispose();
+    this.capture = null;
+    this.localAiProvider = null;
+    this.localAiItems = [];
+    this.localAiIdSeq = 0;
+    this.partialCue = null;
+    this.localAiStatus = undefined;
+
+    // 清理模式 B 运行态
+    this.remoteItems = [];
+    this.remoteItemIdSeq = 0;
+    this.remoteLoadedRange = null;
+    this.remoteRequestId++;
+    this.remoteActiveTrack = null;
+    this.translationItems = [];
+    this.activeTrackId = null;
+    this.lastRenderedKey = '';
+
+    // 清理 AI 字幕运行态
+    this.eventBus = null;
+    this.aiFetcher = null;
+    this.aiLoading = false;
   }
 
   // ==================== RAF 更新循环 ====================
@@ -318,15 +548,39 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     return -1;
   }
 
+  /**
+   * 有序插入：按 startTime 二分定位插入点
+   * 本地识别/增量拉取按播放顺序产出，seek 后可能乱序；
+   * 插入而非 push 保证 items 升序（二分查找渲染管线的前提，设计文档 4.6）
+   */
+  private insertOrdered(items: SubtitleItem[], item: SubtitleItem): void {
+    let low = 0;
+    let high = items.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (items[mid].startTime <= item.startTime) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    items.splice(low, 0, item);
+  }
+
   // ==================== 字幕更新 ====================
 
   /**
    * 更新字幕显示（由 RAF 驱动）
+   * 渲染优先级：final 条目 > partial 灰显（被 final 覆盖）> 清空；
+   * 翻译轨启用时在 final 条目下方叠加译文行（双语拼装）
    */
   private updateSubtitle(): void {
-    if (!this.isVisible || !this.currentSubtitle || !this.subtitleEl || !this.video) {
-      if (this.subtitleEl) {
+    if (!this.subtitleEl) return;
+
+    if (!this.isVisible || !this.currentSubtitle || !this.video) {
+      if (this.subtitleEl.innerHTML !== '') {
         this.subtitleEl.innerHTML = '';
+        this.lastRenderedKey = '';
       }
       return;
     }
@@ -336,16 +590,44 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
 
     // 使用二分查找定位当前字幕
     const activeIndex = this.binarySearchSubtitle(items, currentTime);
+    this.currentIndex = activeIndex;
+    const activeItem = activeIndex >= 0 ? items[activeIndex] : null;
 
-    if (activeIndex !== this.currentIndex) {
-      this.currentIndex = activeIndex;
+    // partial 灰显：无 final 命中且 partial 覆盖当前时间
+    const partial = this.partialCue;
+    const partialActive =
+      activeItem === null &&
+      partial !== null &&
+      currentTime >= partial.startTime &&
+      currentTime <= partial.endTime;
 
-      if (activeIndex >= 0) {
-        const item = items[activeIndex];
-        this.subtitleEl.innerHTML = item.text;
-      } else {
-        this.subtitleEl.innerHTML = '';
-      }
+    // 翻译行：主轨条目命中时查译文（同一时间轴二分）
+    let translationItem: SubtitleItem | null = null;
+    if (activeItem !== null && this.translationItems.length > 0) {
+      const translationIndex = this.binarySearchSubtitle(this.translationItems, currentTime);
+      translationItem = translationIndex >= 0 ? this.translationItems[translationIndex] : null;
+    }
+
+    // 渲染 key：final/partial/译文组合任一变化才写 DOM（RAF 逐帧调用，避免高频写入）
+    const renderKey =
+      activeItem !== null
+        ? `f:${activeItem.id}:${translationItem !== null ? `t${translationItem.id}` : ''}`
+        : partialActive && partial !== null
+          ? `p:${partial.text}`
+          : '';
+    if (renderKey === this.lastRenderedKey) return;
+    this.lastRenderedKey = renderKey;
+
+    if (activeItem !== null) {
+      this.subtitleEl.innerHTML =
+        translationItem !== null
+          ? `${activeItem.text}<br><span class="${SUBTITLE_TRANSLATION_CLASS}" style="opacity:.8;font-size:.85em">${translationItem.text}</span>`
+          : activeItem.text;
+    } else if (partialActive && partial !== null) {
+      // 临时灰显：文本仍在变动，被后续 finalCues 覆盖
+      this.subtitleEl.innerHTML = `<span class="${SUBTITLE_PARTIAL_CLASS}" style="opacity:.55">${partial.text}</span>`;
+    } else {
+      this.subtitleEl.innerHTML = '';
     }
   }
 
@@ -392,6 +674,483 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     }
   }
 
+  // ==================== 轨道注册表 ====================
+
+  /** 广播轨道集合变化（菜单轨道列表渲染数据源） */
+  private broadcastTracksChange(): void {
+    this.eventBus?.emit(PlayerEventEnum.SUBTITLE_TRACKS_CHANGE, {
+      tracks: this.listTracks(),
+    });
+  }
+
+  /** 归一服务端 Provider：注入的优先，旧 aiBackend 包装为单轨 Provider（懒构造） */
+  private getRemoteProvider(): RemoteSubtitleProvider | null {
+    if (this.remoteProvider) return this.remoteProvider;
+    if (this.remoteProviderInjected) {
+      this.remoteProvider = this.remoteProviderInjected;
+      return this.remoteProvider;
+    }
+    if (this.aiBackend) {
+      this.remoteProvider = createLegacyRemoteProvider(this.aiBackend, (): {
+        videoId?: string;
+        lang?: string;
+        duration?: number;
+      } => ({
+        videoId: this.aiVideoIdResolver?.() ?? undefined,
+        lang: this.config.defaultLang || undefined,
+        duration: this.video?.duration ?? undefined,
+      }));
+      return this.remoteProvider;
+    }
+    return null;
+  }
+
+  /** 加载服务端轨道列表（listTracks 未提供时保持单轨语义） */
+  private async loadRemoteTracks(): Promise<void> {
+    const provider = this.getRemoteProvider();
+    if (!provider?.listTracks) return;
+    try {
+      const tracks = await provider.listTracks();
+      this.remoteTracks = Array.isArray(tracks) ? tracks : [];
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Remote subtitle track list failed: ${message}`);
+      this.remoteTracks = [];
+      return;
+    }
+    this.broadcastTracksChange();
+  }
+
+  /**
+   * 列出可用字幕轨道（文件源 + 服务端轨 + 本地轨的并集）
+   */
+  listTracks(): SubtitleTrackInfo[] {
+    const tracks: SubtitleTrackInfo[] = [];
+
+    // 文件源轨
+    for (const source of this.config.sources) {
+      tracks.push({
+        trackId: `file:${source.lang}`,
+        lang: source.lang,
+        label: source.label,
+        source: 'file',
+      });
+    }
+
+    // 服务端轨
+    for (const track of this.remoteTracks) {
+      tracks.push({
+        trackId: `remote:${track.trackId}`,
+        lang: track.lang,
+        label: track.label,
+        source: 'remote',
+        kind: track.kind,
+      });
+    }
+
+    // 本地实时识别轨（配置可用即列出；徽标 + 状态点由菜单渲染）
+    if (this.localAiConfig) {
+      tracks.push({
+        trackId: LOCAL_AI_TRACK_ID,
+        lang: this.localAiLang || this.localAiConfig.defaultLang,
+        label: 'AI Live',
+        source: 'local-ai',
+        isLive: true,
+        status: this.localAiStatus,
+      });
+    }
+
+    return tracks;
+  }
+
+  /**
+   * 激活某轨道（主字幕轨切换）
+   * local-ai → 启动本地识别；remote:* → 拉取服务端轨；file:* → 加载文件源
+   */
+  async activateTrack(trackId: string): Promise<void> {
+    if (!isBrowser()) return;
+    if (!this.eventBus) {
+      logger.warn('Subtitle plugin is not installed');
+      return;
+    }
+
+    if (trackId === LOCAL_AI_TRACK_ID) {
+      await this.startLocalAi();
+      return;
+    }
+    if (trackId.startsWith('remote:')) {
+      await this.activateRemoteTrack(trackId.slice('remote:'.length));
+      return;
+    }
+    if (trackId.startsWith('file:')) {
+      await this.switchLanguage(trackId);
+      return;
+    }
+    logger.warn(`Unknown subtitle track: ${trackId}`);
+  }
+
+  /** 激活服务端轨道：切换 Provider 目标轨并按增量能力拉取 */
+  private async activateRemoteTrack(remoteId: string): Promise<void> {
+    const provider = this.getRemoteProvider();
+    const bus = this.eventBus;
+    if (!provider) {
+      bus?.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, { count: 0, status: 'error' });
+      return;
+    }
+
+    // 轨道信息（listTracks 未返回时合成为单轨）
+    const track: RemoteSubtitleTrack =
+      this.remoteTracks.find(t => t.trackId === remoteId) ?? {
+        trackId: remoteId,
+        lang: this.config.defaultLang || 'ai',
+        label: 'AI Subtitle',
+        kind: 'original',
+      };
+
+    await provider.activateTrack?.(remoteId);
+    this.remoteActiveTrack = track;
+    // 切轨 = 新数据集：重置主轨数据
+    this.remoteItems = [];
+    this.remoteItemIdSeq = 0;
+    this.remoteLoadedRange = null;
+    this.remoteRequestId++;
+    this.activeTrackId = `remote:${remoteId}`;
+
+    if (provider.incremental) {
+      // 增量模式：先拉首个窗口，后续由播放头预取推进
+      await this.refreshRange(0, REMOTE_WINDOW_SECONDS);
+    } else {
+      // 整段模式：一次性拉全
+      await this.refreshRange(0, Number.POSITIVE_INFINITY);
+    }
+  }
+
+  /** 增量预取：播放头接近已加载区间末尾时拉取下一窗口 */
+  private maybePrefetchNextRange(time: number): void {
+    const provider = this.getRemoteProvider();
+    if (!provider?.incremental) return;
+    if (!this.activeTrackId?.startsWith('remote:')) return;
+    const loaded = this.remoteLoadedRange;
+    if (!loaded || this.remoteLoading) return;
+    if (time <= loaded.to - REMOTE_PREFETCH_AHEAD) return;
+    const duration = this.video?.duration ?? Number.POSITIVE_INFINITY;
+    if (!Number.isFinite(loaded.to) || loaded.to >= duration) return;
+    void this.refreshRange(loaded.to, loaded.to + REMOTE_WINDOW_SECONDS);
+  }
+
+  /**
+   * 拉取指定时间区间的服务端字幕（设计文档 5.2：增量窗口拉取）
+   * 区间按序追加（有序插入容忍服务端乱序返回）；请求序号丢弃过期响应
+   */
+  async refreshRange(from: number, to: number): Promise<void> {
+    if (!isBrowser()) return;
+    const provider = this.getRemoteProvider();
+    if (!provider || !this.remoteActiveTrack) return;
+    if (this.remoteLoading) return;
+
+    const bus = this.eventBus;
+    const requestId = ++this.remoteRequestId;
+    const isFirstWindow = this.remoteLoadedRange === null;
+    this.remoteLoading = true;
+
+    if (isFirstWindow) {
+      bus?.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, { count: 0, status: 'loading' });
+    }
+
+    try {
+      // 多轨 Provider 的 fetch 作用于「当前激活轨」：拉取前重申主轨
+      //（译文轨整段拉取会临时切换 Provider 内部轨道，见 setTranslationTrack）
+      await provider.activateTrack?.(this.remoteActiveTrack.trackId);
+
+      const range =
+        provider.incremental && Number.isFinite(to) ? { from, to } : undefined;
+      const entries: AiSubtitleEntry[] = await provider.fetch(range);
+
+      // 竞态守卫：过期响应丢弃
+      if (requestId !== this.remoteRequestId) return;
+
+      const startId = this.remoteItemIdSeq + 1;
+      const items = aiSubtitleEntriesToItems(entries, startId);
+      this.remoteItemIdSeq = startId + entries.length - 1;
+      for (const item of items) {
+        this.insertOrdered(this.remoteItems, item);
+      }
+      this.remoteLoadedRange = { from, to };
+
+      // 激活轨即当前主轨时接入渲染管线
+      if (
+        this.remoteActiveTrack !== null &&
+        this.activeTrackId === `remote:${this.remoteActiveTrack.trackId}`
+      ) {
+        this.currentSubtitle = {
+          format: SubtitleFormat.UNKNOWN,
+          items: this.remoteItems,
+        };
+        this.currentSource = {
+          src: '',
+          lang: this.remoteActiveTrack.lang,
+          label: this.remoteActiveTrack.label,
+        };
+        this.currentIndex = -1;
+        this.lastRenderedKey = '';
+      }
+
+      bus?.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, {
+        count: this.remoteItems.length,
+        status: 'ready',
+      });
+      bus?.emit(PlayerEventEnum.SUBTITLE_LANG_CHANGE, this.remoteActiveTrack.lang);
+    } catch (error) {
+      if (requestId !== this.remoteRequestId) return;
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Remote subtitle fetch failed: ${message}`);
+      bus?.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, { count: 0, status: 'error' });
+    } finally {
+      this.remoteLoading = false;
+    }
+  }
+
+  /**
+   * 设置翻译轨（双语拼装：主轨 + 译文轨叠加展示）
+   * 译文轨整段拉取一次（增量窗口仅作用于主轨），按时间轴二分匹配叠加
+   */
+  async setTranslationTrack(trackId: string | null): Promise<void> {
+    if (!isBrowser()) return;
+
+    if (!trackId) {
+      this.translationItems = [];
+      this.lastRenderedKey = '';
+      return;
+    }
+
+    const provider = this.getRemoteProvider();
+    if (!provider) return;
+
+    const remoteId = trackId.startsWith('remote:')
+      ? trackId.slice('remote:'.length)
+      : trackId;
+    const requestId = ++this.translationRequestId;
+
+    try {
+      await provider.activateTrack?.(remoteId);
+      // 译文轨整段拉取（忽略增量区间）
+      const entries = await provider.fetch();
+      if (requestId !== this.translationRequestId) return;
+
+      const startId = this.translationItemIdSeq + 1;
+      const items = aiSubtitleEntriesToItems(entries, startId);
+      this.translationItemIdSeq = startId + entries.length - 1;
+      // 按时间排序保证二分匹配的前提（容忍服务端乱序返回）
+      items.sort((a, b): number => a.startTime - b.startTime);
+      this.translationItems = items;
+      this.lastRenderedKey = '';
+
+      // 恢复主轨指向（后续增量窗口拉取继续作用于主轨）
+      if (this.remoteActiveTrack) {
+        await provider.activateTrack?.(this.remoteActiveTrack.trackId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Translation track fetch failed: ${message}`);
+    }
+  }
+
+  // ==================== 模式 A：本地实时识别 ====================
+
+  /**
+   * 处理本地识别 cue 推送：
+   * - final：负数 id 重排 + 有序插入 + 广播 SUBTITLE_CUE
+   * - partial：保存当前值并广播（不入 items，RAF 渲染时灰显）
+   */
+  private handleLocalCue(event: SubtitleCueEvent): void {
+    for (const cue of event.finalCues) {
+      const item: SubtitleItem = { ...cue, id: --this.localAiIdSeq };
+      this.insertOrdered(this.localAiItems, item);
+      this.eventBus?.emit(PlayerEventEnum.SUBTITLE_CUE, item);
+    }
+    this.partialCue = event.partialCue ?? null;
+    this.lastRenderedKey = '';
+    this.eventBus?.emit(PlayerEventEnum.SUBTITLE_PARTIAL, this.partialCue);
+  }
+
+  /**
+   * 启动本地实时识别（幂等；模型懒加载，进度经 SUBTITLE_AI_STATUS 广播）
+   * 失败（无引擎/环境不支持/采集异常）自动降级模式 B（设计文档 6.5）
+   */
+  async startLocalAi(lang?: string): Promise<void> {
+    if (!isBrowser()) return;
+    if (!this.eventBus) {
+      logger.warn('Subtitle plugin is not installed');
+      return;
+    }
+
+    const cfg = this.localAiConfig;
+    if (!this.video || !cfg || (!cfg.provider && !cfg.engines)) {
+      await this.fallbackToRemote(
+        this.video ? 'local AI is not configured' : 'video element is not ready',
+      );
+      return;
+    }
+
+    const targetLang = lang ?? (this.localAiLang || cfg.defaultLang);
+
+    // 幂等：同语言运行中直接返回；异语言走切换（停引擎换模型重启）
+    if (this.localAiActive) {
+      if (targetLang === this.localAiLang) return;
+      await this.switchLocalAiLanguage(targetLang);
+      return;
+    }
+
+    const bus = this.eventBus;
+    this.localAiStatus = 'loading';
+    bus.emit(PlayerEventEnum.SUBTITLE_AI_STATUS, { phase: 'loading' });
+    this.broadcastTracksChange();
+
+    try {
+      // 组装 Provider：自定义 Provider 优先，缺省用 engines 组装内部采集管线
+      let provider = cfg.provider ?? null;
+      if (!provider) {
+        const engines = cfg.engines;
+        const engine: AsrEngine | null =
+          engines?.[targetLang] ?? engines?.[cfg.defaultLang] ?? null;
+        if (!engine) {
+          throw new Error(`no ASR engine available for language "${targetLang}"`);
+        }
+        // 引擎初始化（模型懒加载；真实引擎在此阶段广播下载进度）
+        await engine.init({
+          lang: targetLang,
+          modelBasePath: cfg.modelBasePath,
+        });
+        const engineStatus = engine.getStatus();
+        if (engineStatus.state === 'error') {
+          throw new Error(engineStatus.message ?? 'engine init failed');
+        }
+        provider = createLocalAiProvider({
+          engine,
+          lang: targetLang,
+          confidenceThreshold: cfg.confidenceThreshold,
+          maxSegmentSeconds: cfg.maxSegmentSeconds,
+        });
+      }
+
+      // 采集链（AudioContext/Source 全实例复用；CORS 静音数据时上报并降级）
+      if (!this.capture) {
+        this.capture = new AudioCapture(this.video, {
+          onSilenceError: (message): void => {
+            void this.fallbackToRemote(message);
+          },
+        });
+      }
+      const audioStream = await this.capture.start();
+
+      const context: SubtitleEngineContext = {
+        audioStream,
+        events: bus,
+        getMediaTime: (): number => this.video?.currentTime ?? 0,
+      };
+
+      provider.onCue = (event): void => this.handleLocalCue(event);
+      provider.start(context);
+
+      this.localAiProvider = provider;
+      this.localAiLang = targetLang;
+      this.localAiActive = true;
+      this.localAiStatus = 'ready';
+
+      // 激活为当前主字幕轨（复用现有 RAF + 二分查找渲染管线；
+      // items 引用保持 localAiItems，增量 append 后 RAF 逐帧可见）
+      this.activeTrackId = LOCAL_AI_TRACK_ID;
+      this.currentSubtitle = {
+        format: SubtitleFormat.UNKNOWN,
+        items: this.localAiItems,
+      };
+      this.currentSource = {
+        src: '',
+        lang: LOCAL_AI_TRACK_ID,
+        label: `AI Live (${targetLang})`,
+      };
+      this.currentIndex = -1;
+      this.lastRenderedKey = '';
+
+      bus.emit(PlayerEventEnum.SUBTITLE_AI_STATUS, { phase: 'ready' });
+      bus.emit(PlayerEventEnum.SUBTITLE_LANG_CHANGE, LOCAL_AI_TRACK_ID);
+      this.broadcastTracksChange();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to start local AI subtitle: ${message}`);
+      await this.fallbackToRemote(message);
+    }
+  }
+
+  /**
+   * 停止本地识别并释放引擎资源
+   * 已识别条目保留（localAiItems 不清空），切回本地轨时继续可用
+   */
+  stopLocalAi(): void {
+    if (!this.localAiActive) return;
+    this.localAiProvider?.stop();
+    this.localAiProvider = null;
+    this.capture?.stop();
+    this.localAiActive = false;
+    this.localAiStatus = undefined;
+    this.partialCue = null;
+    this.lastRenderedKey = '';
+    this.eventBus?.emit(PlayerEventEnum.SUBTITLE_PARTIAL, null);
+    this.broadcastTracksChange();
+  }
+
+  /**
+   * 切换识别语言：停当前引擎实例 → 换模型重启（在途 partial 丢弃）
+   */
+  async switchLocalAiLanguage(lang: string): Promise<void> {
+    if (this.localAiActive && lang === this.localAiLang) return;
+    this.stopLocalAi();
+    await this.startLocalAi(lang);
+  }
+
+  /**
+   * 获取本地识别完整转写（已保留的识别条目快照，供外挂功能使用）
+   */
+  getFullTranscript(): SubtitleItem[] {
+    return [...this.localAiItems];
+  }
+
+  /**
+   * 降级链（设计文档 6.5）：
+   * 模式 A 不可用/失败 → 广播 error → 尝试模式 B（remoteProvider/aiBackend）
+   * → 模式 B 也未配置 → 维持文件源/无字幕 + warning
+   */
+  private async fallbackToRemote(reason: string): Promise<void> {
+    const bus = this.eventBus;
+    // 半启动的本地识别先停（保留已产出条目）
+    this.stopLocalAi();
+    this.localAiStatus = 'error';
+    // 降级原因经 SUBTITLE_AI_STATUS 广播，避免静默失败
+    bus?.emit(PlayerEventEnum.SUBTITLE_AI_STATUS, {
+      phase: 'error',
+      message: reason,
+    });
+    this.broadcastTracksChange();
+
+    const provider = this.getRemoteProvider();
+    if (provider) {
+      logger.warn(`Local AI subtitle unavailable (${reason}), falling back to remote subtitle`);
+      try {
+        await this.loadRemoteTracks();
+        const first = this.remoteTracks[0];
+        if (first) {
+          await this.activateRemoteTrack(first.trackId);
+          return;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`Remote subtitle fallback failed: ${message}`);
+      }
+    } else {
+      logger.warn('No AI subtitle source available, keeping current subtitle');
+    }
+  }
+
   // ==================== 公共 API ====================
 
   /**
@@ -412,7 +1171,7 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
       this.currentIndex = -1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error(`字幕加载失败: ${message}`);
+      logger.error(`Subtitle load failed: ${message}`);
     }
   }
 
@@ -423,6 +1182,8 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     this.currentSubtitle = null;
     this.currentSource = null;
     this.currentIndex = -1;
+    this.activeTrackId = null;
+    this.lastRenderedKey = '';
     if (this.subtitleEl) {
       this.subtitleEl.innerHTML = '';
     }
@@ -486,6 +1247,7 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
   setOffset(offset: number): void {
     this.timeOffset = offset;
     this.currentIndex = -1; // 重置索引，强制刷新
+    this.lastRenderedKey = '';
   }
 
   /**
@@ -508,11 +1270,24 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
 
   /**
    * 切换字幕语言
+   * 支持三种形态：轨道 id（local-ai / remote:* / file:*）路由到轨道激活；
+   * 语言代码走文件源切换
    */
   async switchLanguage(lang: string): Promise<void> {
+    if (
+      lang === LOCAL_AI_TRACK_ID ||
+      lang.startsWith('remote:') ||
+      lang.startsWith('file:')
+    ) {
+      await this.activateTrack(lang);
+      return;
+    }
     const source = this.config.sources.find(s => s.lang === lang);
     if (source) {
       await this.load(source);
+      // 本地识别保持运行（条目继续累积，切回本地轨继续可用）
+      this.activeTrackId = `file:${source.lang}`;
+      this.lastRenderedKey = '';
     }
   }
 
@@ -585,6 +1360,14 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     this.applyPosition();
   }
 
+  /** 当前字幕来源维度（设计文档 6.4） */
+  private resolveActiveSource(): 'file' | 'remote' | 'local-ai' | null {
+    if (this.activeTrackId === LOCAL_AI_TRACK_ID) return 'local-ai';
+    if (this.activeTrackId?.startsWith('remote:')) return 'remote';
+    if (this.activeTrackId?.startsWith('file:')) return 'file';
+    return this.currentSource ? 'file' : null;
+  }
+
   /**
    * 获取字幕状态
    */
@@ -598,6 +1381,7 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
     position: string;
     itemCount: number;
     timeOffset: number;
+    source: 'file' | 'remote' | 'local-ai' | null;
   } {
     return {
       visible: this.isVisible,
@@ -609,7 +1393,116 @@ class SubtitlePluginClass implements SubtitlePluginAPI {
       position: this.config.position,
       itemCount: this.currentSubtitle?.items.length ?? 0,
       timeOffset: this.timeOffset,
+      source: this.resolveActiveSource(),
     };
+  }
+
+  // ==================== AI 字幕 API（旧路径） ====================
+
+  /**
+   * 启用 AI 字幕模式
+   * 已启用时重复调用为 no-op；启用后自动拉取一次 AI 字幕
+   * 后端未配置时仍会尝试拉取（refreshAiSubtitle 内部会静默 no-op）
+   */
+  enableAi(): void {
+    if (this.aiEnabled) return;
+    this.aiEnabled = true;
+    void this.refreshAiSubtitle();
+  }
+
+  /**
+   * 禁用 AI 字幕模式
+   * 仅切换开关，不主动清空当前字幕（避免画面闪烁），由调用方决定后续动作
+   */
+  disableAi(): void {
+    this.aiEnabled = false;
+  }
+
+  /**
+   * 查询 AI 字幕模式是否启用
+   */
+  isAiEnabled(): boolean {
+    return this.aiEnabled;
+  }
+
+  /**
+   * 重新拉取 AI 字幕（语义收窄为「整段拉取一次」，设计文档 5.2）
+   * 调用 fetcher 拿数据 → toSubtitleItems → 构造 ParsedSubtitle → 走现有 RAF 渲染管线
+   * 加载状态通过 PlayerEventEnum.SUBTITLE_LIST_CHANGE 广播（count + 可选 status）：
+   *   - loading：count=0, status='loading'
+   *   - ready：count=items.length, status='ready'，并附带 SUBTITLE_LANG_CHANGE='ai'
+   *   - error：count=0, status='error'
+   *
+   * 后端未配置（aiBackend 为空）或非启用状态时静默 no-op，保证「后续对接」语义。
+   */
+  async refreshAiSubtitle(): Promise<void> {
+    // 静默 no-op：未启用 / 后端未配置 / 仍在加载中
+    if (!this.aiEnabled) return;
+    if (!this.aiBackend) return;
+    if (this.aiLoading) return;
+    if (!isBrowser()) return;
+
+    const bus = this.eventBus;
+    // bus 可能在 uninstall 后置空；置空时无法广播，但加载逻辑仍可执行
+    if (bus) {
+      bus.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, { count: 0, status: 'loading' });
+    }
+
+    this.aiLoading = true;
+    try {
+      if (!this.aiFetcher) {
+        this.aiFetcher = new AiSubtitleFetcher(this.aiBackend);
+      }
+
+      const params = {
+        videoId: this.aiVideoIdResolver?.() ?? undefined,
+        lang: this.config.defaultLang || undefined,
+        duration: this.video?.duration ?? undefined,
+      };
+      const entries = await this.aiFetcher.fetch(params);
+      const items = this.aiFetcher.toSubtitleItems(entries);
+
+      // 构造 ParsedSubtitle 走现有二分查找 + RAF 渲染管线
+      // format 用 UNKNOWN：AI 字幕非文件格式，只是按时间区间渲染
+      this.currentSubtitle = {
+        format: SubtitleFormat.UNKNOWN,
+        items,
+      };
+      this.currentSource = {
+        src: '',
+        lang: this.config.defaultLang || 'ai',
+        label: 'AI Subtitle',
+      };
+      this.currentIndex = -1;
+      this.lastRenderedKey = '';
+
+      // 旧 aiBackend 路径映射为单轨 remote 轨（与 Provider 化的模式 B 一致）
+      const trackLang = this.config.defaultLang || 'ai';
+      this.activeTrackId = `remote:${LEGACY_REMOTE_TRACK_ID}`;
+      this.remoteActiveTrack = {
+        trackId: LEGACY_REMOTE_TRACK_ID,
+        lang: trackLang,
+        label: 'AI Subtitle',
+        kind: 'original',
+      };
+      this.remoteItems = items;
+
+      if (bus) {
+        bus.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, {
+          count: items.length,
+          status: 'ready',
+        });
+        bus.emit(PlayerEventEnum.SUBTITLE_LANG_CHANGE, 'ai');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`AI subtitle load failed: ${message}`);
+      if (bus) {
+        bus.emit(PlayerEventEnum.SUBTITLE_LIST_CHANGE, { count: 0, status: 'error' });
+      }
+    } finally {
+      this.aiLoading = false;
+    }
   }
 }
 

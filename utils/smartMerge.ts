@@ -12,7 +12,7 @@
  *   - 不修改任何入参（defaults / source 都保持原样）。
  */
 
-import type { MergeResult } from '@/hili-player/types';
+import type { MergeResult } from '@/nova/types';
 
 /**
  * 判断是否为可递归合并的纯对象
@@ -44,7 +44,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 export function deepMerge<T extends Record<string, unknown>>(
   defaults: T,
-  source?: Partial<T> | null
+  source?: Record<string, unknown> | null
 ): T {
   // 先把 defaults 复制一层，保证返回的是新对象、不污染入参
   const result: Record<string, unknown> = {};

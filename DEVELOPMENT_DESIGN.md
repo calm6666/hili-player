@@ -1,4 +1,4 @@
-# hili-player 开发与设计文档
+# Lumina / Nova 开发与设计文档
 
 > 版本: 5.0 | 日期: 2026-05-25
 
@@ -633,7 +633,7 @@ export interface PlayerCallbacks {
 
 | 旧导入 | 新导入 |
 |--------|--------|
-| `import { Plugin } from '@hili-player/player'` | `import { Plugin } from '@/types/plugin'` |
+| `import { Plugin } from '@lumina/nova'` | `import { Plugin } from '@/types/plugin'` |
 | `import { StreamPlugin } from '../stream/types'` | `import { StreamPlugin } from '@/types/streamPlugin'` |
 
 ### 4.4 接口继承关系
@@ -830,7 +830,7 @@ class CanvasEngine {
   ensureCanvas(): HTMLCanvasElement {
     if (!this.canvas) {
       this.canvas = document.createElement('canvas');
-      this.canvas.className = 'hili-danmaku-canvas';
+      this.canvas.className = 'nova-danmaku-canvas';
       this.canvas.style.cssText =
         'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50';
       this.ctx = this.canvas.getContext('2d')!;

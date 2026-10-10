@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  mock-server 自测页（零依赖：原生 HTML + CSS + JS，不引任何框架）
+  ============================================================================
+  这个页面的定位是「接口体检表」，不是播放器：
+    - 每个接口都能一键点开看原始 JSON/XML，省得切到 Postman；
+    - 能直接发弹幕并立刻在 SSE 窗口里看到它回来，验证「推送」这条链路是通的；
+    - 能把 preview.bin 拆开看前 20 张缩略图，肉眼确认抽帧、切片、下标都对。
+  为什么用 fetch + EventSource 而不是让播放器来测：
+    播放器有它自己的渲染逻辑，出问题时很难判断是「接口数据不对」还是「播放器画得不对」；
+    这里显示的是原始数据，能把两类问题彻底分开。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hilihili 播放器 mock-server 自测页</title>
+<style>
+  :root {
+    --bg: #12131a;
+    --panel: #1b1d27;
+    --panel-2: #232633;
+    --line: #313546;
+    --text: #e6e8f0;
+    --dim: #9aa1b8;
+    --pink: #fb7299;   /* B 站粉，纯为了看着眼熟 */
+    --blue: #66ccff;
+    --green: #4bd07a;
+    --red: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; color: var(--pink); }
+  a { color: var(--blue); }
+  code, pre, .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .panel.wide { grid-column: 1 / -1; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: var(--pink); color: var(--pink); }
+  input, select {
+    background: #0e0f16; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 9px; font-size: 14px; font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--pink); }
+  pre {
+    background: #0e0f16; border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; overflow: auto; max-height: 220px; margin: 8px 0 0;
+    font-size: 12px; white-space: pre-wrap; word-break: break-all;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .stat { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--dim); }
+  .stat b { color: var(--text); font-weight: 600; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; border: 1px solid; }
+  .badge.ok { color: var(--green); border-color: var(--green); }
+  .badge.warn { color: #ffcc66; border-color: #ffcc66; }
+  .badge.err { color: var(--red); border-color: var(--red); }
+  /* SSE / WebSocket 弹幕流窗口（两块布局完全一样，所以选择器共用） */
+  #stream, #wsStream {
+    height: 240px; overflow-y: auto; background: #0e0f16;
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px;
+  }
+  #stream .item, #wsStream .item { padding: 2px 0; border-bottom: 1px dashed #242736; }
+  #stream .seq, #wsStream .seq { color: var(--dim); margin-right: 8px; }
+  #stream .t, #wsStream .t { color: var(--blue); margin-right: 8px; }
+  #wsStream .sys { color: #ffcc66; }
+  /* 缩略图网格 */
+  #thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  #thumbs figure { margin: 0; background: #0e0f16; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  #thumbs img { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
+  #thumbs figcaption { font-size: 11px; color: var(--dim); padding: 3px 5px; }
+  /* 高能进度条示意 */
+  #pbp { width: 100%; height: 90px; background: #0e0f16; border: 1px solid var(--line); border-radius: 6px; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>hilihili 播放器 mock-server 自测页</h1>
+<div class="sub">
+  本页只做「接口体检」：显示各接口的<strong>原始返回</strong>，方便把「数据不对」和「播放器画得不对」分开排查。
+  服务根地址 <code id="base"></code>
+</div>
+
+<div class="panel wide" style="margin-bottom:16px">
+  <h2>怎么用（照着做就行）</h2>
+  <ol style="margin:0 0 10px; padding-left:22px; line-height:1.9">
+    <li>
+      起服务（在 <code>front/player/mock-server</code> 目录下）：
+      <pre style="margin:6px 0">node server.js --port 9101 --video "D:\你的片子.mp4"</pre>
+      不带 <code>--video</code> 也能起，只是 <code>preview.bin</code> 是空文件、片长按 600 秒算（其余接口全部正常）。
+    </li>
+    <li>
+      浏览器打开 <code id="hereUrl">http://127.0.0.1:9101/</code>
+      ——<b>必须通过服务访问这个地址，不要双击用 file:// 打开本文件</b>，
+      否则页面里的请求会指向 file:///x/player/v2 这种不存在的磁盘路径（EventSource 在 file:// 下也不可用）。
+    </li>
+    <li>
+      页面上往下依次是：<b>运行环境</b>（片长来源、弹幕条数、ffmpeg 是否可用、预览图状态）→ <b>接口一览</b>（点「请求」看每项的 URL 与返回前 200 字符）
+      → <b>发弹幕</b>（POST <code>/danmaku/send</code>）→ <b>SSE 实时弹幕</b>（<code>/danmaku/stream</code>，发完立刻能看到）
+      → <b>WebSocket 实时弹幕</b>（<code>ws://…/danmaku/ws</code>，双向：既能实时收，也能直接发）
+      → <b>分段 + 高能曲线</b> → <b>缩略图网格</b>（<code>/videoshot/preview.bin</code> 的前 20 帧）。
+    </li>
+    <li>
+      每一块的输出里都带了<b>请求 URL</b>和<b>返回片段</b>，直接复制就能贴进联调记录；
+      想手测某个接口也可以直接用 <code>curl http://127.0.0.1:9101/x/player/v2?aid=123&amp;cid=456</code>。
+    </li>
+    <li>
+      <b>WebSocket 面板</b>优先走 WS 发送（验证双向链路）：连接正常时点「通过 WS 发送」，消息会走
+      <code>{"type":"send",…}</code> 上行、再以 <code>{"type":"danmaku",…}</code> 广播回来，自己和别的标签页都能看到；
+      WS 断开时同一个按钮会自动降级成 POST（面板上会写明用的是哪条路）。区块里的「发送 ping」用来量 WS 往返延迟。
+      心跳是<b>协议层 ping 帧</b>（浏览器在底层自动回 pong，JS 看不到），页面只能显示服务端在 <code>hello</code> 里报的心跳间隔。
+    </li>
+  </ol>
+  <div class="hint">
+    页面里所有请求都是<strong>相对路径</strong>（同源），所以换端口、换 <code>--host</code>、从别的机器访问都不用改代码。
+  </div>
+</div>
+
+<div class="panel wide" style="margin-bottom:16px">
+  <h2>运行环境</h2>
+  <div class="stat" id="env">读取中…</div>
+  <div class="hint">
+    预览图不可用时，<code>/videoshot/preview.bin</code> 会返回<strong>空文件</strong>（HTTP 200，不是 404）——
+    这样播放器拿到的数组是 <code>[""]</code>，只会安静地不显示预览图，不会刷一屏报错，其余接口也不受影响。
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- 1. 接口一览 -->
+  <div class="panel">
+    <h2>接口一览 / 逐个自测</h2>
+    <table>
+      <thead><tr><th>接口</th><th>说明</th><th>操作</th></tr></thead>
+      <tbody id="apiTable"></tbody>
+    </table>
+    <pre id="apiOut">点右边的按钮看原始返回。</pre>
+  </div>
+
+  <!-- 2. 发送弹幕 -->
+  <div class="panel">
+    <h2>发送弹幕（POST /danmaku/send）</h2>
+    <div class="row">
+      <input id="dmText" style="flex:1;min-width:180px" placeholder="说点什么……" value="自测页发出的第一条弹幕">
+      <input id="dmTime" type="number" style="width:90px" value="0" title="timeMs：弹幕出现在视频的第几毫秒">
+      <span class="hint">ms</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <select id="dmMode">
+        <option value="1">1 滚动</option>
+        <option value="4">4 底部</option>
+        <option value="5">5 顶部</option>
+      </select>
+      <select id="dmSize">
+        <option value="18">18 小</option>
+        <option value="25" selected>25 标准</option>
+        <option value="36">36 大</option>
+      </select>
+      <input id="dmColor" type="color" value="#ffffff" title="颜色">
+      <button id="dmSend">发送</button>
+    </div>
+    <pre id="dmOut">发送结果会显示在这里，同时右侧 SSE 窗口应该立刻出现这条弹幕。</pre>
+  </div>
+
+  <!-- 3. SSE 流 -->
+  <div class="panel">
+    <h2>SSE 弹幕流（GET /danmaku/stream）</h2>
+    <div class="row" style="margin-bottom:8px">
+      <span id="sseState" class="badge warn">连接中…</span>
+      <button id="sseClear">清空窗口</button>
+      <span class="hint">心跳：每 15 秒一个 <code>: ping</code> 注释行（下面会显示成「心跳」）</span>
+    </div>
+    <div id="stream"></div>
+  </div>
+
+  <!-- 4. 分段 + 高能曲线 -->
+  <div class="panel">
+    <h2>分段（view_points）/ 高能进度条（pbp）</h2>
+    <div id="vpList" class="hint">加载中…</div>
+    <canvas id="pbp" style="margin-top:12px"></canvas>
+    <div class="hint">上面这条曲线就是把 <code>pbp.data</code> 按 <code>step_sec</code> 一格画出来的效果（0~1 → 高度）。</div>
+  </div>
+
+  <!-- 5. WebSocket 实时弹幕 -->
+  <div class="panel wide">
+    <h2>WebSocket 实时弹幕（ws://…/danmaku/ws，双向）</h2>
+    <div class="row" style="margin-bottom:8px">
+      <span id="wsState" class="badge warn">连接中…</span>
+      <span class="hint" id="wsInfo">等待 hello…</span>
+      <button id="wsPing">发送 ping（量往返）</button>
+      <button id="wsClear">清空窗口</button>
+      <button id="wsReconnect">重连</button>
+    </div>
+    <div class="row">
+      <input id="wsText" style="flex:1;min-width:180px" placeholder="通过 WS 发弹幕……" value="WS 自测：这条是走 WebSocket 发的">
+      <input id="wsTime" type="number" style="width:90px" value="12.3" title="timeSec：这条弹幕出现在视频第几秒">
+      <span class="hint">s</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <select id="wsMode">
+        <option value="scroll">scroll 滚动</option>
+        <option value="top">top 顶部</option>
+        <option value="bottom">bottom 底部</option>
+      </select>
+      <select id="wsSize">
+        <option value="18">18 小</option>
+        <option value="25" selected>25 标准</option>
+      </select>
+      <select id="wsSpeed">
+        <option value="verySlow">verySlow</option>
+        <option value="slow">slow</option>
+        <option value="moderate" selected>moderate</option>
+        <option value="fast">fast</option>
+        <option value="veryFast">veryFast</option>
+      </select>
+      <input id="wsColor" type="color" value="#ff7204" title="颜色（hex，广播里就是这个写法）">
+      <button id="wsSend">通过 WS 发送</button>
+    </div>
+    <div id="wsStream" style="margin-top:8px"></div>
+    <pre id="wsOut">上行的原始消息和连接状态会显示在这里。</pre>
+  </div>
+
+  <!-- 6. 缩略图 -->
+  <div class="panel wide">
+    <h2>预览缩略图（GET /videoshot/preview.bin，前 20 张）</h2>
+    <div class="hint" style="margin-bottom:8px">
+      <b>每 5 秒 1 帧</b>：整个文件按 <code>\u001F</code> 切分后，<code>arr[0]</code> 是空占位（永远不用），
+      <code>arr[k]</code> 是第 <code>5*(k-1)</code> 秒的帧。
+      播放器就是这么取的（<code>controls/index.ts:1410-1417</code>）：
+      <code>videoshot[Math.floor(当前秒 / 5) + 1]</code>；
+      反查：t=0/4→下标 1，t=5→下标 2，t=12→下标 3。
+    </div>
+    <div id="thumbs"></div>
+    <pre id="thumbOut">加载中…</pre>
+  </div>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// 配置：全部走**同源相对路径**（base 留空串），所以这个页面必须通过服务访问：
+//   http://127.0.0.1:9101/     ← 由 server.js 的 "/" 路由直接返回本文件
+// 千万不要双击用 file:// 打开：那样域名是 file://，下面的 /x/player/v2 会被解析成
+// file:///x/player/v2（磁盘上不存在的路径），并且 EventSource 在 file:// 下不可用。
+// ---------------------------------------------------------------------------
+const CFG = {
+  base: '',        // 留空 = 相对当前源，换端口/换主机都不用改代码
+  duration: 600,   // 下面这些只是兜底，真实值由 /healthz 拉取后覆盖
+  durationSource: '（读取中…）',
+  video: '',
+  aid: '123',
+  cid: '456',
+};
+const BASE = CFG.base;
+
+// 这些提示必须**明确写出来**，不能让用户面对一片空白去猜：
+// 「没给 --video」和「ffmpeg 不可用」是两种不同的原因，修复方式也不同。
+const PREVIEW_REASON = {
+  unavailable: '未提供 --video 或 ffmpeg 不可用：/videoshot/preview.bin 返回空文件，'
+    + '进度条预览图不可用（其余接口正常）。想看缩略图请用 '
+    + 'node server.js --port 9101 --video "D:\\你的片子.mp4" 重新启动，'
+    + '并确保 ffmpeg 在 PATH 里（或用环境变量 FFMPEG_PATH 指定）。',
+  idle: '预览图是懒加载的：还没有人请求过 /videoshot/preview.bin，所以这里还没数据。',
+  ready: '预览图已就绪。',
+};
+
+document.getElementById('base').textContent = location.origin;
+// 运行环境信息从 /healthz 现拉，而不是写死在页面里：
+// 服务端的真实状态（片长来源、ffmpeg 有没有、preview 什么状态）只有它能回答。
+async function loadHealth() {
+  try {
+    const data = (await fetch(BASE + '/healthz').then((r) => r.json())).data;
+    Object.assign(CFG, {
+      duration: data.durationSec,
+      durationSource: data.durationSource,
+      video: data.video,
+      aid: data.aid || CFG.aid,
+      cid: data.cid || CFG.cid,
+      danmakuCount: data.danmakuCount,
+      danmakuBySpeed: data.danmakuBySpeed,
+      wsClients: data.wsClients,
+      wsPath: data.wsPath,
+      wsHeartbeatMs: data.wsHeartbeatMs,
+      previewStatus: data.preview,
+      previewFrames: data.previewFrames,
+      hasFfmpeg: data.hasFfmpeg,
+      hasFfprobe: data.hasFfprobe,
+    });
+    renderEnv();
+    return data;
+  } catch (err) {
+    document.getElementById('env').innerHTML =
+      '<span class="badge err">读不到 /healthz</span>　请确认这个页面是通过 '
+      + '<code>http://127.0.0.1:9101/</code> 打开的（不要用 file:// 直接打开）：' + err;
+    return null;
+  }
+}
+
+function renderEnv() {
+  document.getElementById('env').innerHTML = [
+    ['片长', CFG.duration + ' 秒（' + CFG.durationSource + '）'],
+    ['视频', CFG.video ? CFG.video : '<span class="badge warn">未提供 --video</span>'],
+    ['aid / cid', CFG.aid + ' / ' + CFG.cid],
+    // 弹幕条数来自服务端启动时生成的那一批（/healthz.danmakuCount），
+    // 后面还挂了 5 个速度档的分布，方便一眼看出随机结果是不是真的覆盖了 5 档
+    ['历史弹幕', CFG.danmakuCount + ' 条（速度档：'
+        + Object.entries(CFG.danmakuBySpeed || {}).map(([k, v]) => k + ' ' + v).join('，') + '）'],
+    ['WS 连接', (CFG.wsClients === undefined ? '-' : CFG.wsClients + ' 个客户端')
+        + '　心跳 ' + (CFG.wsHeartbeatMs === undefined ? '-' : CFG.wsHeartbeatMs + 'ms')],
+    ['ffmpeg', CFG.hasFfmpeg ? '<span class="badge ok">可用</span>' : '<span class="badge err">不可用</span>'],
+    ['ffprobe', CFG.hasFfprobe ? '<span class="badge ok">可用</span>' : '<span class="badge err">不可用</span>'],
+    ['预览图', '<span class="badge ' + (CFG.previewStatus === 'ready' ? 'ok' : 'warn') + '">'
+        + CFG.previewStatus + '</span> ' + CFG.previewFrames + ' 帧'
+        + (CFG.previewStatus === 'ready' ? '' : '　<span class="hint">' + (PREVIEW_REASON[CFG.previewStatus] || '') + '</span>')],
+  ].map(([k, v]) => '<span>' + k + '：<b>' + v + '</b></span>').join('');
+}
+
+// ---------------------------------------------------------------------------
+// 接口一览表
+// ---------------------------------------------------------------------------
+// url 全是**相对路径**（不带域名），和服务同源，所以不存在跨域问题；
+// 换端口、换 --host、从别的机器访问，这个页面都不用改。
+const APIS = [
+  { name: 'GET /x/player/v2', url: '/x/player/v2?aid=' + CFG.aid + '&cid=' + CFG.cid, desc: '进度条节点 view_points，from/to 单位是秒', kind: 'json' },
+  { name: 'GET /x/player/pbp', url: '/x/player/pbp?aid=' + CFG.aid + '&cid=' + CFG.cid, desc: '高能进度条曲线，data 是 0~1 数组', kind: 'json' },
+  { name: 'GET /x/v1/dm/list.so', url: '/x/v1/dm/list.so?oid=' + CFG.cid, desc: '历史弹幕 XML（B 站 list.so 形状）', kind: 'text' },
+  { name: 'GET /danmaku/since', url: '/danmaku/since?seq=0', desc: '长轮询兜底（没有新弹幕时会挂 25 秒，别急）', kind: 'json' },
+  // WS 不能用 fetch 请求，所以 kind 单独标一类：点了只打印地址和消息格式，真正验证走下面的 WebSocket 面板
+  { name: 'WS /danmaku/ws', url: '/danmaku/ws', desc: 'WebSocket 实时弹幕（双向：收广播 / 发弹幕）', kind: 'ws' },
+  { name: 'GET /videoshot/index.json', url: '/videoshot/index.json', desc: '预览图元信息（含取图公式）', kind: 'json' },
+  { name: 'GET /videoshot/preview.bin', url: '/videoshot/preview.bin', desc: '预览图文件（\\u001F 分隔的 data URL）', kind: 'blob' },
+  { name: 'GET /healthz', url: '/healthz', desc: '运行状态：片长、ffmpeg、预览图状态', kind: 'json' },
+];
+
+const out = document.getElementById('apiOut');
+const apiTable = document.getElementById('apiTable');
+
+APIS.forEach((api) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td class="mono">' + api.name + '</td><td>' + api.desc + '</td><td></td>';
+  const btn = document.createElement('button');
+  btn.textContent = '请求';
+  btn.onclick = () => callApi(api);
+  tr.lastElementChild.appendChild(btn);
+  apiTable.appendChild(tr);
+});
+
+async function callApi(api) {
+  out.textContent = '请求中：' + api.url;
+  const started = performance.now();
+  try {
+    if (api.kind === 'ws') {
+      // WS 不是 HTTP 请求，fetch 打不了，这里就把地址和消息格式打出来，连接状态看下面的面板
+      out.textContent = 'WebSocket 地址：' + wsUrl() + '\n'
+        + '（这个端点要带 Upgrade 头，普通 HTTP 访问会得到 426；真正验证请用下面的 WebSocket 面板）\n\n'
+        + '上行发送：{"type":"send","text":"你好","timeSec":12.3,"mode":"scroll","color":"#FFFFFF","fontSize":25,"speed":"moderate"}\n'
+        + '下行广播：{"type":"danmaku","id":"dm-1","seq":1,"text":"你好","timeSec":12.3,"timeMs":12300,'
+        + '"mode":"scroll","fontSize":25,"color":"#FFFFFF","uid":"1","speed":"moderate","isSelf":true,"ts":1700000000000}\n'
+        + '其它下行：{"type":"hello",…}（连上就发）、{"type":"pong","t":…}（回客户端的 ping）、'
+        + '{"type":"error","message":"…"}（上行消息有问题时）';
+    } else if (api.kind === 'blob') {
+      // 和 player/src/api/preview.ts 完全一样的读法，顺便验证前端那套解析能不能跑通
+      const resp = await fetch(BASE + api.url);
+      const buf = await resp.arrayBuffer();
+      const text = new TextDecoder('utf-8').decode(buf);
+      const arr = text.split('\u001F');
+      out.textContent = 'HTTP ' + resp.status + '　' + (performance.now() - started).toFixed(0) + ' ms\n'
+        + '字节数：' + buf.byteLength + '\n'
+        + 'split("\\u001F") 后长度：' + arr.length + '（第 0 项应当为空串：' + JSON.stringify(arr[0]) + '）\n'
+        + '第 1 项前 80 字符：' + String(arr[1] || '').slice(0, 80) + '…';
+    } else {
+      const resp = await fetch(BASE + api.url);
+      const text = await resp.text();
+      let pretty = text;
+      try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (_) { /* XML 就原样显示 */ }
+      out.textContent = 'HTTP ' + resp.status + '　' + (performance.now() - started).toFixed(0) + ' ms\n'
+        + (pretty.length > 4000 ? pretty.slice(0, 4000) + '\n……（已截断）' : pretty);
+    }
+  } catch (err) {
+    out.textContent = '请求失败：' + err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 发送弹幕
+// ---------------------------------------------------------------------------
+const dmOut = document.getElementById('dmOut');
+document.getElementById('dmSend').onclick = async () => {
+  const payload = {
+    text: document.getElementById('dmText').value,
+    timeMs: Number(document.getElementById('dmTime').value) || 0,
+    mode: Number(document.getElementById('dmMode').value),
+    fontSize: Number(document.getElementById('dmSize').value),
+    // <input type="color"> 给的是 #rrggbb，B 站要的是十进制整数
+    color: parseInt(document.getElementById('dmColor').value.slice(1), 16),
+  };
+  dmOut.textContent = 'POST ' + BASE + '/danmaku/send\n' + JSON.stringify(payload, null, 2);
+  try {
+    const resp = await fetch(BASE + '/danmaku/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    dmOut.textContent += '\n\n← HTTP ' + resp.status + ' ' + (await resp.text());
+  } catch (err) {
+    dmOut.textContent += '\n\n← 失败：' + err;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// SSE 流
+// ---------------------------------------------------------------------------
+const stream = document.getElementById('stream');
+const sseState = document.getElementById('sseState');
+
+// 只用 innerHTML 拼接带颜色的片段，插入前一律经 escapeHtml 转义弹幕文本
+function appendStream(text) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = text;
+  stream.appendChild(div);
+  // 只留最近 200 条，避免长时间开着把 DOM 撑爆
+  while (stream.childElementCount > 200) stream.removeChild(stream.firstChild);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+const es = new EventSource(BASE + '/danmaku/stream');
+es.onopen = () => { sseState.className = 'badge ok'; sseState.textContent = '已连接'; };
+es.onerror = () => { sseState.className = 'badge err'; sseState.textContent = '断开（EventSource 会自动重连）'; };
+es.onmessage = (ev) => {
+  const d = JSON.parse(ev.data);
+  const color = '#' + Number(d.color).toString(16).padStart(6, '0');
+  appendStream(
+    '<span class="seq">#' + d.seq + '</span>'
+    + '<span class="t">' + (d.timeMs / 1000).toFixed(1) + 's</span>'
+    + '<span style="color:' + color + '">' + escapeHtml(d.text) + '</span>'
+    + '<span class="seq" style="margin-left:8px">mode=' + d.mode + ' size=' + d.fontSize + '</span>'
+  );
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+document.getElementById('sseClear').onclick = () => { stream.innerHTML = ''; };
+
+// ---------------------------------------------------------------------------
+// WebSocket 实时弹幕（双向：既能实时收广播，也能直接发弹幕）
+// ---------------------------------------------------------------------------
+const wsStream = document.getElementById('wsStream');
+const wsState = document.getElementById('wsState');
+const wsInfo = document.getElementById('wsInfo');
+const wsOut = document.getElementById('wsOut');
+
+// 【为什么要拼绝对地址】WebSocket 构造函数只接受 ws:// 或 wss:// 开头的完整地址，不吃相对路径；
+// 同源的话用 location.host 拼就行，换端口、换主机都不用改代码。
+function wsUrl() {
+  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + (CFG.wsPath || '/danmaku/ws');
+}
+
+let ws = null;
+let wsPingStarted = 0; // 最近一次应用层 ping 的发出时刻，用来算往返延迟
+
+function wsAppend(html) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = html; // 所有插进来的动态内容都经过 escapeHtml，见 SSE 那边的同一个约定
+  wsStream.appendChild(div);
+  while (wsStream.childElementCount > 200) wsStream.removeChild(wsStream.firstChild);
+  wsStream.scrollTop = wsStream.scrollHeight;
+}
+
+function wsSetState(cls, text, info) {
+  wsState.className = 'badge ' + cls;
+  wsState.textContent = text;
+  if (info !== undefined) wsInfo.textContent = info;
+}
+
+function wsConnect() {
+  if (ws) {
+    try { ws.close(); } catch (_) { /* 已经关了，忽略 */ }
+  }
+  wsSetState('warn', '连接中…', wsUrl());
+  ws = new WebSocket(wsUrl()); // 构造函数的地址必须带 ws:// 前缀（见 wsUrl 的注释）
+
+  ws.onopen = () => {
+    wsSetState('ok', '已连接', wsUrl() + '　（等 hello）');
+    wsOut.textContent = '已连接：' + wsUrl();
+  };
+
+  // 【为什么 onerror 里拿不到具体原因】浏览器出于安全考虑不把 WS 失败的细节暴露给 JS
+  //（只看得到「连接失败」），所以这里给的是自查清单，真正的错误原因要去服务端日志里看。
+  ws.onerror = () => {
+    wsSetState('err', '连接出错', '地址 ' + wsUrl() + ' 连不上或握手中断；'
+      + '确认服务在跑、路径是 ' + (CFG.wsPath || '/danmaku/ws') + '（别写成 http://）');
+    wsOut.textContent = 'WebSocket 出错。浏览器不会告诉页面具体原因，按下面三条自查：\n'
+      + '1) 服务是否在跑（看本页顶部「运行环境」）\n'
+      + '2) 地址是否是 ' + wsUrl() + '\n'
+      + '3) 用 http:// 直接打开这个路径会得到 426 + 一行提示，可用来确认路径没写错';
+  };
+
+  ws.onclose = (ev) => {
+    wsSetState('err', '已断开', 'close code=' + ev.code + '　' + (ev.reason || '(无原因)') + '；点「重连」再试');
+    wsAppend('<span class="sys">连接关闭：code=' + ev.code + ' reason=' + escapeHtml(ev.reason || '') + '</span>');
+  };
+
+  ws.onmessage = (ev) => {
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch (err) {
+      wsAppend('<span class="sys">收到非 JSON 消息：' + escapeHtml(ev.data) + '</span>');
+      return;
+    }
+
+    if (msg.type === 'hello') {
+      wsSetState('ok', '已连接', '心跳 ' + msg.heartbeatMs + 'ms　历史弹幕 ' + msg.danmakuCount
+        + ' 条　片长 ' + msg.durationSec + 's');
+      wsAppend('<span class="sys">hello：服务端心跳 ' + msg.heartbeatMs + 'ms，list.so 有 ' + msg.danmakuCount
+        + ' 条弹幕；发送格式 ' + escapeHtml(msg.sendExample) + '</span>');
+      return;
+    }
+
+    if (msg.type === 'danmaku') {
+      // 广播里 mode 是字符串、color 是 #RRGGBB，和 SSE 那边（mode 数字、color 十进制）不一样：
+      // 两个窗口对照着看，正好能确认「WS 走播放器口径、SSE 走 B 站 p 属性口径」
+      wsAppend('<span class="seq">#' + msg.seq + ' ' + escapeHtml(msg.id) + '</span>'
+        + '<span class="t">' + msg.timeSec + 's</span>'
+        + '<span style="color:' + escapeHtml(msg.color) + '">' + escapeHtml(msg.text) + '</span>'
+        + '<span class="seq" style="margin-left:8px">mode=' + escapeHtml(String(msg.mode))
+        + ' size=' + msg.fontSize + ' speed=' + escapeHtml(String(msg.speed))
+        + ' uid=' + escapeHtml(String(msg.uid)) + (msg.isSelf ? ' isSelf' : '') + '</span>');
+      return;
+    }
+
+    if (msg.type === 'pong') {
+      wsAppend('<span class="sys">pong：应用层往返 ' + (performance.now() - wsPingStarted).toFixed(1)
+        + ' ms（服务端时间 ' + msg.t + '）</span>');
+      return;
+    }
+
+    // error 以及将来可能新增的类型：原样打出来，免得「收到了但页面什么都不显示」让人以为没收到
+    wsAppend('<span class="sys">' + escapeHtml(JSON.stringify(msg)) + '</span>');
+  };
+}
+
+document.getElementById('wsSend').onclick = async () => {
+  const payload = {
+    type: 'send',
+    text: document.getElementById('wsText').value,
+    // 【注意这里是秒】WS 按参考实现 Danmaku.timePoint 的口径用秒（timeSec），
+    // 而上面的 POST 面板按 B 站口径用毫秒（timeMs）；服务端两个都认，见 normalizeTimeMs
+    timeSec: Number(document.getElementById('wsTime').value) || 0,
+    mode: document.getElementById('wsMode').value,
+    fontSize: Number(document.getElementById('wsSize').value),
+    speed: document.getElementById('wsSpeed').value,
+    color: document.getElementById('wsColor').value.toUpperCase(),
+  };
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    // 优先走 WS：这样一按就能同时验证「上行能发」和「下行能收」两个方向
+    ws.send(JSON.stringify(payload));
+    wsOut.textContent = '↑ 已通过 WS 上行：\n' + JSON.stringify(payload, null, 2)
+      + '\n\n（正常的话 1 秒内会在上面的窗口里看到广播回来的同一条 danmaku 消息）';
+    return;
+  }
+
+  // 降级：WS 没连上时改走 POST，否则「发弹幕」这件事在当前环境就完全测不了了
+  wsOut.textContent = 'WS 未连接，这次降级为 POST /danmaku/send\n' + JSON.stringify(payload, null, 2) + '\n';
+  try {
+    const resp = await fetch(BASE + '/danmaku/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    wsOut.textContent += '\n← HTTP ' + resp.status + ' ' + (await resp.text());
+  } catch (err) {
+    wsOut.textContent += '\n← 失败：' + err;
+  }
+};
+
+document.getElementById('wsPing').onclick = () => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    wsOut.textContent = 'WS 未连接，无法 ping（先点「重连」）';
+    return;
+  }
+  wsPingStarted = performance.now();
+  ws.send(JSON.stringify({ type: 'ping' }));
+  wsOut.textContent = '↑ {"type":"ping"}（服务端会回 {"type":"pong"}，往返时间显示在上面窗口里）';
+};
+
+document.getElementById('wsClear').onclick = () => { wsStream.innerHTML = ''; };
+document.getElementById('wsReconnect').onclick = wsConnect;
+
+// ---------------------------------------------------------------------------
+// 分段 + 高能曲线
+// ---------------------------------------------------------------------------
+async function loadViewPointsAndPbp() {
+  const vpResp = await fetch(BASE + '/x/player/v2?aid=' + CFG.aid + '&cid=' + CFG.cid).then((r) => r.json());
+  const points = (vpResp.data && vpResp.data.view_points) || [];
+  document.getElementById('vpList').innerHTML = points.length === 0
+    ? '没有分段'
+    : '共 ' + points.length + ' 段（百分比 = 秒 / 片长，播放器就是这么算进度条宽度的）：<br>'
+      + points.map((p) => '　from=' + p.from + 's → to=' + p.to + 's　'
+          + ((p.from / CFG.duration) * 100).toFixed(1) + '% ~ ' + ((p.to / CFG.duration) * 100).toFixed(1) + '%　'
+          + '<b>' + escapeHtml(p.content) + '</b>').join('<br>');
+
+  const pbpResp = await fetch(BASE + '/x/player/pbp?aid=' + CFG.aid + '&cid=' + CFG.cid).then((r) => r.json());
+  drawPbp(pbpResp.data.data);
+}
+
+function drawPbp(data) {
+  const canvas = document.getElementById('pbp');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  // 背景网格
+  ctx.strokeStyle = '#242736'; ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke();
+  }
+
+  if (!data || data.length === 0) return;
+  const stepX = w / Math.max(1, data.length - 1);
+  // 填充区域
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  data.forEach((v, i) => ctx.lineTo(i * stepX, h - v * (h - 4) - 2));
+  ctx.lineTo((data.length - 1) * stepX, h);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(251,114,153,0.35)';
+  ctx.fill();
+  // 折线
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * stepX, y = h - v * (h - 4) - 2;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#fb7299'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  ctx.fillStyle = '#9aa1b8'; ctx.font = '11px Consolas, monospace';
+  ctx.fillText('data.length=' + data.length, 6, 12);
+}
+
+// ---------------------------------------------------------------------------
+// 缩略图：先拿 preview.bin（这一步也会触发服务端抽帧），再拉 index.json 看状态
+// ---------------------------------------------------------------------------
+async function loadThumbs() {
+  const thumbOut = document.getElementById('thumbOut');
+  const grid = document.getElementById('thumbs');
+  grid.innerHTML = '';
+  thumbOut.textContent = '正在请求 /videoshot/preview.bin ……（首次且带 --video 时服务端要抽帧，可能要等几秒到几十秒）';
+
+  const resp = await fetch(BASE + '/videoshot/preview.bin');
+  const buf = await resp.arrayBuffer();
+  // 和 player/src/api/preview.ts 完全一样的读法：UTF-8 解码后按 \u001F 切分
+  const arr = new TextDecoder('utf-8').decode(buf).split('\u001F');
+
+  const idx = await fetch(BASE + '/videoshot/index.json').then((r) => r.json());
+  const mock = (idx.data && idx.data.mock) || {};
+  thumbOut.textContent = 'HTTP ' + resp.status + '，' + buf.byteLength + ' 字节，切分后 ' + arr.length + ' 项；'
+    + '第 0 项 = ' + JSON.stringify(arr[0]) + '（空占位）\n'
+    + 'index.json：' + JSON.stringify(idx.data, null, 2).slice(0, 1200);
+
+  if (arr.length <= 1) {
+    // 空文件 = 没缩略图。这里必须写清楚原因，不能留一片空白让人猜。
+    thumbOut.textContent += '\n\n⚠ 服务端返回了空文件：' + (mock.message || '(没有说明)')
+      + '\n\n' + (PREVIEW_REASON[mock.status] || PREVIEW_REASON.unavailable);
+    return;
+  }
+
+  for (let i = 1; i <= 20 && i < arr.length; i++) {
+    if (!arr[i]) continue;
+    // 下标换算照抄播放器的取图算法（controls/index.ts:1410-1417）：
+    //   currTime = floor(currentTime / 5);  src = videoshot[currTime + 1]
+    // 反推：下标 i 对应的就是第 5*(i-1) 秒
+    const second = 5 * (i - 1);
+    const fig = document.createElement('figure');
+    const img = document.createElement('img');
+    img.src = arr[i];
+    img.alt = '第 ' + second + ' 秒';
+    const cap = document.createElement('figcaption');
+    cap.textContent = 'arr[' + i + '] → 第 ' + second + ' 秒';
+    fig.appendChild(img); fig.appendChild(cap);
+    grid.appendChild(fig);
+  }
+}
+
+// 启动顺序：先读 /healthz 拿到真实片长和 aid/cid，再去请求依赖这些参数的接口，
+// 否则 view_points 的百分比、aid/cid 都会用兜底值算错。
+(async () => {
+  await loadHealth();
+  // 同步刷新接口表里的 URL（aid/cid 可能来自服务端启动参数）
+  APIS[0].url = '/x/player/v2?aid=' + CFG.aid + '&cid=' + CFG.cid;
+  APIS[1].url = '/x/player/pbp?aid=' + CFG.aid + '&cid=' + CFG.cid;
+  APIS[2].url = '/x/v1/dm/list.so?oid=' + CFG.cid;
+  // WS 放在 loadHealth 之后连：wsUrl() 要用 CFG.wsPath（服务端在 /healthz 里报的真实路径），
+  // 先连的话拿到的是兜底值，虽然一样能连上，但页面显示的路径会和服务端不一致
+  wsConnect();
+  await loadViewPointsAndPbp().catch((err) => {
+    document.getElementById('vpList').textContent = '加载失败：' + err;
+  });
+  await loadThumbs().catch((err) => { document.getElementById('thumbOut').textContent = '加载失败：' + err; });
+})();
+</script>
+</body>
+</html>

@@ -14,7 +14,7 @@
  * loading(bool) 在圆点内插入 / 移除加载图标。
  */
 
-import { h, defineComponent, useTemplateRef, materialize } from '@/core';
+import { h, defineComponent, useTemplateRef, materialize, signal } from '@/core';
 import type { ComponentLifecycle } from '@/types';
 import type { VNode } from '@/types';
 
@@ -67,23 +67,29 @@ const LoadingIcon = (): VNode =>
  */
 export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentLifecycle) => {
   // ============================================
-  // 状态数据
+  // 状态数据（响应式信号：根节点 class 数组+对象形式自动追踪）
   // ============================================
 
-  /** 当前选中状态 */
-  let checked = props.checked ?? false;
+  /**
+   * 当前选中状态信号
+   * 替代旧的 let checked + switchRef.classList.toggle('switch-checked', checked)
+   * 信号在根节点 class 数组中被读取，编译期提取到 __reactiveAttrs，
+   * mount 时注册 effect，信号变化时自动 normalizeClass 重新应用
+   */
+  const checkedSignal = signal<boolean>(props.checked ?? false);
 
-  /** 当前禁用状态 */
-  let disabled = props.disabled ?? false;
+  /**
+   * 当前禁用状态信号
+   * 替代旧的 let disabled + switchRef.classList.toggle('switch-disabled', disabled)
+   * 同样由根节点 class 数组+对象形式自动追踪
+   */
+  const disabledSignal = signal<boolean>(props.disabled ?? false);
 
   // ============================================
   // DOM 引用
   // ============================================
 
-  /** 开关根元素引用 */
-  const switchRef = useTemplateRef<HTMLDivElement>(lifecycle, 'switchRef');
-
-  /** 复选框输入元素引用 */
+  /** 复选框输入元素引用（用于同步 input.checked/disabled 表单属性） */
   const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
 
   /** 圆点元素引用（loading 图标插入位置） */
@@ -97,52 +103,43 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
   // ============================================
 
   /**
-   * 根据当前选中状态同步 switch-checked 样式类
-   */
-  const syncCheckedClass = (): void => {
-    if (switchRef.value) {
-      switchRef.value.classList.toggle('switch-checked', checked);
-    }
-  };
-
-  /**
    * 处理复选框 change 事件（对应既有实现 change()）
-   * 以 input.checked 为准切换样式类，禁用态下不响应
+   * 以 input.checked 为准更新信号（响应式系统自动同步根节点 class），
+   * 禁用态下不响应
    * @param event - change 事件
    */
   const handleChange = (event: Event): void => {
-    if (disabled) {
+    if (disabledSignal.value) {
       return;
     }
     if (!(event.target instanceof HTMLInputElement)) return;
-    checked = event.target.checked;
-    syncCheckedClass();
-    props.onChange?.(checked);
+    checkedSignal.value = event.target.checked;
+    props.onChange?.(checkedSignal.value);
   };
 
   /**
-   * 外部设置选中状态（同步 input.checked 与样式类）
+   * 外部设置选中状态
+   * 信号变化后根节点 class effect 自动同步 switch-checked 类；
+   * input.checked 是表单元素属性（非样式），保留命令式设置以正确反映运行时状态
    * @param value - 是否选中
    */
   const setChecked = (value: boolean): void => {
-    checked = value;
+    checkedSignal.value = value;
     if (inputRef.value) {
       inputRef.value.checked = value;
     }
-    syncCheckedClass();
   };
 
   /**
    * 外部设置禁用状态
+   * 信号变化后根节点 class effect 自动同步 switch-disabled 类；
+   * input.disabled 是表单元素属性（非样式），保留命令式设置
    * @param value - 是否禁用
    */
   const setDisabled = (value: boolean): void => {
-    disabled = value;
-    if (switchRef.value) {
-      switchRef.value.classList.toggle('switch-disabled', disabled);
-    }
+    disabledSignal.value = value;
     if (inputRef.value) {
-      inputRef.value.disabled = disabled;
+      inputRef.value.disabled = value;
     }
   };
 
@@ -170,16 +167,13 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
   // ============================================
 
   /**
-   * 组件挂载后：同步初始状态，并通过事件向外暴露控制方法
+   * 组件挂载后：同步表单元素初始状态，并通过事件向外暴露控制方法
+   * 根节点 class 已由响应式 class（数组+对象形式）自动追踪信号，无需手动 toggle
    */
   lifecycle.onMounted = (): void => {
     if (inputRef.value) {
-      inputRef.value.checked = checked;
-      inputRef.value.disabled = disabled;
-    }
-    if (switchRef.value) {
-      switchRef.value.classList.toggle('switch-checked', checked);
-      switchRef.value.classList.toggle('switch-disabled', disabled);
+      inputRef.value.checked = checkedSignal.value;
+      inputRef.value.disabled = disabledSignal.value;
     }
     lifecycle.emit?.('switchMounted', { setChecked, setDisabled, loading } satisfies SwitchApi);
   };
@@ -190,11 +184,15 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
 
   // 带文字形态：与参考 bui-switch 一致（input + label > name + body > dot），
   // 面板 scss 通过 .ui-switch-labeled 覆盖基础尺寸，不影响无文字形态
+  // 根节点 class 含 signal.value，编译期提取到 __reactiveAttrs 自动追踪
   if (props.name !== undefined) {
     return h('div', {
-      class: `ui-switch ui-switch-labeled switch-${props.size ?? 'middle'}`,
-      ref: 'switchRef',
-    },
+      class: [`ui-switch ui-switch-labeled switch-${props.size ?? 'middle'}`, {
+        'switch-checked': checkedSignal.value,
+        'switch-disabled': disabledSignal.value,
+      }],
+    // 响应式迁移后根节点 class 由 checkedSignal/disabledSignal 信号驱动，不再需要 switchRef 引用（删除残留 ref 字符串，避免运行时未注册告警）
+  },
       h('input', {
         type: 'checkbox',
         class: 'ui-switch-input',
@@ -214,8 +212,11 @@ export const Switch = defineComponent<SwitchProps>((props, lifecycle: ComponentL
   }
 
   return h('div', {
-    class: `ui-switch switch-${props.size ?? 'middle'}`,
-    ref: 'switchRef',
+    class: [`ui-switch switch-${props.size ?? 'middle'}`, {
+      'switch-checked': checkedSignal.value,
+      'switch-disabled': disabledSignal.value,
+    }],
+    // 响应式迁移后根节点 class 由 checkedSignal/disabledSignal 信号驱动，不再需要 switchRef 引用（删除残留 ref 字符串，避免运行时未注册告警）
   },
     h('input', {
       type: 'checkbox',

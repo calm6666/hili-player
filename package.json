@@ -1,7 +1,7 @@
 {
-  "name": "hili-player",
+  "name": "lumina",
   "version": "1.0.0",
-  "description": "极简 TypeScript 视频播放器 - hili-player",
+  "description": "Lumina reactive framework + Nova video player (monorepo)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,8 @@
     "video-player",
     "typescript",
     "h-function",
-    "lightweight"
+    "lightweight",
+    "lumina"
   ],
   "author": "",
   "license": "MIT",
@@ -44,8 +45,5 @@
     "typescript": "^6.0.3",
     "vite": "^5.2.0",
     "vitest": "^2.1.9"
-  },
-  "dependencies": {
-    "@preact/signals-core": "^1.14.4"
   }
 }

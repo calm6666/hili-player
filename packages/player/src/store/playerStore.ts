@@ -6,7 +6,7 @@
  *
  * ========== 持久化存储结构（参考 B站 store.txt）==========
  *
- * hili_player_profile          → JSON 对象，包含：
+ * nova_player_profile          → JSON 对象，包含：
  *   {
  *     volume: 0.8,              // 音量 (0-1)
  *     isMuted: false,           // 是否静音
@@ -35,26 +35,26 @@
  *     }
  *   }
  *
- * hili_player_codec_prefer_type → number  // 独立 key，便于快速读取不必解析整个 profile
- * hili_player_version          → string   // 播放器版本号，用于数据迁移判断
+ * nova_player_codec_prefer_type → number  // 独立 key，便于快速读取不必解析整个 profile
+ * nova_player_version          → string   // 播放器版本号，用于数据迁移判断
  *
  * ========== 设计对照 B站 store.txt ==========
  *
- * hili_player_profile          ≈ bpx_player_profile
- * hili_player_codec_prefer_type ≈ bilibili_player_codec_prefer_type
- * hili_player_version          ≈ version（在 pcdnzip_prod_36900 对象里）
+ * nova_player_profile          ≈ bpx_player_profile
+ * nova_player_codec_prefer_type ≈ bilibili_player_codec_prefer_type
+ * nova_player_version          ≈ version（在 pcdnzip_prod_36900 对象里）
  *
  * ========== 数据流向 ==========
  *
  * 页面加载 → createPlayerStore()
- *   ├─ 读取 hili_player_profile → 解析 JSON → 合并默认值 → 存入内存
- *   ├─ 读取 hili_player_codec_prefer_type → 覆盖 profile 中的值（独立 key 优先）
+ *   ├─ 读取 nova_player_profile → 解析 JSON → 合并默认值 → 存入内存
+ *   ├─ 读取 nova_player_codec_prefer_type → 覆盖 profile 中的值（独立 key 优先）
  *   └─ 如果 profile 不存在（首次使用）→ 写入默认 profile JSON
  *
  * 用户操作 → store.setVolume(0.5)
  *   ├─ 更新内存中的 persistentState.volume
  *   ├─ 通知所有订阅了 'volume' 的监听器
- *   └─ 将整个 persistentState 写入 hili_player_profile JSON
+ *   └─ 将整个 persistentState 写入 nova_player_profile JSON
  */
 
 import type {
@@ -75,7 +75,7 @@ import {
   defaultRuntimeState,
 } from './state';
 
-import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
+import { BrowserCapabilityDetector } from '@/nova/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 import { createSafeCall } from '@/error';
 
@@ -203,7 +203,7 @@ function safeRemoveItem(key: string): void {
 }
 
 /**
- * 将持久化状态写入主 profile JSON（hili_player_profile）
+ * 将持久化状态写入主 profile JSON（nova_player_profile）
  * 仅在 persist=true 时执行
  */
 function saveProfile(state: PlayerPersistentState): void {
@@ -218,17 +218,19 @@ function saveProfile(state: PlayerPersistentState): void {
  * 从旧格式迁移到新的 profile 对象存储
  *
  * 旧格式（v1，已废弃）：单一 key 'hili_player_state' 存储完整状态 JSON（平铺结构）
- * 新格式（v2，当前）：hili_player_profile JSON 对象 + hili_player_codec_prefer_type 独立 key
+ * （改名前的历史 key，字面量保留原名以兼容改名前的浏览器数据）
+ * 新格式（v2，当前）：nova_player_profile JSON 对象 + nova_player_codec_prefer_type 独立 key
  *
  * 迁移步骤：
  * 1. 读取旧 key 'hili_player_state'
- * 2. 写入新 key 'hili_player_profile'
+ * 2. 写入新 key 'nova_player_profile'
  * 3. 提取 codecPreferType 到独立 key
  * 4. 删除旧 key
  */
 function tryMigrateFromLegacy(): void {
   const result = safeCall.storage(
     () => {
+      /** 改名（hili→nova）前的历史 v1 key，保留原名以迁移旧浏览器数据 */
       const legacyKey = 'hili_player_state';
       const legacyData = localStorage.getItem(legacyKey);
       if (!legacyData) return;
@@ -246,7 +248,7 @@ function tryMigrateFromLegacy(): void {
 
       // 删除旧格式数据，避免重复迁移
       safeRemoveItem(legacyKey);
-      logger.info('已从旧格式 (hili_player_state) 迁移到新格式 (hili_player_profile)');
+      logger.info('已从旧格式 (hili_player_state) 迁移到新格式 (nova_player_profile)');
     },
     'MIGRATION_FAILED',
     '旧格式迁移失败',

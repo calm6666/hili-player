@@ -1,4 +1,4 @@
-import { h } from '@/core';
+import { h, signal } from '@/core';
 import type { VNode } from '@/types';
 
 export interface RadioGroupOption {
@@ -15,6 +15,10 @@ export interface RadioGroupConfig {
 
 /**
  * 渲染一组单选胶囊
+ * 声明式响应式版本：选中态由内部 checkedValueSignal 驱动 label 的
+ * active 类（__reactiveAttrs），点击仅写信号 + 回调，
+ * 组内互斥由响应式系统自动同步，
+ * 替代旧的 querySelectorAll + classList.add/remove 命令式互斥
  * @param options - 选项列表
  * @param config - 组名、选中回调与可选模板引用
  * @returns 单选组虚拟节点
@@ -22,8 +26,14 @@ export interface RadioGroupConfig {
 export const RadioGroup = (
   options: RadioGroupOption[],
   config: RadioGroupConfig,
-): VNode =>
-  h(
+): VNode => {
+  /** 选中值信号：初值取传入 options 中标记 checked 的项 */
+  const initialChecked = options.find((option) => option.checked === true);
+  const checkedValueSignal = signal<boolean | string | number | undefined>(
+    initialChecked?.value,
+  );
+
+  return h(
     'div',
     {
       class: 'ui-radio-wrap ui-radio-button',
@@ -36,16 +46,15 @@ export const RadioGroup = (
         h(
           'label',
           {
-            class: option.checked ? 'ui-radio-item active' : 'ui-radio-item',
+            // 选中态类名由 checkedValueSignal 响应式驱动（__reactiveAttrs + normalizeClass）
+            class: [
+              'ui-radio-item',
+              { active: checkedValueSignal.value === option.value },
+            ],
             style: { margin: '0 4px' },
-            onClick: (event: MouseEvent) => {
-              const target = event.currentTarget;
-              if (target instanceof HTMLElement) {
-                target.parentElement
-                  ?.querySelectorAll('.ui-radio-item')
-                  .forEach((item) => item.classList.remove('active'));
-                target.classList.add('active');
-              }
+            onClick: () => {
+              // 写信号即可：active 类随信号在组内自动互斥切换
+              checkedValueSignal.value = option.value;
               config.onSelect(option);
             },
           },
@@ -65,3 +74,4 @@ export const RadioGroup = (
       ),
     ),
   );
+};

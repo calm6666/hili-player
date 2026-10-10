@@ -1,5 +1,5 @@
-.player-container {
-  .player-top-wrap {
+.nova-player-container {
+  .nova-player-top-wrap {
     color: #fff;
     display: -webkit-box;
     display: -ms-flexbox;
@@ -13,7 +13,7 @@
     width: 100%;
     z-index: 45;
 
-    .player-top-mask {
+    .nova-player-top-mask {
       background: -webkit-gradient(
         linear,
         left top,
@@ -38,8 +38,8 @@
       z-index: -1;
     }
 
-    .player-top-left-title,
-    .player-top-title {
+    .nova-player-top-left-title,
+    .nova-player-top-title {
       font-size: 16px;
       font-weight: 500;
       line-height: 24px;
@@ -51,24 +51,24 @@
       z-index: 2;
     }
 
-    .player-top-follow {
+    .nova-player-top-follow {
       -webkit-box-flex: 0;
       -ms-flex: none;
       flex: none;
     }
 
-    .player-top-left {
+    .nova-player-top-left {
       left: 12px;
       margin-top: 18px;
       position: absolute;
 
-      .player-top-left-title {
+      .nova-player-top-left-title {
         margin: 0 0 8px;
         display: none;
       }
 
-      .player-top-left-follow {
-        .player-follow {
+      .nova-player-top-left-follow {
+        .nova-player-follow {
           -webkit-box-align: center;
           -ms-flex-align: center;
           -webkit-box-flex: 0;
@@ -91,7 +91,7 @@
           width: 89px;
           z-index: 2;
 
-          .player-follow-face {
+          .nova-player-follow-face {
             -webkit-box-flex: 0;
             border-radius: 50%;
             -ms-flex: none;
@@ -102,7 +102,7 @@
             width: 24px;
           }
 
-          .player-follow-icon {
+          .nova-player-follow-icon {
             fill: #fff;
             -webkit-box-flex: 0;
             -ms-flex: none;
@@ -113,7 +113,7 @@
             width: 14px;
           }
 
-          .player-follow-text {
+          .nova-player-follow-text {
             -webkit-box-flex: 0;
             -ms-flex: none;
             flex: none;
@@ -123,7 +123,7 @@
       }
     }
 
-    .player-top-issue {
+    .nova-player-top-issue {
       -webkit-box-flex: 0;
       cursor: pointer;
       -ms-flex: none;
@@ -136,7 +136,7 @@
       text-align: center;
       z-index: 2;
 
-      .player-top-issue-icon {
+      .nova-player-top-issue-icon {
         -webkit-box-flex: 0;
         display: inline-block;
         -ms-flex: none;

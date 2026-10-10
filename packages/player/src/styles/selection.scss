@@ -1,5 +1,5 @@
-.player-container {
-  .player-mode-selection-panel {
+.nova-player-container {
+  .nova-player-mode-selection-panel {
     background: hsla(0, 0%, 8%, 0.9);
     border-radius: 2px;
     width: 216px;
@@ -7,7 +7,7 @@
     height: 260px;
     box-sizing: border-box;
     padding: 20px;
-    .player-mode-selection-row {
+    .nova-player-mode-selection-row {
       font-size: 12px;
       line-height: 22px;
       min-height: 22px;
@@ -49,7 +49,7 @@
               font-size: 12px;
             }
             &.active {
-              background: var(--player-fn-color, #00a1d6);
+              background: var(--nova-player-fn-color, #00a1d6);
             }
             &:first-child {
               margin-right: 10px;
@@ -90,17 +90,17 @@
 
         .selection-span.active {
           background: #00a1d6;
-          background: var(--player-fn-color, #00a1d6);
+          background: var(--nova-player-fn-color, #00a1d6);
           color: #fff;
         }
 
         .selection-span:hover,
         .selection-span.active {
           fill: #00a1d6;
-          fill: var(--player-fn-color, #00a1d6);
+          fill: var(--nova-player-fn-color, #00a1d6);
           background: transparent;
           color: #00a1d6;
-          color: var(--player-fn-color, #00a1d6);
+          color: var(--nova-player-fn-color, #00a1d6);
         }
         .color-input-warp {
           display: flex;
@@ -158,7 +158,7 @@
       }
     }
 
-    .player-mode-selection-row.mode {
+    .nova-player-mode-selection-row.mode {
       .selection-span {
         fill: hsla(0, 0%, 100%, 0.8);
         background: transparent;

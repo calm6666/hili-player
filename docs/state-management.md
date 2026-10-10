@@ -1,4 +1,4 @@
-# hili-player 播放器状态管理详细分析
+# Nova 播放器状态管理详细分析
 
 ## 一、架构总览
 
@@ -415,20 +415,20 @@ VideoPlayer (注入 __providers)
 
 | 字段 | 类型 | localStorage key | 说明 |
 |------|------|-----------------|------|
-| `volume` | `number` | `hili_player_profile.volume` | 音量 (0-1) |
-| `isMuted` | `boolean` | `hili_player_profile.isMuted` | 是否静音 |
-| `playbackRate` | `number` | `hili_player_profile.playbackRate` | 播放速度 |
-| `codecPreferType` | `number` | `hili_player_profile.codecPreferType` + 独立 key | 编解码器偏好 |
-| `isWideScreen` | `boolean` | `hili_player_profile.isWideScreen` | 宽屏模式 |
-| `gpuRenderer` | `string` | `hili_player_profile.gpuRenderer` | GPU 渲染器信息 |
-| `maxVideoQn` | `number` | `hili_player_profile.maxVideoQn` | 最高视频清晰度 |
-| `maxAudioQn` | `number` | `hili_player_profile.maxAudioQn` | 最高音频质量 |
-| `pbpHeight` | `string` | `hili_player_profile.pbpHeight` | 进度条高度 |
-| `pbpOpacity` | `string` | `hili_player_profile.pbpOpacity` | 进度条不透明度 |
-| `pbpPin` | `number` | `hili_player_profile.pbpPin` | 进度条固定 |
-| `pbpTheme` | `string` | `hili_player_profile.pbpTheme` | 进度条主题色 |
-| `pbpState` | `number` | `hili_player_profile.pbpState` | 进度条开关 |
-| `userPreferences` | `UserPreferences` | `hili_player_profile.userPreferences` | 用户偏好 |
+| `volume` | `number` | `nova_player_profile.volume` | 音量 (0-1) |
+| `isMuted` | `boolean` | `nova_player_profile.isMuted` | 是否静音 |
+| `playbackRate` | `number` | `nova_player_profile.playbackRate` | 播放速度 |
+| `codecPreferType` | `number` | `nova_player_profile.codecPreferType` + 独立 key | 编解码器偏好 |
+| `isWideScreen` | `boolean` | `nova_player_profile.isWideScreen` | 宽屏模式 |
+| `gpuRenderer` | `string` | `nova_player_profile.gpuRenderer` | GPU 渲染器信息 |
+| `maxVideoQn` | `number` | `nova_player_profile.maxVideoQn` | 最高视频清晰度 |
+| `maxAudioQn` | `number` | `nova_player_profile.maxAudioQn` | 最高音频质量 |
+| `pbpHeight` | `string` | `nova_player_profile.pbpHeight` | 进度条高度 |
+| `pbpOpacity` | `string` | `nova_player_profile.pbpOpacity` | 进度条不透明度 |
+| `pbpPin` | `number` | `nova_player_profile.pbpPin` | 进度条固定 |
+| `pbpTheme` | `string` | `nova_player_profile.pbpTheme` | 进度条主题色 |
+| `pbpState` | `number` | `nova_player_profile.pbpState` | 进度条开关 |
+| `userPreferences` | `UserPreferences` | `nova_player_profile.userPreferences` | 用户偏好 |
 
 ### 3.2 运行时状态（仅内存）
 

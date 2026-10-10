@@ -280,7 +280,7 @@ class BrowserCapabilityDetector {
         }
       }
     } catch (e) {
-      logger.warn('WebGL检测失败:', e);
+      logger.warn('WebGL detection failed:', e);
     }
 
     return info;
@@ -334,7 +334,7 @@ class BrowserCapabilityDetector {
           powerEfficient: result.powerEfficient,
         };
       } catch (e) {
-        logger.warn('Media Capabilities API 调用失败，降级使用 canPlayType:', e);
+        logger.warn('Media Capabilities API call failed, falling back to canPlayType:', e);
       }
     }
 
@@ -425,7 +425,7 @@ class BrowserCapabilityDetector {
       return { name: 'Chrome OS', version: '' };
     }
 
-    return { name: '其他', version: '' };
+    return { name: 'Other', version: '' };
   }
 
   /**
@@ -526,7 +526,7 @@ class BrowserCapabilityDetector {
     }
 
     // 其他或未知浏览器
-    return { name: '其他', version: '' };
+    return { name: 'Other', version: '' };
   }
 
   /**
@@ -547,7 +547,7 @@ class BrowserCapabilityDetector {
     if (isIOS) {
       return {
         supported: false,
-        detail: 'iOS 系统不支持 MSE，hls.js 将降级为原生播放器，无法使用精细控制功能',
+        detail: 'iOS does not support MSE, hls.js will fall back to native player without fine-grained control',
       };
     }
 
@@ -556,8 +556,8 @@ class BrowserCapabilityDetector {
       return {
         supported: mseSupported,
         detail: mseSupported
-          ? '桌面端 Safari 支持 MSE，hls.js 基本可用，但需注意 HE-AAC 音频可能存在问题'
-          : '不支持 MSE，hls.js 无法工作',
+          ? 'Desktop Safari supports MSE, hls.js is generally usable, but HE-AAC audio may have issues'
+          : 'MSE not supported, hls.js cannot work',
       };
     }
 
@@ -565,13 +565,13 @@ class BrowserCapabilityDetector {
     if (mseSupported) {
       return {
         supported: true,
-        detail: `${browserInfo.name} 浏览器完整支持 MSE，hls.js 可正常工作`,
+        detail: `${browserInfo.name} fully supports MSE, hls.js works normally`,
       };
     }
 
     return {
       supported: false,
-      detail: '当前浏览器不支持 MSE，hls.js 无法使用',
+      detail: 'Current browser does not support MSE, hls.js cannot be used',
     };
   }
 
@@ -625,31 +625,31 @@ class BrowserCapabilityDetector {
       : result.browserName;
 
     logger.info('='.repeat(50));
-    logger.info('🔍 浏览器能力检测报告');
+    logger.info('Browser capability report');
     logger.info('='.repeat(50));
-    logger.info(`🌐 浏览器: ${browserDisplay}`);
-    logger.info(`💻 操作系统: ${osDisplay}`);
+    logger.info(`Browser: ${browserDisplay}`);
+    logger.info(`OS: ${osDisplay}`);
     logger.info('-'.repeat(50));
     logger.info('-'.repeat(50));
-    logger.info('📹 流媒体协议支持:');
-    logger.info(`  • MSE (基础): ${result.mseSupported ? '✅ 支持' : '❌ 不支持'}`);
-    logger.info(`  • DASH协议: ${result.dashSupported ? '✅ 支持' : '❌ 不支持'}`);
-    logger.info(`  • flv.js: ${result.flvjsSupported ? '✅ 支持' : '❌ 不支持'}`);
+    logger.info('Streaming protocol support:');
+    logger.info(`  • MSE (base): ${result.mseSupported ? 'supported' : 'not supported'}`);
+    logger.info(`  • DASH: ${result.dashSupported ? 'supported' : 'not supported'}`);
+    logger.info(`  • flv.js: ${result.flvjsSupported ? 'supported' : 'not supported'}`);
     logger.info(
-      `  • hls.js: ${result.hlsjsSupported ? '✅ 支持' : '❌ 不支持'} (${result.hlsjsSupportDetail})`
+      `  • hls.js: ${result.hlsjsSupported ? 'supported' : 'not supported'} (${result.hlsjsSupportDetail})`
     );
     logger.info('-'.repeat(50));
-    logger.info('🖥️ 硬件信息:');
-    logger.info(`  • WebGPU: ${hw.webgpuSupported ? '✅ 支持' : '❌ 不支持'}`);
-    logger.info(`  • WebGL: ${hw.webglSupported ? '✅ 支持' : '❌ 不支持'}`);
+    logger.info('Hardware info:');
+    logger.info(`  • WebGPU: ${hw.webgpuSupported ? 'supported' : 'not supported'}`);
+    logger.info(`  • WebGL: ${hw.webglSupported ? 'supported' : 'not supported'}`);
     if (hw.webglRenderer) {
-      logger.info(`  • GPU渲染器: ${hw.webglRenderer}`);
+      logger.info(`  • GPU renderer: ${hw.webglRenderer}`);
     }
     if (hw.webglVendor) {
-      logger.info(`  • GPU供应商: ${hw.webglVendor}`);
+      logger.info(`  • GPU vendor: ${hw.webglVendor}`);
     }
     logger.info(
-      `  • 可能为独显: ${hw.isDiscreteGPU === null ? '未知' : hw.isDiscreteGPU ? '✅ 是' : '❌ 否'}`
+      `  • Possibly discrete GPU: ${hw.isDiscreteGPU === null ? 'unknown' : hw.isDiscreteGPU ? 'yes' : 'no'}`
     );
     logger.info('='.repeat(50));
   }
@@ -660,7 +660,7 @@ class BrowserCapabilityDetector {
 
 // 1. 获取完整检测结果
 const capability = BrowserCapabilityDetector.getFullCapabilityResult();
-logger.info('浏览器能力检测结果:', capability);
+logger.info('Browser capability result:', capability);
 
 // 2. 在控制台打印详细报告
 BrowserCapabilityDetector.printCapabilityReport();
@@ -670,24 +670,24 @@ BrowserCapabilityDetector.printCapabilityReport();
   const h264Capability = await BrowserCapabilityDetector.checkDecodingCapability(
     'video/mp4; codecs="avc1.42E01E"'
   );
-  logger.info('H.264解码能力:', h264Capability);
+  logger.info('H.264 decode capability:', h264Capability);
 
   const hevcCapability = await BrowserCapabilityDetector.checkDecodingCapability(
     'video/mp4; codecs="hvc1.1.6.L93.90"'
   );
-  logger.info('HEVC解码能力:', hevcCapability);
+  logger.info('HEVC decode capability:', hevcCapability);
 })().catch((err) => {
-  logger.error('解码能力检测失败:', err);
+  logger.error('Decode capability detection failed:', err);
   // 这里可以做降级处理，例如使用软解
 });
 
 // 4. 根据检测结果进行业务逻辑判断
 if (capability.isIOS) {
-  logger.info('📱 检测到iOS系统，将使用原生HLS播放，禁用dash.js/flv.js');
+  logger.info('iOS detected, will use native HLS playback, dash.js/flv.js disabled');
 } else if (capability.dashSupported) {
-  logger.info('💻 桌面浏览器支持DASH，可以使用dash.js播放');
+  logger.info('Desktop browser supports DASH, dash.js can be used');
 } else {
-  logger.info('⚠️ 当前浏览器不支持高级流媒体功能，请考虑降级方案');
+  logger.info('Current browser does not support advanced streaming features, consider a fallback solution');
 }
 
 // 导出供其他模块使用

@@ -1,5 +1,5 @@
-.player-docker .player-container {
-  .player-sending-area {
+.nova-player-docker .nova-player-container {
+  .nova-player-sending-area {
     &:before {
       background: #f4f4f4;
       content: "";
@@ -10,12 +10,12 @@
     }
   }
 
-  .player-sending-bar {
+  .nova-player-sending-bar {
     -webkit-box-flex: 0;
     -webkit-box-pack: justify;
     -ms-flex-pack: justify;
     background: #fff;
-    background: var(--player-dmsend-main-bg, #fff);
+    background: var(--nova-player-dmsend-main-bg, #fff);
     display: -webkit-box;
     display: -ms-flexbox;
     display: flex;
@@ -32,13 +32,13 @@
     align-items: center;
   }
 
-  .player-video-info {
+  .nova-player-video-info {
     -ms-flex-negative: 1;
     -webkit-box-align: center;
     -ms-flex-align: center;
     align-items: center;
     color: #505050;
-    color: var(--player-dmsend-info-font, #505050);
+    color: var(--nova-player-dmsend-info-font, #505050);
     display: -webkit-box;
     display: -ms-flexbox;
     display: flex;
@@ -56,11 +56,11 @@
     width: 132px;
   }
 
-  .player-video-info-online {
+  .nova-player-video-info-online {
     position: relative;
   }
 
-  .player-dm-root {
+  .nova-player-dm-root {
     -webkit-box-flex: 1;
     -webkit-box-align: center;
     -ms-flex-align: center;
@@ -73,7 +73,7 @@
     height: 34px;
   }
 
-  .player-dm-switch {
+  .nova-player-dm-switch {
     cursor: pointer;
     line-height: 30px;
     margin-right: 12px;
@@ -91,11 +91,11 @@
     -webkit-box-pack: start;
     -ms-flex-pack: start;
     color: #505050;
-    color: var(--player-dmsend-info-font, #505050);
+    color: var(--nova-player-dmsend-info-font, #505050);
 
     &:not(.disabled):hover {
       fill: #00a1d6;
-      fill: var(--player-primary-color, #00a1d6);
+      fill: var(--nova-player-primary-color, #00a1d6);
     }
   }
 
@@ -171,7 +171,7 @@
     display: none;
   }
 
-  .player-dm-setting {
+  .nova-player-dm-setting {
     cursor: pointer;
     line-height: 30px;
     margin-right: 12px;
@@ -189,11 +189,11 @@
     -webkit-box-pack: start;
     -ms-flex-pack: start;
     color: #505050;
-    color: var(--player-dmsend-info-font, #505050);
+    color: var(--nova-player-dmsend-info-font, #505050);
 
     &:hover {
       fill: #00a1d6;
-      fill: var(--player-primary-color, #00a1d6);
+      fill: var(--nova-player-primary-color, #00a1d6);
     }
 
     svg {
@@ -201,7 +201,7 @@
     }
   }
 
-  .player-dm-setting-wrap {
+  .nova-player-dm-setting-wrap {
     background: none;
     border: none;
     border-radius: 4px 4px 0 0;
@@ -219,7 +219,7 @@
     display: none;
   }
 
-  .player-dm-setting-box {
+  .nova-player-dm-setting-box {
     bottom: 0;
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
@@ -227,28 +227,28 @@
     right: 0;
   }
 
-  .player-dm-setting-show {
+  .nova-player-dm-setting-show {
     display: block;
   }
 
-  .player-dm-setting.disabled {
+  .nova-player-dm-setting.disabled {
     cursor: not-allowed !important;
     opacity: 0.4 !important;
     pointer-events: none;
   }
 
-  .player-video-inputbar {
+  .nova-player-video-inputbar {
     border-radius: 8px;
     height: 32px;
     min-width: 300px;
     width: calc(100% - 72px);
     background: #f4f4f4;
-    background: var(--player-dmsend-input-bg, #f4f4f4);
+    background: var(--nova-player-dmsend-input-bg, #f4f4f4);
     color: #999;
     flex-grow: 1;
   }
 
-  .player-video-inputbar-wrap {
+  .nova-player-video-inputbar-wrap {
     -ms-flex-align: center;
     border: none;
     border-radius: 8px 0 0 8px;
@@ -259,10 +259,10 @@
     flex: 1;
   }
 
-  .player-video-btn-dm {
+  .nova-player-video-btn-dm {
     -webkit-box-flex: 0;
     fill: #757575;
-    fill: var(--player-dmsend-switch-icon, #757575);
+    fill: var(--nova-player-dmsend-switch-icon, #757575);
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
     color: hsla(0, 0%, 100%, 0.8);
@@ -278,11 +278,11 @@
 
     &:hover {
       fill: #00a1d6;
-      fill: var(--player-primary-color, #00a1d6);
+      fill: var(--nova-player-primary-color, #00a1d6);
     }
   }
 
-  .player-iconfont {
+  .nova-player-iconfont {
     -webkit-box-align: center;
     -ms-flex-align: center;
     align-items: center;
@@ -302,7 +302,7 @@
     }
   }
 
-  .player-mode-selection-container {
+  .nova-player-mode-selection-container {
     background: hsla(0, 0%, 8%, 0.9);
     border-radius: 2px;
     bottom: 39px;
@@ -322,11 +322,11 @@
     z-index: 1001;
   }
 
-  .player-mode-selection-show {
+  .nova-player-mode-selection-show {
     display: block;
   }
 
-  .player-dm-wrap {
+  .nova-player-dm-wrap {
     -webkit-box-flex: 1;
     -ms-flex-positive: 1;
     -webkit-box-sizing: border-box;
@@ -343,12 +343,12 @@
 
     a {
       color: #00a1d6;
-      color: var(--player-primary-color, #00a1d6);
+      color: var(--nova-player-primary-color, #00a1d6);
       padding: 0 4px;
     }
   }
 
-  .player-dm-input {
+  .nova-player-dm-input {
     -webkit-box-flex: 1;
     -ms-flex-positive: 1;
     background: none;
@@ -356,7 +356,7 @@
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
     color: #212121;
-    color: var(--player-dmsend-input-font, #212121);
+    color: var(--nova-player-dmsend-input-font, #212121);
     flex-grow: 1;
     height: 28px;
     line-height: 28px;
@@ -365,13 +365,32 @@
     width: 100%;
     z-index: 12;
     font-size: inherit;
+
+    &::-webkit-input-placeholder {
+      color: var(--nova-player-dmsend-input-font, #212121);
+    }
+    &::-moz-placeholder {
+      color: var(--nova-player-dmsend-input-font, #212121);
+    }
+    &:-ms-input-placeholder {
+      color: var(--nova-player-dmsend-input-font, #212121);
+    }
+    &::-ms-input-placeholder {
+      color: var(--nova-player-dmsend-input-font, #212121);
+    }
+    &::placeholder {
+      color: var(--nova-player-dmsend-input-font, #212121);
+    }
+    &::placeholder {
+      color: var(--nova-player-dmsend-input-font, #212121);
+    }
   }
 
-  .player-dm-wrap {
+  .nova-player-dm-wrap {
     padding: 0 0 0 6px;
   }
 
-  .player-dm-btn-send {
+  .nova-player-dm-btn-send {
     border-radius: 0 8px 8px 0;
     height: 100%;
     min-width: 62px;
@@ -383,7 +402,7 @@
     z-index: 13;
   }
 
-  .player-button {
+  .nova-player-button {
     -webkit-box-align: center;
     -ms-flex-align: center;
     -webkit-box-pack: start;
@@ -423,32 +442,32 @@
       transform: translateZ(0);
       justify-content: center;
       background-color: #00a1d6;
-      background-color: var(--player-primary-color, #00a1d6);
+      background-color: var(--nova-player-primary-color, #00a1d6);
       color: #fff;
       cursor: pointer;
     }
 
     .button-blue:hover {
       background-color: #00aeec;
-      background-color: var(--player-fn-color, #00aeec);
+      background-color: var(--nova-player-fn-color, #00aeec);
     }
   }
 
-  .player-dm-btn-send.disabled {
+  .nova-player-dm-btn-send.disabled {
     -webkit-filter: initial;
     filter: none;
     cursor: not-allowed;
 
     .button-blue {
       background-color: #e7e7e7;
-      background-color: var(--player-dmsend-disable-button-bg, #e7e7e7);
+      background-color: var(--nova-player-dmsend-disable-button-bg, #e7e7e7);
       color: #999;
-      color: var(--player-dmsend-disable-button-text, #999);
+      color: var(--nova-player-dmsend-disable-button-text, #999);
     }
   }
 
-  .player-video-inputbar,
-  .player-video-inputbar-wrap {
+  .nova-player-video-inputbar,
+  .nova-player-video-inputbar-wrap {
     -webkit-box-align: center;
     -webkit-box-flex: 1;
     align-items: center;
@@ -458,16 +477,16 @@
     position: relative;
   }
 
-  .player-sending-bar {
+  .nova-player-sending-bar {
     font-size: 13px;
     padding-left: 12px;
 
-    .player-video-info {
+    .nova-player-video-info {
       line-height: 18px !important;
       margin-right: 24px !important;
       width: auto !important;
 
-      .player-video-info-online {
+      .nova-player-video-info-online {
         margin-right: 0;
 
         b {
@@ -476,7 +495,7 @@
         }
       }
 
-      .player-video-info-dm {
+      .nova-player-video-info-dm {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;

@@ -5,15 +5,15 @@
  * 提供集中式状态存储和订阅机制
  * 支持路径式访问状态，如 'player.currentTime'
  *
- * 响应式引擎：@preact/signals-core（与 signal/computed/effect/onEffect 统一）
+ * 响应式引擎：自研 signalsCore（与 signal/computed/effect/onEffect 统一）
  * - 每个状态路径一个惰性 Signal，set 写入 signal、subscribe/useState 通过 effect 订阅 signal
  * - 同步通知：set() 立即同步触发 effect（signals 语义，尊重 batch 批量提交）
  * - 异常隔离：每个监听器用 try-catch 包裹，单个崩溃不影响其他
  * - === 短路：值未变化不触发通知
  */
 
-import { signal, effect } from "@preact/signals-core";
-import type { Signal } from "@preact/signals-core";
+import { signal, effect } from "./signalsCore";
+import type { Signal } from "./signalsCore";
 import { isDev } from "./warning";
 
 /**
@@ -55,7 +55,7 @@ export interface StateManager {
   ): () => void;
 
   /**
-   * 获取指定路径的响应式 Signal（基于 @preact/signals-core）
+   * 获取指定路径的响应式 Signal（基于自研 signalsCore）
    * 可用于 onEffect / computed，与 useState / subscribe 共用同一响应式引擎
    * @param path - 状态路径，如 'player.currentTime'
    * @returns 该路径的 Signal（惰性创建，与 get/set 保持一致）
@@ -189,7 +189,7 @@ function setValue(
       } else {
         if (isDev()) {
           console.warn(
-            `[HiliFramework/state] 路径 "${path}" 的中间节点 "${key}" 不是对象（当前值: ${String(next)}），将被覆盖为对象`,
+            `[Lumina/state] Intermediate node "${key}" on path "${path}" is not an object (current value: ${String(next)}), will be overwritten with an object`,
           );
         }
         const newObj: Record<string, unknown> = {};
@@ -411,12 +411,82 @@ export function createTypedStateManager<TMap>(
 }
 
 /**
- * 组件内使用状态的工具函数
- * 订阅 TypedStateManager 的指定路径，状态变化时自动调用 updater 更新 DOM
+ * 在组件内获取响应式状态 Signal（Pinia 风格 API）
+ *
+ * 返回 Signal<T>，调用方读取 `.value` 时自动建立响应式依赖：
+ * - 在 onEffect 内读取 → 依赖变化时自动重跑 effect（精准更新 DOM）
+ * - 在 _reactiveText getter 内读取 → 依赖变化时自动更新文本节点
+ * - 在 computed 内读取 → 派生值自动更新
+ * - 配合编译期响应式追踪（vite-plugin-lumina-compile 自动包装 _reactiveText）
+ *
+ * 与 useState 的关系：
+ * - useReactiveState 返回 Signal，声明式响应式（推荐新代码使用）
+ * - useState 是 useReactiveState 的命令式包装，接收 updater 回调（向后兼容老代码）
+ *
+ * Signal 是惰性原语，自身不需要清理；真正的 effect 清理由 onEffect / _reactiveText
+ * 的调用方负责（onEffect 启动时把 dispose 收集到 _stateCleanups，destroy 时统一清理）。
+ * lifecycle 参数保留以备未来扩展（如开发环境记录使用位置）。
+ *
+ * @param state - 类型安全的状态管理器实例
+ * @param path - 状态路径，必须是 TMap 的 key
+ * @param lifecycle - 组件生命周期对象（保留参数以备扩展，当前 signal 自身无需清理）
+ * @returns 该路径的 Signal，类型为 TMap[K]
+ *
+ * @example
+ * // 在 defineComponent 中使用（声明式响应式）
+ * const MyComponent = defineComponent<{ state: TypedStateManager<PlayerStateMap> }>(
+ *   (props, lifecycle) => {
+ *     const volumeEl = h('span', { class: 'volume' });
+ *     const volumeSignal = useReactiveState(props.state, PlayerStateKeyEnum.VOLUME, lifecycle);
+ *
+ *     // onEffect 内读取 .value 自动追踪，volume 变化时自动重跑 effect
+ *     onEffect(lifecycle, () => {
+ *       volumeEl.el!.textContent = `${Math.round(volumeSignal.value * 100)}%`;
+ *     });
+ *
+ *     return volumeEl;
+ *   }
+ * );
+ *
+ * @example
+ * // 配合编译期响应式追踪（vite-plugin-lumina-compile 自动包装为 _reactiveText）
+ * const MyComponent = defineComponent<{ state: TypedStateManager<PlayerStateMap> }>(
+ *   (props, lifecycle) => {
+ *     const volumeSignal = useReactiveState(props.state, PlayerStateKeyEnum.VOLUME, lifecycle);
+ *     // h('span', {}, volumeSignal.value) 会被编译为
+ *     // h('span', {}, _reactiveText(() => volumeSignal.value))
+ *     // locale/signal 变化时自动更新文本节点，无需 onEffect
+ *     return h('span', {}, volumeSignal.value);
+ *   }
+ * );
+ */
+export function useReactiveState<TMap, K extends keyof TMap & string>(
+  state: TypedStateManager<TMap>,
+  path: K,
+  _lifecycle?: { _stateCleanups?: Array<() => void>; _effects?: Array<() => (() => void) | void> },
+): Signal<TMap[K]> {
+  // Signal 自身是惰性的，读取 .value 才建立依赖
+  // 真正的 effect 清理由 onEffect / _reactiveText 的调用方负责
+  // （onEffect 启动时把 dispose 收集到 _stateCleanups）
+  return state.signal(path);
+}
+
+/**
+ * 组件内使用状态的工具函数（useReactiveState 的命令式包装）
+ *
+ * 内部基于 useReactiveState 获取响应式 Signal，再通过 state.subscribe
+ * 订阅 signal.value 变化，状态变化时自动调用 updater 更新 DOM：
+ * - subscribe 内部基于 effect（自动追踪 sig.value，尊重 batch 批量提交）
+ * - silent set 时通过 silentPaths 抑制订阅回调（signal 值同步但监听器不触发）
+ * - === 短路：值未变化不触发通知
+ * - 异常隔离：单个 updater 崩溃不影响其他
  *
  * 清理机制：使用 lifecycle._stateCleanups 数组收集所有取消订阅函数
  * 避免多次调用 useState 时互相覆盖 onDestroyed 导致清理丢失
  * destroy 时通过 invokeLifecycle → processLifecycleForNode 统一调用
+ *
+ * 推荐新代码使用 useReactiveState + onEffect / _reactiveText 实现声明式响应式，
+ * useState 仅为向后兼容老代码保留。
  *
  * @param state - 类型安全的状态管理器实例
  * @param path - 状态路径，必须是 TMap 的 key
@@ -434,12 +504,12 @@ export function createTypedStateManager<TMap>(
  *     const volume = useState(
  *       props.state,
  *       PlayerStateKeyEnum.VOLUME,
- *       (newVol) => { volumeEl.el.textContent = `${Math.round(newVol * 100)}%`; },
+ *       (newVol) => { volumeEl.el!.textContent = `${Math.round(newVol * 100)}%`; },
  *       lifecycle
  *     );
  *
  *     // 初始渲染
- *     volumeEl.el.textContent = `${Math.round(volume * 100)}%`;
+ *     volumeEl.el!.textContent = `${Math.round(volume ?? 0 * 100)}%`;
  *     return volumeEl;
  *   }
  * );
@@ -448,20 +518,40 @@ export function useState<TMap, K extends keyof TMap & string>(
   state: TypedStateManager<TMap>,
   path: K,
   updater: (newVal: TMap[K], oldVal: TMap[K]) => void,
-  lifecycle: { onDestroyed?: () => void; _stateCleanups?: Array<() => void> },
+  lifecycle: {
+    onDestroyed?: () => void;
+    _stateCleanups?: Array<() => void>;
+    _stateSubscriptions?: Array<() => () => void>;
+    _effects?: Array<() => (() => void) | void>;
+  },
 ): TMap[K] | undefined {
-  const currentValue = state.get(path);
-  const unsub = state.subscribe(path, updater);
+  // ★ 基于 useReactiveState 获取响应式 Signal（与 Pinia 风格 API 共用同一响应式原语）
+  // useState 是 useReactiveState 的命令式包装：返回当前值 + updater 回调订阅
+  useReactiveState(state, path, lifecycle);
 
   /**
-   * 收集取消订阅函数到 _stateCleanups 数组
-   * 避免直接替换 onDestroyed 导致多次 useState 时清理函数丢失
-   * destroy 时由 mount.ts 的 processLifecycleForNode 统一调用
+   * ★ 订阅改为「可重放启动器」模式（与 onEffect 的 _effects 同构）：
+   * 组件 setup 只执行一次，若在此直接订阅，控制流（Show/Switch）
+   * 卸载 → destroy 退订 → 重挂（setup 不重跑）后订阅将永久丢失；
+   * 收集启动器交由 mount.ts 在 onMounted 时建立订阅，
+   * 重挂时先退旧再重建，保证任意时刻恰好一份活跃订阅。
    */
-  if (lifecycle._stateCleanups === undefined) {
-    lifecycle._stateCleanups = [];
-  }
-  lifecycle._stateCleanups.push(unsub);
+  const starters = (lifecycle._stateSubscriptions ??= []);
+  starters.push((): (() => void) => {
+    // state.subscribe 内部基于 effect 订阅 sig.value（自动追踪 + batch + silent + 异常隔离）
+    const unsub = state.subscribe(path, updater);
+    /**
+     * 订阅建立后立即以当前值补一次同步：
+     * subscribe 的「跳过初始」语义以订阅时刻为基准（prev = 订阅时的当前值），
+     * 晚订阅 / 控制流重挂场景借此捕获挂载窗口期内已发生的状态变化，
+     * 避免组件停留在 setup 期的旧快照。
+     */
+    const current = state.get(path);
+    if (current !== undefined) {
+      updater(current, current);
+    }
+    return unsub;
+  });
 
-  return currentValue;
+  return state.get(path);
 }

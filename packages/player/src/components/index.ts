@@ -54,11 +54,6 @@ export { VideoInfo } from './VideoInfo';
 /** 视频统计信息组件 Props 及信息项类型 */
 export type { VideoInfoProps, VideoInfoItem } from './VideoInfo';
 
-/** 进度关闭按钮组件 */
-export { ProgressClose } from './ProgressClose';
-/** 进度关闭按钮组件 Props 类型 */
-export type { ProgressCloseProps } from './ProgressClose';
-
 /** 对话框组件 */
 export { Dialog } from './Dialog';
 /** 对话框组件 Props 及弹幕提示数据类型 */
@@ -106,8 +101,8 @@ export type { ContextProps, ContextMenuItem, ContextOffset } from './Context';
 
 /** 弹幕行组件 */
 export { RowDm } from './RowDm';
-/** 弹幕行组件 Props、弹幕项、弹幕模式、弹幕信息及弹幕提示类型 */
-export type { RowDmProps, DanmakuItem, DanmakuMode, DanmakuInfo, DmTip } from './RowDm';
+/** 弹幕行组件 Props 类型 */
+export type { RowDmProps } from './RowDm';
 
 /** 控制栏组件 */
 export { Controls } from './Controls';

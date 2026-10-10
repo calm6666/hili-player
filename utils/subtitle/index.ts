@@ -380,7 +380,7 @@ export function parseSubtitle(content: string): ParsedSubtitle {
       try {
         return parseSRT(content);
       } catch (e) {
-        logger.warn('字幕解析失败:', e);
+        logger.warn('Subtitle parse failed:', e);
         return {
           format: SubtitleFormat.UNKNOWN,
           items: [],

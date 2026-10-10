@@ -2,25 +2,27 @@
  * ============================================
  * 播放倍速选择菜单组件 (PlaybackRateMenu)
  * ============================================
- * 播放倍速选择下拉菜单，支持倍速列表渲染、
- * 当前倍率高亮、菜单悬停动画回调
- *
- * 本次修正：
- * 1. 选中态类名由 `active` 改为 `player-state-active`，与 scss 选择器
- *    `.player-ctrl-playbackrate-menu-item.player-state-active` 对齐
- *    （此前类名不匹配，选中项高亮实际不生效）；
- * 2. 新增对运行时状态 `player.playbackRate` 的订阅：倍速被外部改变
- *    （播放器 API / 快捷键 / 配置恢复）时，结果文本与高亮会同步更新
- *    （此前只在挂载时读取一次）；
- * 3. 挂载时通过 `playbackRateMenuMounted` 回传 `setRate`，父层可主动同步。
+ * 声明式响应式版本：
+ * - 当前倍速由 currentRateSignal 驱动（结果文案 _reactiveText / 项高亮 class）
+ * - 面板展开态由 shownSignal 驱动根节点 state-show 类（__reactiveAttrs），
+ *   hover 定时器（rafTimeout）仅负责延迟时序并写信号，不直接操作 DOM
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
-import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
-import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
-import type { AnimationFrameID } from '@/utils/rafTimeout';
-import type { VNode } from '@/types';
-import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
+import {
+  h,
+  defineComponent,
+  useReactiveState,
+  useContext,
+  t,
+  signal,
+  onEffect,
+  For,
+} from "@/core";
+import type { VNode } from "@/types";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
+import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
+import type { AnimationFrameID } from "@/utils/rafTimeout";
+import { PlayerStateKeyEnum, StateContext } from "@/store/runtimeState";
 
 const MENU_SHOW_DELAY = 120;
 const MENU_HIDE_DELAY = 220;
@@ -43,7 +45,10 @@ export type PlaybackRateMenuEvents = {
  * PlaybackRateMenu 组件 - 使用 defineComponent 创建独立组件
  * 渲染播放倍速选择菜单，支持当前倍速高亮
  */
-export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackRateMenuEvents>((props, lifecycle) => {
+export const PlaybackRateMenu = defineComponent<
+  PlaybackRateMenuProps,
+  PlaybackRateMenuEvents
+>((props, lifecycle) => {
   /** 初始倍速与可选档位 */
   const { rate = 1, rates = [2, 1.5, 1.25, 1, 0.75, 0.5] } = props;
 
@@ -51,17 +56,8 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   const state = useContext(StateContext);
 
   // ============================================
-  // DOM 引用
+  // 面板展开态（hover 定时器时序 + signal 驱动类名）
   // ============================================
-
-  /** 倍速显示文本元素引用 */
-  const backrateResultTextRef = useTemplateRef<HTMLDivElement>(lifecycle, 'backrateResultTextRef');
-
-  /** 倍速下拉菜单列表元素引用 */
-  const backrateMenuRef = useTemplateRef<HTMLUListElement>(lifecycle, 'backrateMenuRef');
-
-  /** 倍速按钮根元素引用（面板显隐的类名挂载点） */
-  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'backrateRootRef');
 
   /** 展开定时器 */
   let showTimer: AnimationFrameID | null = null;
@@ -70,11 +66,19 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   let hideTimer: AnimationFrameID | null = null;
 
   /**
-   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * 响应式信号：面板展开态
+   * 驱动根节点 state-show 类（编译器包装为 __reactiveAttrs，
+   * 变化时经 normalizeClass 精准更新类名），
+   * 替代旧的 rootRef.classList.toggle 命令式写法
+   */
+  const shownSignal = signal<boolean>(false);
+
+  /**
+   * 落地面板展开态：写信号即可，DOM 类名由响应式系统自动同步
    * @param show - 是否展开
    */
   const setShown = (show: boolean): void => {
-    rootRef.value?.classList.toggle('state-show', show);
+    shownSignal.value = show;
   };
 
   /** 取消两个方向的排队任务 */
@@ -86,14 +90,34 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   };
 
   // ============================================
-  // 状态
+  // 响应式信号
   // ============================================
 
-  /** 倍速菜单项 DOM 元素列表，用于切换高亮状态 */
-  const menuItems: HTMLLIElement[] = [];
+  /**
+   * 响应式信号：当前倍速
+   * 替代旧的 let currentRate = rate 可变变量
+   * signal 变化时自动驱动 _reactiveText 更新结果文案 + onEffect 更新高亮
+   */
+  const currentRateSignal = signal<number>(rate);
 
-  /** 当前倍速（可变：订阅到状态变化后更新） */
-  let currentRate = rate;
+  /**
+   * 响应式信号：运行时倍速状态（外部改变时同步）
+   * useReactiveState 返回 Signal，读取 .value 自动建立依赖
+   * 替代旧的 useState(state, PLAYBACK_RATE, (next) => setRate(next), lifecycle)
+   */
+  const playbackRateStateSignal = state
+    ? useReactiveState(state, PlayerStateKeyEnum.PLAYBACK_RATE, lifecycle)
+    : signal<unknown>(undefined);
+
+  /**
+   * 响应式同步：运行时倍速变化 → 更新本地倍速信号
+   * onEffect 内读取 playbackRateStateSignal.value 自动追踪
+   * 替代旧的 useState updater 回调
+   */
+  onEffect(lifecycle, () => {
+    const next = playbackRateStateSignal.value;
+    if (typeof next === "number") currentRateSignal.value = next;
+  });
 
   // ============================================
   // 渲染辅助函数
@@ -105,37 +129,15 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
    * @returns 格式化后的显示文本
    */
   const formatRateLabel = (rateValue: number): string => {
-    return rateValue === 1 ? '1.0X' : `${rateValue}X`;
+    return rateValue === 1 ? "1.0X" : `${rateValue}X`;
   };
 
   /**
-   * 刷新结果文本：1 倍速显示「倍速」，其它显示具体档位
-   */
-  const applyResultText = (): void => {
-    if (backrateResultTextRef.value) {
-      backrateResultTextRef.value.innerText =
-        currentRate === 1 ? '倍速' : formatRateLabel(currentRate);
-    }
-  };
-
-  /**
-   * 同步选中态（框架无 diff，必须手动互斥）
-   */
-  const updateActive = (): void => {
-    menuItems.forEach((item) => {
-      const value = Number(item.getAttribute('data-value'));
-      item.classList.toggle('player-state-active', value === currentRate);
-    });
-  };
-
-  /**
-   * 统一的倍速更新入口：更新当前值并刷新文本与高亮
+   * 统一的倍速更新入口：更新信号（响应式系统自动刷新文本与高亮）
    * @param next - 新的倍速值
    */
   const setRate = (next: number): void => {
-    currentRate = next;
-    applyResultText();
-    updateActive();
+    currentRateSignal.value = next;
   };
 
   // ============================================
@@ -169,70 +171,39 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   };
 
   /**
-   * 渲染单个倍速菜单项
+   * 渲染单个倍速菜单项（For 组件的 render 回调）
+   * 每个 key 只调用一次，选中态由响应式 class（currentRateSignal.value 自动驱动）自动同步
    * @param rateValue - 倍速值
    * @returns 菜单项 VNode
    */
-  const renderRateItem = (rateValue: number): VNode => {
-    /** 是否为当前选中的倍速 */
-    const isActive = rateValue === currentRate;
-    return h('li', {
-      class: [
-        'player-ctrl-playbackrate-menu-item',
-        isActive ? 'player-state-active' : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-      'data-value': rateValue.toString(),
-      onClick: () => {
-        // 先本地反馈，随后由运行时状态订阅统一校正
-        setRate(rateValue);
-        lifecycle.emit?.('rateChange', rateValue);
+  const renderRateItem = (rateValue: number): VNode =>
+    h(
+      "li",
+      {
+        class: [
+          "nova-player-ctrl-playbackrate-menu-item",
+          { "nova-player-state-active": currentRateSignal.value === rateValue },
+        ],
+        "data-value": rateValue.toString(),
+        onClick: () => {
+          // 先本地反馈，随后由运行时状态订阅统一校正
+          setRate(rateValue);
+          lifecycle.emit?.("rateChange", rateValue);
+        },
       },
-    }, formatRateLabel(rateValue));
-  };
-
-  // ============================================
-  // 状态监听
-  // ============================================
-
-  // 框架无响应式：倍速被外部改变时不会自动更新 DOM，必须在回调里手动刷新
-  if (state) {
-    useState(
-      state,
-      PlayerStateKeyEnum.PLAYBACK_RATE,
-      (next) => {
-        setRate(next);
-      },
-      lifecycle,
+      formatRateLabel(rateValue),
     );
-  }
 
   // ============================================
   // 生命周期钩子
   // ============================================
 
   /**
-   * 组件挂载后的回调，收集菜单项 DOM 元素并同步初始倍速显示
+   * 组件挂载后：回传控制方法，供父层主动同步
+   * 文本与高亮已由 _reactiveText / onEffect 响应式管理，无需手动初始化
    */
   lifecycle.onMounted = (): void => {
-    // 收集菜单项 DOM 元素
-    if (backrateMenuRef.value) {
-      const items = backrateMenuRef.value.querySelectorAll('.player-ctrl-playbackrate-menu-item');
-      menuItems.length = 0;
-      items.forEach((item) => {
-        if (item instanceof HTMLLIElement) {
-          menuItems.push(item);
-        }
-      });
-    }
-
-    // 同步初始倍速的文本与高亮
-    applyResultText();
-    updateActive();
-
-    // 回传控制方法，供父层主动同步
-    lifecycle.emit?.('playbackRateMenuMounted', { setRate });
+    lifecycle.emit?.("playbackRateMenuMounted", { setRate });
   };
 
   useComponentUnmount(lifecycle, clearTimers);
@@ -241,21 +212,44 @@ export const PlaybackRateMenu = defineComponent<PlaybackRateMenuProps, PlaybackR
   // 主渲染函数
   // ============================================
 
-  return h('div', {
-    class: 'player-ctrl-btn player-ctrl-playbackrate',
-    role: 'button',
-    'aria-label': '倍速',
-    ref: 'backrateRootRef',
-    onMouseEnter: handleMouseEnter,
-    onMouseLeave: handleMouseLeave,
-  },
-    // 当前倍速显示
-    h('div', { class: 'player-ctrl-playbackrate-result', ref: 'backrateResultTextRef' }, '倍速'),
-    // 倍速下拉菜单
-    h('div', { class: 'player-ctrl-playbackrate-menu-wrap' },
-      h('ul', { class: 'player-ctrl-playbackrate-menu', ref: 'backrateMenuRef' },
-        ...rates.map((r) => renderRateItem(r))
-      )
-    )
+  return h(
+    "div",
+    {
+      // 展开态类名由 shownSignal 响应式驱动（__reactiveAttrs + normalizeClass）
+      class: [
+        "nova-player-ctrl-btn",
+        "nova-player-ctrl-playbackrate",
+        { "state-show": shownSignal.value },
+      ],
+      role: "button",
+      "aria-label": t("player.ui.settings.speed"),
+      onMouseEnter: handleMouseEnter,
+      onMouseLeave: handleMouseLeave,
+    },
+    // 当前倍速显示（编译器自动检测动态表达式并包装为 _reactiveText：
+    // currentRateSignal 变化时自动更新 textContent，无需手动 el.innerText = ...）
+    h(
+      "div",
+      { class: "nova-player-ctrl-playbackrate-result" },
+      currentRateSignal.value === 1
+        ? t("player.ui.settings.speed")
+        : formatRateLabel(currentRateSignal.value),
+    ),
+    // 倍速下拉菜单（For 组件：key-based 精准更新，每个倍速值只渲染一次）
+    h(
+      "div",
+      { class: "nova-player-ctrl-playbackrate-menu-wrap" },
+      h(
+        "ul",
+        { class: "nova-player-ctrl-playbackrate-menu" },
+        h(For, {
+          each: rates,
+          key: (_item: unknown, _index: number) => String(_item),
+          // For 回调入参为 unknown：typeof 收窄（替代 as 断言）
+          render: (item: unknown, _index: number): VNode =>
+            typeof item === "number" ? renderRateItem(item) : h("li", {}),
+        }),
+      ),
+    ),
   );
 });

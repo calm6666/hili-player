@@ -16,7 +16,7 @@
  * - 首帧时间追踪
  *
  * 使用方式：
- * import { createDashPlugin } from '@hili-player/plugins';
+ * import { createDashPlugin } from '@lumina/plugins';
  * const player = new VideoPlayer({
  *   plugins: [createDashPlugin({ autoplay: true })]
  * });
@@ -26,16 +26,16 @@ import { MediaPlayer } from 'dashjs';
 import type { MediaPlayerClass, ErrorEvent, Representation } from 'dashjs';
 import type { MediaManifest } from '../vendor/types';
 import { manifestToDash } from '../vendor/manifest-to-dash';
-import type { VideoPlayer } from '@hili-player/player';
+import type { VideoPlayer } from '@lumina/nova';
 import { StreamPluginTypeEnum, StreamPluginEventEnum, StreamFormatEnum, AUTO_QUALITY_ID, resolveVideoCodec } from '@/types/streamPlugin';
-import { detectManifestProtocol } from '@/hili-player/utils/media/manifestProtocol';
+import { detectManifestProtocol } from '@/nova/utils/media/manifestProtocol';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel, MediaManifestSource, StreamQualityChangePayload } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
 import { PlayerEventEnum } from '@/core/events';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { createStreamPluginEventBus } from '../stream/streamEventBus';
 import type { StreamPluginEventBus } from '../stream/streamEventBus';
-import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
+import { BrowserCapabilityDetector } from '@/nova/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
 const logger = createLogger('DashPlugin');

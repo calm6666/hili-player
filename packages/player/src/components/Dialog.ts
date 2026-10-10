@@ -5,10 +5,10 @@
  * 支持弹幕详情提示弹窗 (DmTip) 和通用对话框
  */
 
-import { h, defineComponent, useTemplateRef, materialize } from '@/core';
-import { isBrowser } from '@/utils';
-import { Close } from '@/hili-player/components/icons';
-import type { ComponentLifecycle, VNode } from '@/types';
+import { h, defineComponent, useTemplateRef, materialize } from "@/core";
+import { isBrowser } from "@/utils";
+import { Close } from "@/nova/components/icons";
+import type { ComponentLifecycle, VNode } from "@/types";
 
 /**
  * 安全转义 CSS 颜色值字符串
@@ -61,139 +61,147 @@ export interface DialogProps {
  * 对话框组件
  * 提供弹幕详情提示弹窗的创建与销毁，以及通用对话框容器
  */
-export const Dialog = defineComponent<DialogProps>((props, lifecycle: ComponentLifecycle) => {
-  // ============================================
-  // DOM 引用
-  // ============================================
+export const Dialog = defineComponent<DialogProps>(
+  (props, lifecycle: ComponentLifecycle) => {
+    // ============================================
+    // DOM 引用
+    // ============================================
 
-  /** 对话框外层容器 DOM 引用 */
-  const dialogWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'dialogWrapRef');
-
-  /** 当前显示的弹幕提示弹窗 DOM 元素 */
-  let dmTipElement: HTMLDivElement | null = null;
-
-  // ============================================
-  // 弹幕提示方法
-  // ============================================
-
-  /**
-   * 弹幕提示里的一行「标签 + 值」
-   * @param label - 标签文本
-   * @param value - 值文本
-   * @param color - 值的颜色（可选）
-   * @returns 行虚拟节点
-   */
-  const tipRow = (label: string, value: string, color?: string): VNode =>
-    h(
-      'div',
-      { class: 'player-dm-tip-row' },
-      h('span', { class: 'player-dm-tip-label' }, label),
-      h(
-        'span',
-        color
-          ? { class: 'player-dm-tip-value', style: { color: sanitizeColor(color) } }
-          : { class: 'player-dm-tip-value' },
-        value,
-      ),
+    /** 对话框外层容器 DOM 引用 */
+    const dialogWrapRef = useTemplateRef<HTMLDivElement>(
+      lifecycle,
+      "dialogWrapRef",
     );
 
-  /**
-   * 显示弹幕详情提示弹窗
-   * @param dmTip - 弹幕提示数据
-   * @param container - 弹幕元素所在的容器，提示弹窗将挂载到此容器内
-   */
-  const showDmTip = (dmTip: DmTipData, container: HTMLElement): void => {
-    if (!isBrowser()) return;
-    // 先移除已有的提示
-    hideDmTip();
+    /** 当前显示的弹幕提示弹窗 DOM 元素 */
+    let dmTipElement: HTMLDivElement | null = null;
 
-    if (!container) return;
+    // ============================================
+    // 弹幕提示方法
+    // ============================================
 
-    /** 时间点对应的分钟数 */
-    const minutes = Math.floor(dmTip.timePoint / 60);
-    /** 时间点对应的秒数 */
-    const seconds = Math.floor(dmTip.timePoint % 60);
-    /** 格式化后的时间字符串，格式为 "mm:ss" */
-    const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-    /** 弹幕提示弹窗根元素（关闭按钮同样由虚拟节点挂载，不再手工绑定监听） */
-    const tipEl = materialize(
+    /**
+     * 弹幕提示里的一行「标签 + 值」
+     * @param label - 标签文本
+     * @param value - 值文本
+     * @param color - 值的颜色（可选）
+     * @returns 行虚拟节点
+     */
+    const tipRow = (label: string, value: string, color?: string): VNode =>
       h(
-        'div',
-        { class: 'player-dm-tip' },
-        tipRow('内容：', dmTip.content),
-        tipRow('时间：', timeStr),
-        ...(dmTip.user ? [tipRow('用户：', dmTip.user)] : []),
-        ...(dmTip.color ? [tipRow('颜色：', dmTip.color, dmTip.color)] : []),
+        "div",
+        { class: "nova-player-dm-tip-row" },
+        h("span", { class: "nova-player-dm-tip-label" }, label),
         h(
-          'div',
-          {
-            class: 'player-dm-tip-close',
-            onClick: () => {
-              hideDmTip();
-              props.onClose?.();
-            },
-          },
-          Close(),
+          "span",
+          color
+            ? {
+                class: "nova-player-dm-tip-value",
+                style: { color: sanitizeColor(color) },
+              }
+            : { class: "nova-player-dm-tip-value" },
+          value,
         ),
-      ),
-    ) as HTMLDivElement;
+      );
 
-    container.appendChild(tipEl);
-    dmTipElement = tipEl;
-  };
+    /**
+     * 显示弹幕详情提示弹窗
+     * @param dmTip - 弹幕提示数据
+     * @param container - 弹幕元素所在的容器，提示弹窗将挂载到此容器内
+     */
+    const showDmTip = (dmTip: DmTipData, container: HTMLElement): void => {
+      if (!isBrowser()) return;
+      // 先移除已有的提示
+      hideDmTip();
 
-  /**
-   * 隐藏弹幕详情提示弹窗
-   * @param element - 可选指定要移除的提示元素，不传则移除当前记录的提示元素
-   */
-  const hideDmTip = (element?: HTMLElement): void => {
-    /** 实际要移除的目标元素 */
-    const target = element ?? dmTipElement;
-    if (target && target.parentNode) {
-      target.parentNode.removeChild(target);
-    }
-    if (target === dmTipElement || !element) {
-      dmTipElement = null;
-    }
-  };
+      if (!container) return;
 
-  // ============================================
-  // 生命周期
-  // ============================================
+      /** 时间点对应的分钟数 */
+      const minutes = Math.floor(dmTip.timePoint / 60);
+      /** 时间点对应的秒数 */
+      const seconds = Math.floor(dmTip.timePoint % 60);
+      /** 格式化后的时间字符串，格式为 "mm:ss" */
+      const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
-  /** 组件挂载后对外暴露对话框容器和弹幕提示控制方法 */
-  lifecycle.onMounted = (): void => {
-    lifecycle.emit?.('dialogMounted', {
-      dialogWrap: dialogWrapRef.value,
-      showDmTip,
-      hideDmTip,
-    });
-  };
+      /** 弹幕提示弹窗根元素（关闭按钮同样由虚拟节点挂载，不再手工绑定监听） */
+      const tipEl = materialize(
+        h(
+          "div",
+          { class: "nova-player-dm-tip" },
+          tipRow("内容：", dmTip.content),
+          tipRow("时间：", timeStr),
+          ...(dmTip.user ? [tipRow("用户：", dmTip.user)] : []),
+          ...(dmTip.color ? [tipRow("颜色：", dmTip.color, dmTip.color)] : []),
+          h(
+            "div",
+            {
+              class: "nova-player-dm-tip-close",
+              onClick: () => {
+                hideDmTip();
+                props.onClose?.();
+              },
+            },
+            Close(),
+          ),
+        ),
+      ) as HTMLDivElement;
 
-  /** 组件销毁前清理弹幕提示和容器内的所有子节点 */
-  lifecycle.onBeforeDestroy = (): void => {
-    // 清理弹幕提示
-    hideDmTip();
-    // 清理对话框容器内所有子节点
-    if (dialogWrapRef.value) {
-      while (dialogWrapRef.value.firstChild) {
-        dialogWrapRef.value.removeChild(dialogWrapRef.value.firstChild);
+      container.appendChild(tipEl);
+      dmTipElement = tipEl;
+    };
+
+    /**
+     * 隐藏弹幕详情提示弹窗
+     * @param element - 可选指定要移除的提示元素，不传则移除当前记录的提示元素
+     */
+    const hideDmTip = (element?: HTMLElement): void => {
+      /** 实际要移除的目标元素 */
+      const target = element ?? dmTipElement;
+      if (target && target.parentNode) {
+        target.parentNode.removeChild(target);
       }
-    }
-  };
+      if (target === dmTipElement || !element) {
+        dmTipElement = null;
+      }
+    };
 
-  // ============================================
-  // 渲染输出
-  // ============================================
+    // ============================================
+    // 生命周期
+    // ============================================
 
-  return h('div', {
-    class: 'player-dialog-wrap',
-    ref: 'dialogWrapRef',
-    style: {
-      display: props.visible ? '' : 'none',
-    },
-  });
-});
+    /** 组件挂载后对外暴露对话框容器和弹幕提示控制方法 */
+    lifecycle.onMounted = (): void => {
+      lifecycle.emit?.("dialogMounted", {
+        dialogWrap: dialogWrapRef.value,
+        showDmTip,
+        hideDmTip,
+      });
+    };
+
+    /** 组件销毁前清理弹幕提示和容器内的所有子节点 */
+    lifecycle.onBeforeDestroy = (): void => {
+      // 清理弹幕提示
+      hideDmTip();
+      // 清理对话框容器内所有子节点
+      if (dialogWrapRef.value) {
+        while (dialogWrapRef.value.firstChild) {
+          dialogWrapRef.value.removeChild(dialogWrapRef.value.firstChild);
+        }
+      }
+    };
+
+    // ============================================
+    // 渲染输出
+    // ============================================
+
+    return h("div", {
+      class: "nova-player-dialog-wrap",
+      ref: "dialogWrapRef",
+      style: {
+        display: props.visible ? "" : "none",
+      },
+    });
+  },
+);
 
 export default Dialog;

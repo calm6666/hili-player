@@ -2,9 +2,16 @@
  * ============================================
  * 滑块组件
  * ============================================
+ * 声明式响应式版本：
+ * - 滑块值由内部 valueSignal 驱动：进度条宽度为响应式 style 派生，
+ *   数值文本为显式 getter 协议（编译器自动包装为 _reactiveText）
+ * - 拖拽 / 点击写信号即可，preact signals 批量调度自动合并逐帧高频写，
+ *   删除旧的 updateProgressBar 逐次命令式 DOM 更新
+ * - progressRef 仅用于拖拽几何量测（getBoundingClientRect），
+ *   属命令式读取场景，保留 DOM 引用
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
+import { h, defineComponent, signal, useTemplateRef } from '@/core';
 import type { VNode, ComponentLifecycle } from '@/types';
 import { isBrowser } from '@/utils';
 
@@ -48,8 +55,12 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
   /** 步长，默认为 1 表示连续调整 */
   const step = props.step ?? 1;
 
-  /** 当前滑块值 */
-  let currentValue = props.value ?? 0;
+  /**
+   * 响应式信号：当前滑块值 (0-100)
+   * 驱动进度条宽度（响应式 style）与数值文本（_reactiveText），
+   * 替代旧的 currentValue 变量 + updateProgressBar 命令式 DOM 更新
+   */
+  const valueSignal = signal<number>(props.value ?? 0);
 
   /** 拖动开始时的 X 坐标 */
   let startX = 0;
@@ -57,38 +68,21 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
   /** 是否正在拖动 */
   let isDragging = false;
 
-  /** 进度条容器元素引用 */
+  /** 进度条容器元素引用（仅用于拖拽几何量测，属命令式读取场景） */
   const progressRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressRef');
-
-  /** 进度条元素引用 */
-  const progressBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressBarRef');
-
-  /** 进度值显示元素引用 */
-  const progressValRef = useTemplateRef<HTMLDivElement>(lifecycle, 'progressValRef');
 
   /**
    * 获取显示值，优先从标记点中查找名称，否则返回百分比字符串
+   * 读取 valueSignal.value，在 _reactiveText 中调用时自动建立依赖
    */
   const getDisplayValue = (): string => {
     if (props.marks) {
-      const mark = props.marks.find((m: SliderMark) => m.value === currentValue);
+      const mark = props.marks.find((m: SliderMark) => m.value === valueSignal.value);
       if (mark) {
         return mark.name;
       }
     }
-    return `${Math.floor(currentValue)}%`;
-  };
-
-  /**
-   * 更新进度条宽度和显示值
-   */
-  const updateProgressBar = (): void => {
-    if (progressBarRef.value) {
-      progressBarRef.value.style.width = `${Math.floor(currentValue)}%`;
-    }
-    if (progressValRef.value) {
-      progressValRef.value.textContent = getDisplayValue();
-    }
+    return `${Math.floor(valueSignal.value)}%`;
   };
 
   /**
@@ -96,7 +90,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
    */
   const calculateValueFromPosition = (clientX: number): number => {
     if (!progressRef.value) {
-      return currentValue;
+      return valueSignal.value;
     }
 
     /** 进度条容器的边界矩形 */
@@ -119,11 +113,11 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
 
   /**
    * 处理进度条容器点击，直接跳转到点击位置
+   * 响应式：写信号即可，进度条宽度 / 数值文本由响应式系统自动同步
    */
   const handleProgressClick = (event: MouseEvent): void => {
-    currentValue = calculateValueFromPosition(event.clientX);
-    updateProgressBar();
-    props.onChange?.(currentValue);
+    valueSignal.value = calculateValueFromPosition(event.clientX);
+    props.onChange?.(valueSignal.value);
   };
 
   /**
@@ -145,6 +139,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
 
   /**
    * 处理鼠标移动，实时更新滑块位置
+   * 响应式：写信号即可（preact signals 批量调度自动合并逐帧高频写）
    */
   const handleMouseMove = (event: MouseEvent): void => {
     if (!isDragging || !progressRef.value) {
@@ -152,7 +147,7 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
     }
 
     if (step !== 1) {
-      currentValue = calculateValueFromPosition(event.clientX);
+      valueSignal.value = calculateValueFromPosition(event.clientX);
     } else {
       /** 进度条容器的边界矩形 */
       const rect = progressRef.value.getBoundingClientRect();
@@ -160,12 +155,11 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
       const deltaX = event.clientX - startX;
       /** 偏移量对应的百分比变化 */
       const deltaPercentage = (deltaX / rect.width) * 100;
-      currentValue = Math.min(Math.max(0, currentValue + deltaPercentage), 100);
+      valueSignal.value = Math.min(Math.max(0, valueSignal.value + deltaPercentage), 100);
       startX = event.clientX;
     }
 
-    updateProgressBar();
-    props.onChange?.(currentValue);
+    props.onChange?.(valueSignal.value);
   };
 
   /**
@@ -185,18 +179,17 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
   // ============================================
 
   /**
-   * 设置当前值并更新进度条
+   * 设置当前值（写信号即可，进度条宽度 / 数值文本由响应式系统自动同步）
    */
   const setValue = (value: number): void => {
-    currentValue = Math.min(Math.max(0, value), 100);
-    updateProgressBar();
+    valueSignal.value = Math.min(Math.max(0, value), 100);
   };
 
   /**
    * 获取当前值
    */
   const getValue = (): number => {
-    return currentValue;
+    return valueSignal.value;
   };
 
   // ============================================
@@ -218,8 +211,6 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
     document.removeEventListener('mouseup', handleMouseUp);
     isDragging = false;
   };
-
-
 
   /**
    * 渲染标记点
@@ -252,33 +243,38 @@ export const Slider = defineComponent<SliderProps>((props, lifecycle: ComponentL
       style: { width: typeof width === 'number' ? `${width}px` : width },
     },
     h(
-        'div',
-        {
-          class: 'ui-progress-wrap',
-          ref: 'progressRef',
-          onClick: handleProgressClick,
-        },
-        h(
-          'div',
-          {
-            class: 'ui-progress-bar',
-            ref: 'progressBarRef',
-          },
-          h('span', {
-            class: 'ui-progress-dot',
-            onMouseDown: handleDotMouseDown,
-          })
-        ),
-        renderMarks()
-      ),
+      'div',
+      {
+        class: 'ui-progress-wrap',
+        ref: 'progressRef',
+        onClick: handleProgressClick,
+      },
       h(
         'div',
         {
-          class: 'ui-progress-val',
-          style: { width: '60px' },
-          ref: 'progressValRef',
+          class: 'ui-progress-bar',
+          // 进度条宽度由 valueSignal 响应式驱动（__reactiveAttrs 响应式 style），
+          // 替代旧的 progressBarRef.style.width 命令式更新
+          style: { width: `${Math.floor(valueSignal.value)}%` },
         },
-        getDisplayValue()
-      )
+        h('span', {
+          class: 'ui-progress-dot',
+          onMouseDown: handleDotMouseDown,
+        })
+      ),
+      renderMarks()
+    ),
+    h(
+      'div',
+      {
+        class: 'ui-progress-val',
+        style: { width: '60px' },
+      },
+      // 显式 getter 协议：h() 子节点位置写零参箭头函数，
+      // 编译器自动包装为 _reactiveText（运行时 flattenInto 兜底），
+      // valueSignal 变化时精准更新 Text 节点，
+      // 替代旧的 progressValRef.textContent 命令式更新
+      () => getDisplayValue()
+    )
   );
 });

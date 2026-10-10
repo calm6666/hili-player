@@ -16,15 +16,15 @@
  *   return h('input', { ref: 'input' });
  */
 
-import { signal } from "@preact/signals-core";
-import type { Signal } from "@preact/signals-core";
+import { signal } from "./signalsCore";
+import type { Signal } from "./signalsCore";
 
 /** 判断是否为旧版对象 ref（{ current }） */
 export function isRefObject(value: unknown): value is { current: unknown } {
   return typeof value === "object" && value !== null && "current" in value;
 }
 
-/** 判断是否为响应式 Signal（@preact/signals-core） */
+/** 判断是否为响应式 Signal（自研 signalsCore） */
 export function isSignalRef(value: unknown): value is Signal<unknown> {
   return (
     typeof value === "object" &&

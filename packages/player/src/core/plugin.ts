@@ -6,7 +6,7 @@
  * 包括插件接口、状态管理器、事件总线、钩子系统等
  */
 
-import type { VideoPlayer } from "@/hili-player/index";
+import type { VideoPlayer } from "@/nova/index";
 import type { TypedStateManager, PlayerEventBus } from "@/core";
 export type { PlayerEventBus };
 

@@ -7,8 +7,7 @@
 
 import { h, defineComponent } from "@/core";
 import { ProgressBar, type ProgressBarApi } from "./ProgressBar";
-import type { ProgressSegment } from "@/types";
-import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
+import type { ProgressPreviewProvider, ProgressSegment } from "@/types";
 
 /**
  * TopControls 组件 Props 接口
@@ -18,8 +17,8 @@ export interface TopControlsProps {
   duration?: number;
   /** 进度条分段信息 */
   progressSegments?: ProgressSegment[];
-  /** 预览数据提供者（雪碧图或逐帧，透传给 ProgressBar） */
-  getPreviewFrames?: () => ProgressPreviewSource | string[] | null;
+  /** 预览图提供者（progress.previewProvider 配置注入，透传给 ProgressBar） */
+  previewProvider?: ProgressPreviewProvider;
 }
 
 export type TopControlsEvents = {
@@ -31,33 +30,32 @@ export type TopControlsEvents = {
   progressBarMounted: ProgressBarApi;
 };
 
-export const TopControls = defineComponent<TopControlsProps, TopControlsEvents>((props, lifecycle) => {
-  const {
-    duration = 0,
-    progressSegments,
-    getPreviewFrames,
-  } = props;
-   /**
-   * 组件挂载后，通知上层组件
-   */
-  lifecycle.onMounted = (): void => {
-    lifecycle.emit?.('topControlsMounted');
-  };
-  // ============================================
-  // 主渲染函数
-  // ============================================
-  return h(
-    "div",
-    { class: "player-control-top" },
-    h(ProgressBar, {
-      duration,
-      progressSegments,
-      getPreviewSource: getPreviewFrames,
-      onSeek: (time) => lifecycle.emit?.('seek', time),
-      onSeekStart: () => lifecycle.emit?.('seekStart'),
-      onSeekEnd: () => lifecycle.emit?.('seekEnd'),
-      // 进度条挂载后拿到其更新 API，继续向上层（Controls → PlayerDocker）回传
-      onProgressBarMounted: (api) => lifecycle.emit?.('progressBarMounted', api),
-    }),
-  );
-});
+export const TopControls = defineComponent<TopControlsProps, TopControlsEvents>(
+  (props, lifecycle) => {
+    const { duration = 0, progressSegments, previewProvider } = props;
+    /**
+     * 组件挂载后，通知上层组件
+     */
+    lifecycle.onMounted = (): void => {
+      lifecycle.emit?.("topControlsMounted");
+    };
+    // ============================================
+    // 主渲染函数
+    // ============================================
+    return h(
+      "div",
+      { class: "nova-player-control-top" },
+      h(ProgressBar, {
+        duration,
+        progressSegments,
+        previewProvider,
+        onSeek: (time) => lifecycle.emit?.("seek", time),
+        onSeekStart: () => lifecycle.emit?.("seekStart"),
+        onSeekEnd: () => lifecycle.emit?.("seekEnd"),
+        // 进度条挂载后拿到其更新 API，继续向上层（Controls → PlayerDocker）回传
+        onProgressBarMounted: (api) =>
+          lifecycle.emit?.("progressBarMounted", api),
+      }),
+    );
+  },
+);

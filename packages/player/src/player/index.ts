@@ -4,13 +4,13 @@
  * ============================================
  */
 
-export { VideoPlayer, getPlayerInstance } from './VideoPlayer';
+export { VideoPlayer, getPlayerInstance } from "./VideoPlayer";
 
-import { VideoPlayer } from './VideoPlayer';
-import type { PlayerConfig } from '@/types';
-import { isServer } from '@/utils';
+import { VideoPlayer } from "./VideoPlayer";
+import type { PlayerConfig } from "@/types";
+import { isServer } from "@/utils";
 
-export { renderToString } from '@/core';
+export { renderToString } from "@/core";
 
 /**
  * 创建播放器实例
@@ -23,7 +23,7 @@ export { renderToString } from '@/core';
  *   src: 'https://example.com/video.mp4',
  *   autoplay: true,
  * });
- * player.mount(document.getElementById('player-container')!);
+ * player.mount(document.getElementById('nova-player-container')!);
  */
 export function createPlayer(config: PlayerConfig): VideoPlayer {
   return new VideoPlayer(config);
@@ -44,7 +44,7 @@ export function createPlayer(config: PlayerConfig): VideoPlayer {
  */
 export function mountPlayer(
   container: string | HTMLElement,
-  config: PlayerConfig
+  config: PlayerConfig,
 ): VideoPlayer {
   /**
    * 服务端环境只创建实例，不挂载
@@ -53,16 +53,19 @@ export function mountPlayer(
     return createPlayer(config);
   }
 
-  const el = typeof container === 'string'
-    ? document.querySelector(container)
-    : container;
+  const el =
+    typeof container === "string"
+      ? document.querySelector(container)
+      : container;
 
   if (!el) {
-    throw new Error(`Container not found: ${typeof container === 'string' ? container : 'HTMLElement'}`);
+    throw new Error(
+      `Container not found: ${typeof container === "string" ? container : "HTMLElement"}`,
+    );
   }
 
   if (!(el instanceof HTMLElement)) {
-    throw new Error('Container must be an HTMLElement');
+    throw new Error("Container must be an HTMLElement");
   }
 
   const player = createPlayer(config);

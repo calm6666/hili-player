@@ -1,16 +1,17 @@
 {
-  "name": "@hili-player/player",
+  "name": "@lumina/nova",
   "version": "1.0.0",
-  "description": "hili-player播放器",
+  "description": "Nova video player built on the Lumina framework",
   "type": "module",
-  "main": "./dist/index.es.js",
-  "module": "./dist/index.es.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.es.js",
+      "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./lumina": "./dist/lumina.js",
     "./style.css": "./dist/style.css"
   },
   "files": [
@@ -18,7 +19,7 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && vite build --mode lib-cdn",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"

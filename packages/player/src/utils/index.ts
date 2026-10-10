@@ -487,7 +487,7 @@ export function buildQuery(params: Record<string, string | number | boolean>): s
  * @param prefix - ID 前缀
  * @returns 唯一 ID 字符串
  */
-export function generateId(prefix = 'hili'): string {
+export function generateId(prefix = 'nova'): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
@@ -500,11 +500,12 @@ export function generateId(prefix = 'hili'): string {
  */
 export function deepMerge<T extends Record<string, unknown>>(
   target: T,
-  ...sources: Array<Partial<T>>
+  ...sources: Array<Record<string, unknown> | null | undefined>
 ): T {
   const result: Record<string, unknown> = { ...target };
 
   for (const source of sources) {
+    if (!source) continue;
     for (const key in source) {
       if (Object.prototype.hasOwnProperty.call(source, key)) {
         const value = source[key];

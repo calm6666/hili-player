@@ -2,21 +2,27 @@
  * ============================================
  * 底部影子进度条组件 (ShadowProgressArea)
  * ============================================
- *
- * 对应参考实现 `src/component/controls/index.ts` 的
- * `.player-shadow-progress-area > .player-shadow-progress-schedule-wrap`：
- * 控制栏隐藏时常驻在控制条下沿的细进度条（2px），与顶部进度条同源同几何，
- * 逐分段镜像缓冲条 / 已播放条；`.permanent` 时高度抬到 30px 并显示分段文本。
- *
- * 显隐时机不在这里判断：由祖先 `.player-control-entity[data-shadow-show]` 上的
- * CSS 规则控制（showControl → "false" 隐藏影子条，hideControl → "true" 显示）。
+ * 响应式迁移决策：整体保留命令式（B 类·性能关键路径）。
+ * - updateProgress/updateBuffer 按播放头/缓冲更新频率逐帧写 scaleX，
+ *   与 ProgressBar.ts 同属高频进度渲染（缓存 DOM + 精准 style 写入实现
+ *   零重渲染），signal 化只会引入逐次 effect 调度开销，无收益
+ * - 分段 DOM 由 createSegmentElement 命令式创建并在
+ *   segment.shadowElement 等字段建立数据↔DOM 交叉引用（与
+ *   ProgressBar.ts 同款契约），rebuildSegments 增量复用
+ * - permanent/duration 等状态与命令式分段 DOM 强耦合
+ *   （applyPermanent 直写 text.textContent），单独 signal 化会造成
+ *   半信号半命令式的混合状态，不如整组件统一命令式
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
-import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
-import type { ProgressSegment } from '@/types';
-import { computeSegmentBox, computeSegmentRatio, computeSegmentBufferRatio } from './ProgressBar';
-import { normalizeSegmentSpan } from '@/hili-player/utils/media/progressSegment';
+import { h, defineComponent, useTemplateRef } from "@/core";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
+import type { ProgressSegment } from "@/types";
+import {
+  computeSegmentBox,
+  computeSegmentRatio,
+  computeSegmentBufferRatio,
+} from "./ProgressBar";
+import { normalizeSegmentSpan } from "@/nova/utils/media/progressSegment";
 
 /** 影子进度条挂载后回传的控制 API */
 export interface ShadowProgressAreaApi {
@@ -62,12 +68,12 @@ export const ShadowProgressArea = defineComponent<
   let currentTime = 0;
 
   /** 影子进度条容器 */
-  const areaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'shadowAreaRef');
+  const areaRef = useTemplateRef<HTMLDivElement>(lifecycle, "shadowAreaRef");
 
   /** 影子进度条分段容器 */
   const wrapRef = useTemplateRef<HTMLDivElement>(
     lifecycle,
-    'shadowScheduleWrapRef',
+    "shadowScheduleWrapRef",
   );
 
   /**
@@ -75,7 +81,7 @@ export const ShadowProgressArea = defineComponent<
    * 多分段直接用各段自身区间；单分段 / 无分段时整条视作 [0, duration]
    */
   const resolveSegments = (): Array<
-    Pick<ProgressSegment, 'startTime' | 'endTime'>
+    Pick<ProgressSegment, "startTime" | "endTime">
   > => {
     if (segments.length > 1) return normalizeSegmentSpan(segments, duration);
     return [{ startTime: 0, endTime: duration }];
@@ -85,7 +91,9 @@ export const ShadowProgressArea = defineComponent<
   const getScheduleElements = (): HTMLDivElement[] => {
     if (!wrapRef.value) return [];
     return Array.from(
-      wrapRef.value.querySelectorAll<HTMLDivElement>('.player-progress-schedule'),
+      wrapRef.value.querySelectorAll<HTMLDivElement>(
+        ".nova-player-progress-schedule",
+      ),
     );
   };
 
@@ -131,7 +139,9 @@ export const ShadowProgressArea = defineComponent<
         playhead,
       );
       schedule
-        .querySelectorAll<HTMLDivElement>('.player-progress-schedule-buffer')
+        .querySelectorAll<HTMLDivElement>(
+          ".nova-player-progress-schedule-buffer",
+        )
         .forEach((el) => {
           el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
         });
@@ -183,22 +193,22 @@ export const ShadowProgressArea = defineComponent<
     index?: number,
     segment?: ProgressSegment,
   ): HTMLDivElement => {
-    const schedule = document.createElement('div');
+    const schedule = document.createElement("div");
     schedule.classList.add(
-      'player-progress-schedule',
-      ...(hasSegments ? ['player-progress-schedule-segment'] : []),
+      "nova-player-progress-schedule",
+      ...(hasSegments ? ["nova-player-progress-schedule-segment"] : []),
     );
 
-    const buffer = document.createElement('div');
-    buffer.classList.add('player-progress-schedule-buffer');
-    buffer.style.transform = 'scaleX(0)';
+    const buffer = document.createElement("div");
+    buffer.classList.add("nova-player-progress-schedule-buffer");
+    buffer.style.transform = "scaleX(0)";
 
-    const current = document.createElement('div');
-    current.classList.add('player-progress-schedule-current');
-    current.style.transform = 'scaleX(0)';
+    const current = document.createElement("div");
+    current.classList.add("nova-player-progress-schedule-current");
+    current.style.transform = "scaleX(0)";
 
-    const text = document.createElement('div');
-    text.classList.add('player-progress-schedule-text');
+    const text = document.createElement("div");
+    text.classList.add("nova-player-progress-schedule-text");
     // 文本仅在常驻形态（.permanent）下填充，与参考实现一致
     // （参考：仅 isEdit 且多分段时写入 pointText）
 
@@ -206,7 +216,7 @@ export const ShadowProgressArea = defineComponent<
     schedule.appendChild(current);
     schedule.appendChild(text);
 
-    if (segment && typeof index === 'number') {
+    if (segment && typeof index === "number") {
       applySegmentBox(schedule, segment, index, segments.length);
       segment.shadowElement = schedule;
       segment.shadowBufferElement = buffer;
@@ -222,7 +232,7 @@ export const ShadowProgressArea = defineComponent<
     const wrap = wrapRef.value;
     if (!wrap) return;
 
-    wrap.textContent = '';
+    wrap.textContent = "";
     segments.forEach((segment) => {
       segment.shadowElement = undefined;
       segment.shadowBufferElement = undefined;
@@ -243,11 +253,11 @@ export const ShadowProgressArea = defineComponent<
 
   /** 应用常驻形态：类名 + 逐分段文本（仅在常驻时填充文本） */
   const applyPermanent = (): void => {
-    areaRef.value?.classList.toggle('permanent', permanent);
+    areaRef.value?.classList.toggle("permanent", permanent);
     segments.forEach((segment) => {
       const text = segment.shadowTextElement;
       if (!text) return;
-      text.textContent = permanent ? segment.label : '';
+      text.textContent = permanent ? segment.label : "";
     });
   };
 
@@ -261,7 +271,7 @@ export const ShadowProgressArea = defineComponent<
   const updateProgress = (time: number): void => {
     if (duration <= 0) return;
     if (Number.isFinite(time)) currentTime = time;
-    updateSegmentFills(time, 'player-progress-schedule-current');
+    updateSegmentFills(time, "nova-player-progress-schedule-current");
   };
 
   /** 更新缓冲进度 */
@@ -286,7 +296,7 @@ export const ShadowProgressArea = defineComponent<
   lifecycle.onMounted = (): void => {
     build();
     setPermanent(props.permanent === true);
-    lifecycle.emit?.('shadowProgressAreaMounted', {
+    lifecycle.emit?.("shadowProgressAreaMounted", {
       updateProgress,
       updateBuffer,
       setDuration,
@@ -305,11 +315,11 @@ export const ShadowProgressArea = defineComponent<
   });
 
   return h(
-    'div',
-    { class: 'player-shadow-progress-area', ref: 'shadowAreaRef' },
-    h('div', {
-      class: 'player-shadow-progress-schedule-wrap',
-      ref: 'shadowScheduleWrapRef',
+    "div",
+    { class: "nova-player-shadow-progress-area", ref: "shadowAreaRef" },
+    h("div", {
+      class: "nova-player-shadow-progress-schedule-wrap",
+      ref: "shadowScheduleWrapRef",
     }),
   );
 });

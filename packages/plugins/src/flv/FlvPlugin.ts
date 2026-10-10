@@ -18,14 +18,14 @@
  * - 编码信息收集
  *
  * 使用方式：
- * import { createFlvPlugin } from '@hili-player/plugins';
+ * import { createFlvPlugin } from '@lumina/plugins';
  * const player = new VideoPlayer({
  *   plugins: [createFlvPlugin({ isLive: true })]
  * });
  */
 
 import flvjs from 'flv.js';
-import type { VideoPlayer } from '@hili-player/player';
+import type { VideoPlayer } from '@lumina/nova';
 import { StreamPluginTypeEnum, StreamPluginEventEnum } from '@/types/streamPlugin';
 import type { StreamPlugin, StreamConfig, StreamStats, BufferInfo, QualityLevel } from '@/types/streamPlugin';
 import type { PluginOptions } from '@/types/plugin';
@@ -33,7 +33,7 @@ import { PlayerEventEnum } from '@/core/events';
 import type { PlayerEventBus } from '../../../player/src/core/plugin';
 import { createStreamPluginEventBus } from '../stream/streamEventBus';
 import type { StreamPluginEventBus } from '../stream/streamEventBus';
-import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
+import { BrowserCapabilityDetector } from '@/nova/utils/browserCapabilityDetector';
 import { createLogger } from '@/utils';
 
 const logger = createLogger('FlvPlugin');

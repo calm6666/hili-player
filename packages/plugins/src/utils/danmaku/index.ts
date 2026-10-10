@@ -12,43 +12,26 @@
 import {
   DanmakuType,
   DanmakuSpeed,
+  DanmakuFontSize,
   DanmakuArea,
   RenderMode,
   ScreenMode,
-} from '@/types/danmaku';
-import type {
-  DanmakuItem,
-  DanmakuFilter,
-} from '@/types/danmaku';
-import type {
-  DanmakuOptions,
-  DanmakuEvents,
-  PerformanceStats,
-  DanmakuMaskConfig,
-  DanmakuRenderItem as DanmakuRenderItemType,
-} from './types';
-import { DOMElementPool, DanmakuItemPool } from './objectPool';
-import { TrackManager } from './trackManager';
-import { DOMEngine } from './domEngine';
-import { CanvasEngine } from './canvasEngine';
-import { DanmakuScheduler } from './scheduler';
-import { rafTimeout, cancelRaf, createLogger, isBrowser } from '@/utils';
-const logger = createLogger('Danmaku');
+  type DanmakuItem,
+  type DanmakuOptions,
+  type DanmakuEvents,
+  type PerformanceStats,
+  type DanmakuFilter,
+  type DanmakuMaskConfig,
+  type DanmakuRenderItem as DanmakuRenderItemType,
+} from "./types";
+import { DOMElementPool, DanmakuItemPool } from "./objectPool";
+import { TrackManager } from "./trackManager";
+import { DOMEngine } from "./domEngine";
+import { CanvasEngine } from "./canvasEngine";
+import { DanmakuScheduler } from "./scheduler";
+import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
 
-/** 带有 memory 信息的 Performance 接口（Chrome 扩展） */
-interface PerformanceWithMemory extends Performance {
-  memory?: {
-    usedJSHeapSize: number;
-    totalJSHeapSize: number;
-    jsHeapSizeLimit: number;
-  };
-}
-
-function hasMemoryInfo(perf: Performance): perf is PerformanceWithMemory {
-  return 'memory' in perf;
-}
-
-// 重新导出类型 — 通用类型从 @/types/danmaku，扩展类型从 ./types
+// 重新导出类型
 export {
   DanmakuType,
   DanmakuSpeed,
@@ -56,30 +39,24 @@ export {
   DanmakuArea,
   RenderMode,
   ScreenMode,
-} from '@/types/danmaku';
-
-export type {
-  DanmakuItem,
-  DanmakuFilter,
-  DanmakuSegment,
-} from '@/types/danmaku';
-
-export type {
-  DanmakuOptions,
-  DanmakuEvents,
-  PerformanceStats,
-  DanmakuMaskConfig,
-  MaskLoader,
-  DanmakuTrack,
-  DanmakuRenderItem,
-} from './types';
+  type DanmakuItem,
+  type DanmakuOptions,
+  type DanmakuEvents,
+  type PerformanceStats,
+  type DanmakuFilter,
+  type DanmakuMaskConfig,
+  type MaskLoader,
+  type DanmakuSegment,
+  type DanmakuTrack,
+  type DanmakuRenderItem,
+} from "./types";
 
 // 导出子模块
-export { DOMElementPool, DanmakuItemPool } from './objectPool';
-export { TrackManager } from './trackManager';
-export { DOMEngine } from './domEngine';
-export { CanvasEngine } from './canvasEngine';
-export { DanmakuScheduler } from './scheduler';
+export { DOMElementPool, DanmakuItemPool } from "./objectPool";
+export { TrackManager } from "./trackManager";
+export { DOMEngine } from "./domEngine";
+export { CanvasEngine } from "./canvasEngine";
+export { DanmakuScheduler } from "./scheduler";
 
 /** 弹幕管理器配置 */
 interface DanmakuManagerConfig {
@@ -91,11 +68,24 @@ interface DanmakuManagerConfig {
   minFps: number;
 }
 
+/**
+ * 速度档位 → 连续倍率的权威映射表
+ * 注意：DOMEngine/CanvasEngine 各自持有同值表（引擎内部实现细节），
+ * 修改档位倍率时两处需同步。
+ */
+const SPEED_MULTIPLIERS: Record<DanmakuSpeed, number> = {
+  [DanmakuSpeed.VERY_SLOW]: 0.5,
+  [DanmakuSpeed.SLOW]: 0.75,
+  [DanmakuSpeed.NORMAL]: 1.0,
+  [DanmakuSpeed.FAST]: 1.5,
+  [DanmakuSpeed.VERY_FAST]: 2.0,
+};
+
 /** 弹幕管理器 */
 export class DanmakuManager {
   private container: HTMLElement;
   private video: HTMLVideoElement;
-  private options: DanmakuOptions & { renderMode: RenderMode; opacity: number; speed: DanmakuSpeed; area: DanmakuArea; fontSize: number; autoScale: boolean; visible: boolean; density: number; preventOverlap: boolean; trackHeight: number; segmentDuration: number; preloadSegments: number; maxRenderCount: number; hardwareAcceleration: boolean; showAdvanced: boolean; mergeSame: boolean; filter: DanmakuFilter };
+  private options: Required<DanmakuOptions>;
   private events: DanmakuEvents;
 
   // 核心组件
@@ -112,6 +102,7 @@ export class DanmakuManager {
   private currentScreenMode: ScreenMode = ScreenMode.NORMAL;
   private lastVideoTime = 0;
   private animationId: number | null = null;
+  private renderQueryPending = false;
   private resizeTimeout: { id: number } | null = null;
   private pauseStartTime = 0; // 暂停开始时间
 
@@ -128,6 +119,7 @@ export class DanmakuManager {
   };
   private performanceMonitorTimer: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private fullscreenHandler: (() => void) | null = null;
   private lastContainerWidth = 0;
   private lastContainerHeight = 0;
 
@@ -135,11 +127,15 @@ export class DanmakuManager {
     this.container = options.container;
     this.video = options.video;
     this.options = {
-      renderMode: RenderMode.AUTO,
+      // 默认 DOM 渲染：开发者可通过 DanmakuPlugin({ renderer }) 选择
+      // 'canvas' 或 'auto'（auto 在弹幕量超阈值时自动切换 Canvas）
+      renderMode: RenderMode.DOM,
       opacity: 1,
       speed: DanmakuSpeed.NORMAL,
+      speedMultiplier: 1, // 连续速度倍率，与 speed 档位双轨：setSpeedMultiplier 优先
       area: DanmakuArea.FULL,
       fontSize: 18,
+      fontSizeScale: DanmakuFontSize.NORMAL, // 字号档位默认标准（setFontSizeScale 连续值优先）
       autoScale: true, // 默认开启自动缩放
       visible: true,
       density: 1,
@@ -168,10 +164,6 @@ export class DanmakuManager {
 
   /** 初始化 */
   private init(): void {
-    if (!isBrowser()) {
-      return;
-    }
-
     // 初始化对象池
     this.elementPool = new DOMElementPool({
       initialCapacity: 100,
@@ -217,7 +209,9 @@ export class DanmakuManager {
 
   /** 初始化渲染引擎 */
   private initEngines(): void {
-    // DOM引擎
+    // 只创建 DOM 引擎（DOM 弹幕不依赖 canvas）。
+    // Canvas 引擎改为懒创建：只有真正切到 Canvas 模式时才 new CanvasEngine，
+    // 从而保证「DOM 模式下页面不会出现 <canvas>」，符合需求。
     this.domEngine = new DOMEngine(
       this.container,
       this.elementPool,
@@ -227,31 +221,45 @@ export class DanmakuManager {
         opacity: this.options.opacity,
         fontSizeScale: this.options.fontSize / 18,
         speed: this.options.speed,
+        speedMultiplier: this.options.speedMultiplier,
         area: this.options.area,
         hardwareAcceleration: this.options.hardwareAcceleration,
         filter: this.options.filter,
         autoScale: this.options.autoScale,
-      }
+      },
     );
+  }
 
-    // Canvas引擎
-    this.canvasEngine = new CanvasEngine(this.container, this.itemPool, this.trackManager, {
-      opacity: this.options.opacity,
-      fontSizeScale: this.options.fontSize / 18,
-      speed: this.options.speed,
-      area: this.options.area,
-      filter: this.options.filter,
-      autoScale: this.options.autoScale,
-    });
+  /** 懒创建 Canvas 引擎（首次进入 Canvas 模式时调用，避免 DOM 模式白建 canvas） */
+  private ensureCanvasEngine(): CanvasEngine {
+    if (!this.canvasEngine) {
+      this.canvasEngine = new CanvasEngine(
+        this.container,
+        this.itemPool,
+        this.trackManager,
+        {
+          opacity: this.options.opacity,
+          fontSizeScale: this.options.fontSize / 18,
+          speed: this.options.speed,
+          speedMultiplier: this.options.speedMultiplier,
+          area: this.options.area,
+          filter: this.options.filter,
+          autoScale: this.options.autoScale,
+        },
+      );
+      // 懒创建时用户可能已关闭弹幕显示，同步显隐类避免 canvas 裸露
+      this.canvasEngine.setVisible(this.options.visible);
+    }
+    return this.canvasEngine;
   }
 
   /** 绑定视频事件 */
   private bindVideoEvents(): void {
-    this.video.addEventListener('play', () => this.play());
-    this.video.addEventListener('pause', () => this.pause());
-    this.video.addEventListener('seeking', () => this.onSeeking());
-    this.video.addEventListener('timeupdate', () => this.onTimeUpdate());
-    this.video.addEventListener('ended', () => this.stop());
+    this.video.addEventListener("play", () => this.play());
+    this.video.addEventListener("pause", () => this.pause());
+    this.video.addEventListener("seeking", () => this.onSeeking());
+    this.video.addEventListener("timeupdate", () => this.onTimeUpdate());
+    this.video.addEventListener("ended", () => this.stop());
 
     // 使用ResizeObserver监听容器大小变化（更精确）
     this.initResizeObserver();
@@ -259,7 +267,7 @@ export class DanmakuManager {
 
   /** 初始化ResizeObserver */
   private initResizeObserver(): void {
-    if (typeof ResizeObserver === 'undefined') {
+    if (typeof ResizeObserver === "undefined") {
       return;
     }
 
@@ -268,24 +276,38 @@ export class DanmakuManager {
         const { width, height } = entry.contentRect;
 
         // 检查尺寸是否真的变化了
-        if (width !== this.lastContainerWidth || height !== this.lastContainerHeight) {
+        if (
+          width !== this.lastContainerWidth ||
+          height !== this.lastContainerHeight
+        ) {
           this.lastContainerWidth = width;
           this.lastContainerHeight = height;
 
-          // 防抖：延迟执行resize，避免频繁调用
+          // 尺寸刚开始变化时立即保留当前 Canvas 画面，不能等到防抖回调才创建快照。
+          this.canvasEngine?.beginResizeTransition();
+
+          // 在布局稳定后的下一帧执行，避免全屏过渡期间重复重建画布。
           if (this.resizeTimeout) {
             cancelRaf(this.resizeTimeout);
           }
           this.resizeTimeout = rafTimeout(() => {
-            // 更新引擎尺寸（不处理已存在的弹幕位置，避免性能问题）
-            this.domEngine?.resize();
-            this.canvasEngine?.resize();
-          }, 300);
+            requestAnimationFrame(() => {
+              this.domEngine?.resize();
+              this.canvasEngine?.resize();
+            });
+          }, 32);
         }
       }
     });
 
     this.resizeObserver.observe(this.container);
+
+    // 全屏事件必须直接通知弹幕管理器，不能只依赖 ResizeObserver。
+    this.fullscreenHandler = () => {
+      const mode = document.fullscreenElement ? "fullscreen" : "normal";
+      this.switchScreenMode(mode);
+    };
+    document.addEventListener("fullscreenchange", this.fullscreenHandler);
   }
 
   /** 播放 */
@@ -355,12 +377,21 @@ export class DanmakuManager {
     // 更新调度器时间
     this.scheduler.setCurrentTime(currentTime);
 
-    // 获取需要渲染的弹幕（限制每帧最多渲染10条，避免卡顿）
-    const danmakuToRender = this.scheduler.getDanmakuToRender(currentTime, 10);
-
-    // 渲染弹幕
-    if (danmakuToRender.length > 0) {
-      this.renderDanmaku(danmakuToRender);
+    // 以活跃渲染数量为硬上限；历史弹幕数量不会无限转化为 DOM/Canvas 对象。
+    const activeEngine = this.getActiveEngine();
+    const activeCount = activeEngine?.getStats().renderCount || 0;
+    const available = Math.max(0, this.options.maxRenderCount - activeCount);
+    if (available > 0 && !this.renderQueryPending) {
+      this.renderQueryPending = true;
+      this.scheduler
+        .getDanmakuToRenderAsync(currentTime, Math.min(10, available))
+        .then((danmakuToRender) => {
+          if (Math.abs(this.video.currentTime - currentTime) > 0.5) return;
+          if (danmakuToRender.length > 0) this.renderDanmaku(danmakuToRender);
+        })
+        .finally(() => {
+          this.renderQueryPending = false;
+        });
     }
 
     this.animationId = requestAnimationFrame(this.renderLoop);
@@ -390,15 +421,20 @@ export class DanmakuManager {
       if (stats.totalLoaded > this.config.autoSwitchThreshold) {
         this.currentMode = RenderMode.CANVAS;
         this.domEngine?.stop();
-        return this.canvasEngine;
+        const canvas = this.ensureCanvasEngine();
+        if (this.isPlaying) canvas.start();
+        return canvas;
       } else {
         this.currentMode = RenderMode.DOM;
         this.canvasEngine?.stop();
+        if (this.isPlaying) this.domEngine?.start();
         return this.domEngine;
       }
     }
 
-    return this.currentMode === RenderMode.DOM ? this.domEngine : this.canvasEngine;
+    return this.currentMode === RenderMode.DOM
+      ? this.domEngine
+      : this.ensureCanvasEngine();
   }
 
   /** 时间更新处理 */
@@ -462,6 +498,7 @@ export class DanmakuManager {
   clear(): void {
     this.domEngine?.clear();
     this.canvasEngine?.clear();
+    this.scheduler.resetEmission();
   }
 
   /** 移除单条弹幕 */
@@ -471,13 +508,33 @@ export class DanmakuManager {
   }
 
   /** 设置弹幕数据源 */
-  setDataSource(loader: (startTime: number, endTime: number) => Promise<DanmakuItem[]>): void {
+  setDataSource(
+    loader: (startTime: number, endTime: number) => Promise<DanmakuItem[]>,
+  ): void {
     this.scheduler.setLoadCallback(loader);
+  }
+
+  /**
+   * 重置数据源与分段缓存（切换视频 / 更换弹幕源时调用）
+   *
+   * 与 clear() 的区别：clear() 只清空渲染引擎并允许当前窗口重新发射，
+   * 分段缓存保留（同一数据源下的 seek 场景）；本方法额外清空调度器
+   * 的全部分段缓存与统计，保证旧数据源的弹幕不会残留到新视频。
+   */
+  resetDataSource(): void {
+    this.domEngine?.clear();
+    this.canvasEngine?.clear();
+    this.scheduler.reset();
   }
 
   /** 添加单条弹幕 */
   addDanmaku(danmaku: DanmakuItem): void {
     this.scheduler.addDanmaku(danmaku);
+  }
+
+  /** 批量加载弹幕（首次加载大量弹幕时用，避免逐条 addDanmaku 的 O(n²) 卡顿） */
+  loadDanmaku(list: DanmakuItem[]): void {
+    this.scheduler.loadDanmakuBatch(list);
   }
 
   /** 发送弹幕 */
@@ -487,12 +544,20 @@ export class DanmakuManager {
       text,
       time: this.video.currentTime,
       type: DanmakuType.SCROLL,
-      fontSize: this.options.fontSize,
-      color: '#ffffff',
+      // 不携带 fontSize：options.fontSize 是「用户缩放后的基准像素值」，
+      // 若作为弹幕自带字号传入，引擎会再乘一次 fontSizeScale，
+      // 导致本地弹幕字号双重缩放（比历史弹幕大一圈）；
+      // 引擎对缺省字号使用 baseFontSize，与历史弹幕同一缩放基准
+      color: "#ffffff",
       ...options,
     };
 
     this.addDanmaku(danmaku);
+
+    // 标记「已发射」：sendDanmaku 会入调度器并立即渲染，若不标记，
+    // 下一帧查询窗口 [t - renderDelay, t + 0.5] 仍覆盖刚发送的时间点，
+    // 调度器会再次发射同一条弹幕 → 屏幕出现两条一模一样的弹幕。
+    this.scheduler.markEmitted(danmaku);
 
     // 立即渲染
     const engine = this.getActiveEngine();
@@ -503,10 +568,11 @@ export class DanmakuManager {
     }
   }
 
-  /** 设置可见性 */
+  /** 设置可见性（样式由 danmaku.scss 的 .danmaku-x-hide 提供，不在 TS 内联） */
   setVisible(visible: boolean): void {
     this.options.visible = visible;
-    this.container.style.opacity = visible ? '1' : '0';
+    this.domEngine?.setVisible(visible);
+    this.canvasEngine?.setVisible(visible);
   }
 
   /** 设置透明度 */
@@ -524,12 +590,14 @@ export class DanmakuManager {
 
   /** 设置渲染模式 */
   setRenderMode(mode: RenderMode): void {
+    const wasPlaying = this.isPlaying;
     this.currentMode = mode;
     this.options.renderMode = mode;
 
     // 清空并重启
     this.clear();
-    if (this.isPlaying) {
+    if (wasPlaying) {
+      this.isPlaying = false;
       this.play();
     }
   }
@@ -537,13 +605,9 @@ export class DanmakuManager {
   /** 切换全屏 */
   toggleFullscreen(): void {
     if (!document.fullscreenElement) {
-      this.container.requestFullscreen?.()?.catch(err => {
-        logger.warn('全屏请求失败:', err);
-      });
+      this.container.requestFullscreen?.();
     } else {
-      document.exitFullscreen?.()?.catch(err => {
-        logger.warn('退出全屏失败:', err);
-      });
+      document.exitFullscreen?.();
     }
   }
 
@@ -585,8 +649,10 @@ export class DanmakuManager {
   // }
 
   private getMemoryUsage(): number {
-    if (hasMemoryInfo(performance) && performance.memory) {
-      return Math.round(performance.memory.usedJSHeapSize / 1048576);
+    if ("memory" in performance) {
+      const memory = (performance as { memory: { usedJSHeapSize: number } })
+        .memory;
+      return Math.round(memory.usedJSHeapSize / 1048576);
     }
     return 0;
   }
@@ -602,7 +668,7 @@ export class DanmakuManager {
     screenMode: ScreenMode;
     isPlaying: boolean;
     performance: PerformanceStats;
-    scheduler: ReturnType<DanmakuScheduler['getStats']>;
+    scheduler: ReturnType<DanmakuScheduler["getStats"]>;
   } {
     return {
       renderMode: this.currentMode,
@@ -623,21 +689,26 @@ export class DanmakuManager {
    * 切换屏幕模式（全屏/非全屏）
    * @param mode 屏幕模式：'fullscreen' 或 'normal'
    */
-  switchScreenMode(mode: 'fullscreen' | 'normal'): void {
-    const newMode = mode === 'fullscreen' ? ScreenMode.FULLSCREEN : ScreenMode.NORMAL;
+  switchScreenMode(mode: "fullscreen" | "normal"): void {
+    const newMode =
+      mode === "fullscreen" ? ScreenMode.FULLSCREEN : ScreenMode.NORMAL;
 
     if (newMode !== this.currentScreenMode) {
       this.currentScreenMode = newMode;
 
-      // 通知引擎（只调整尺寸，不再切换轨道模式）
-      this.domEngine?.switchScreenMode(newMode);
-      this.canvasEngine?.switchScreenMode(newMode);
+      // 在浏览器开始 fullscreen layout 前先保留当前画面，避免中间过渡帧闪白。
+      this.canvasEngine?.beginResizeTransition();
 
-      // 调整尺寸
-      rafTimeout(() => {
-        this.canvasEngine?.resize();
-        this.domEngine?.resize();
-      }, 100);
+      // 等待浏览器完成 fullscreen layout 后只做一次原子 resize。
+      if (this.resizeTimeout) cancelRaf(this.resizeTimeout);
+      this.resizeTimeout = rafTimeout(() => {
+        requestAnimationFrame(() => {
+          this.domEngine?.switchScreenMode(newMode);
+          this.canvasEngine?.switchScreenMode(newMode);
+          this.domEngine?.resize();
+          this.canvasEngine?.resize();
+        });
+      }, 32);
     }
   }
 
@@ -652,7 +723,7 @@ export class DanmakuManager {
     this.trackManager.initTracks(
       this.container.clientWidth,
       this.container.clientHeight,
-      this.options.area
+      this.options.area,
     );
   }
 
@@ -669,7 +740,8 @@ export class DanmakuManager {
   } {
     return {
       count: this.trackManager.getTrackCount(),
-      height: this.options.trackHeight,
+      // 轨道高度已随有效字号动态化（calculateTrackHeight），以轨道管理器实际值为准
+      height: this.trackManager.getTrackConfig().height,
       screenMode: this.currentScreenMode,
       containerWidth: this.container.clientWidth,
       containerHeight: this.container.clientHeight,
@@ -688,6 +760,10 @@ export class DanmakuManager {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
+    }
+    if (this.fullscreenHandler) {
+      document.removeEventListener("fullscreenchange", this.fullscreenHandler);
+      this.fullscreenHandler = null;
     }
 
     this.domEngine?.destroy();
@@ -716,8 +792,8 @@ export class DanmakuManager {
   setOnDanmakuHover(
     callback: (
       danmaku: DanmakuRenderItemType | null,
-      position: { x: number; y: number } | null
-    ) => void
+      position: { x: number; y: number } | null,
+    ) => void,
   ): void {
     this.domEngine?.setOnDanmakuHover(callback);
     this.canvasEngine?.setOnDanmakuHover(callback);
@@ -726,12 +802,35 @@ export class DanmakuManager {
   /**
    * 设置弹幕速度档位
    * @param speed 速度档位：VERY_SLOW(极慢), SLOW(较慢), NORMAL(适中), FAST(较快), VERY_FAST(极快)
-   * @description 修改后新渲染的弹幕会使用新速度，已存在的弹幕保持原速度
+   * @description 修改后新渲染的弹幕会使用新速度，已存在的弹幕保持原速度；
+   * 档位与连续倍率双轨并存，调用本方法会同步把 speedMultiplier 重置为该档位对应倍率
    */
   setSpeed(speed: DanmakuSpeed): void {
     this.options.speed = speed;
-    this.domEngine?.updateConfig({ speed });
-    this.canvasEngine?.updateConfig({ speed });
+    // 档位驱动时同步连续倍率，保证两条路径状态一致
+    this.options.speedMultiplier = SPEED_MULTIPLIERS[speed] ?? 1;
+    this.domEngine?.updateConfig({ speed, speedMultiplier: this.options.speedMultiplier });
+    this.canvasEngine?.updateConfig({ speed, speedMultiplier: this.options.speedMultiplier });
+  }
+
+  /**
+   * 设置弹幕速度倍率（连续值，面板滑杆直连）
+   * @param multiplier 速度倍率：1.0 = 基准；0.5 = 半速；2.0 = 两倍速（有效范围 0.1-5，越界收敛）
+   * @description 与 speed 档位双轨并存，本方法优先（引擎速度计算优先读 speedMultiplier）；
+   * 修改后新渲染的弹幕会使用新速度，已存在的弹幕保持原速度
+   */
+  setSpeedMultiplier(multiplier: number): void {
+    const value = Math.min(5, Math.max(0.1, multiplier));
+    this.options.speedMultiplier = value;
+    this.domEngine?.updateConfig({ speedMultiplier: value });
+    this.canvasEngine?.updateConfig({ speedMultiplier: value });
+  }
+
+  /**
+   * 获取当前速度倍率
+   */
+  getSpeedMultiplier(): number {
+    return this.options.speedMultiplier;
   }
 
   /**
@@ -753,7 +852,20 @@ export class DanmakuManager {
   }
 
   /**
-   * 获取当前区域档位
+   * 设置弹幕区域占比（连续值，面板滑杆直连）
+   * @param ratio 显示区域占比：0.25 = 仅顶部 1/4；1 = 全屏（有效范围 0.05-1，越界收敛）
+   * @description 与 setArea 档位等效但支持任意比例；
+   * 修改后新渲染的弹幕会使用新区域，已存在的弹幕保持原位置
+   */
+  setAreaRatio(ratio: number): void {
+    const value = Math.min(1, Math.max(0.05, ratio));
+    this.options.area = value;
+    this.domEngine?.updateConfig({ area: value });
+    this.canvasEngine?.updateConfig({ area: value });
+  }
+
+  /**
+   * 获取当前区域占比
    */
   getArea(): DanmakuArea {
     return this.options.area;
@@ -762,13 +874,24 @@ export class DanmakuManager {
   /**
    * 设置弹幕字号
    * @param fontSize 字号大小（像素）
-   * @description 修改后新渲染的弹幕会使用新字号，已存在的弹幕保持原字号
+   * @description 修改后在飞弹幕立即按新字号刷新（重测文本盒、重写滚动距离），
+   * 新渲染的弹幕同样使用新字号
    */
   setFontSize(fontSize: number): void {
     this.options.fontSize = fontSize;
     const fontSizeScale = fontSize / 18;
     this.domEngine?.updateConfig({ fontSizeScale });
     this.canvasEngine?.updateConfig({ fontSizeScale });
+  }
+
+  /**
+   * 设置弹幕字号缩放系数（连续值，面板滑杆直连）
+   * @param scale 缩放系数：1 = 基准 18px；1.5 = 27px；0.5 = 9px（有效范围 0.5-2，越界收敛）
+   * @description 与 setFontSize 像素值等效；修改后在飞弹幕与新弹幕均立即按新字号生效
+   */
+  setFontSizeScale(scale: number): void {
+    const value = Math.min(2, Math.max(0.5, scale));
+    this.setFontSize(value * 18);
   }
 
   /**
@@ -781,11 +904,13 @@ export class DanmakuManager {
   /**
    * 设置是否自动随屏幕大小缩放弹幕
    * @param autoScale 是否自动缩放，默认true
-   * @description 开启后，新渲染的弹幕会随窗口大小自动缩放；关闭后，新弹幕保持固定大小。已存在的弹幕不受影响。
+   * @description 开启后弹幕随容器大小自动缩放，关闭后保持固定大小；
+   * 切换时在飞弹幕立即按新开关刷新字号（引擎同步重建轨道），新弹幕同样即时生效
    */
   setAutoScale(autoScale: boolean): void {
     this.options.autoScale = autoScale;
-    // 只更新配置，不触发resize，已存在的弹幕保持原样，新弹幕使用新配置
+    // 只更新配置不触发 resize（容器尺寸未变，screenScale 无需重算）；
+    // 引擎在字号类配置变化时会刷新在飞弹幕字号并重建轨道
     this.domEngine?.updateConfig({ autoScale });
     this.canvasEngine?.updateConfig({ autoScale });
   }
@@ -843,7 +968,10 @@ export class DanmakuManager {
    */
   getMaskConfig(): DanmakuMaskConfig | undefined {
     // 从 DOM 引擎获取配置（两个引擎配置保持一致）
-    return this.domEngine?.['config']?.maskConfig ?? this.canvasEngine?.['config']?.maskConfig;
+    return (
+      this.domEngine?.["config"]?.maskConfig ??
+      this.canvasEngine?.["config"]?.maskConfig
+    );
   }
 
   /**
@@ -853,7 +981,7 @@ export class DanmakuManager {
    */
   enableMask(
     maskImage: string,
-    videoRect?: { x: number; y: number; width: number; height: number }
+    videoRect?: { x: number; y: number; width: number; height: number },
   ): void {
     this.setMaskConfig({
       enabled: true,

@@ -1,6 +1,6 @@
-.player-container {
-  .player-dialog-wrap {
-    .player-dm-tip {
+.nova-player-container {
+  .nova-player-dialog-wrap {
+    .nova-player-dm-tip {
       height: 48px;
       left: 0;
       margin-top: 6px;
@@ -13,8 +13,8 @@
       width: 162px;
       z-index: 999999;
 
-      .player-dm-tip-svgl,
-      .player-dm-tip-svgm {
+      .nova-player-dm-tip-svgl,
+      .nova-player-dm-tip-svgm {
         height: 100%;
         left: 0;
         opacity: 0;
@@ -25,10 +25,10 @@
         width: 100%;
       }
 
-      .player-dm-tip-back,
-      .player-dm-tip-copy,
-      .player-dm-tip-like,
-      .player-dm-tip-recall {
+      .nova-player-dm-tip-back,
+      .nova-player-dm-tip-copy,
+      .nova-player-dm-tip-like,
+      .nova-player-dm-tip-recall {
         -webkit-box-sizing: border-box;
         box-sizing: border-box;
         cursor: pointer;
@@ -41,51 +41,58 @@
         z-index: 2;
       }
 
-      .player-dm-tip-like-num {
+      .nova-player-dm-tip-like-num {
         color: #fff;
         left: 40px;
         position: absolute;
         top: 13px;
       }
 
-      .player-dm-tip-copy {
+      .nova-player-dm-tip-copy {
         left: 70px;
       }
 
-      .player-dm-tip-recall {
+      .nova-player-dm-tip-recall {
         display: none;
       }
 
-      .player-dm-tip-back,
-      .player-dm-tip-recall {
+      .nova-player-dm-tip-back,
+      .nova-player-dm-tip-recall {
         left: 120px;
       }
     }
 
-    .player-dm-tip.player-master {
-      .player-dm-tip-recall {
+    .nova-player-dm-tip.nova-player-master {
+      .nova-player-dm-tip-recall {
         display: block;
       }
-      .player-dm-tip-back {
+      .nova-player-dm-tip-back {
         display: none;
       }
     }
 
-    .player-dm-tip.player-showB {
+    .nova-player-dm-tip.nova-player-showB {
       -webkit-animation: tipsWrap 0.25s forwards;
       animation: tipsWrap 0.25s forwards;
       visibility: visible;
 
-      .player-dm-tip-svgm {
+      .nova-player-dm-tip-svgm {
         opacity: 1;
       }
     }
 
-    .player-dm-tip.player-hide {
+    .nova-player-dm-tip.nova-player-hide {
       -webkit-animation: tipsWrapReturn 0.25s forwards;
       animation: tipsWrapReturn 0.25s forwards;
       pointer-events: none;
       visibility: hidden;
+    }
+
+    .nova-player-dm-tip-back:hover, 
+    .nova-player-dm-tip-copy:hover, 
+    .nova-player-dm-tip-like:hover, 
+    .nova-player-dm-tip-recall:hover{
+      background: rgba(47, 50, 56, .898);
     }
   }
 }

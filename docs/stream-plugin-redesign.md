@@ -81,8 +81,8 @@ hili-player/
 ```json
 {
   "paths": {
-    "@hili-player/hls.js": ["media-manifest/hls.js/src/hls.ts"],
-    "@hili-player/media-manifest": ["media-manifest/src/index.ts"]
+    "@lumina/hls.js": ["media-manifest/hls.js/src/hls.ts"],
+    "@lumina/media-manifest": ["media-manifest/src/index.ts"]
   }
 }
 ```
@@ -90,18 +90,18 @@ hili-player/
 HLS 插件直接 import fork 版 hls.js：
 
 ```typescript
-import Hls from '@hili-player/hls.js';
+import Hls from '@lumina/hls.js';
 ```
 
-Vite 构建时，`@hili-player/hls.js` 会被解析并**内联打包**进 HLS 插件产物。
+Vite 构建时，`@lumina/hls.js` 会被解析并**内联打包**进 HLS 插件产物。
 
 ### 4.3 media-manifest 类型/转换器的引用方式
 
 HLS 和 DASH 插件需要 `MediaManifest` 类型和 `manifestToHls()`/`manifestToDash()` 转换器：
 
 ```typescript
-import type { MediaManifest } from '@hili-player/media-manifest';
-import { manifestToHls } from '@hili-player/media-manifest';
+import type { MediaManifest } from '@lumina/media-manifest';
+import { manifestToHls } from '@lumina/media-manifest';
 ```
 
 这些是纯类型 + 纯函数，打包后体积可忽略。
@@ -349,7 +349,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
-        '@hili-player/player',  // 播放器核心始终外部化
+        '@lumina/nova',  // 播放器核心始终外部化
       ],
       // 注意：不再外部化 flv.js / hls.js / dashjs
       // 它们会被内联打包进各自的插件产物
@@ -357,8 +357,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@hili-player/hls.js': resolve(__dirname, '../../media-manifest/hls.js/src/hls.ts'),
-      '@hili-player/media-manifest': resolve(__dirname, '../../media-manifest/src/index.ts'),
+      '@lumina/hls.js': resolve(__dirname, '../../media-manifest/hls.js/src/hls.ts'),
+      '@lumina/media-manifest': resolve(__dirname, '../../media-manifest/src/index.ts'),
     },
   },
 });
@@ -369,7 +369,7 @@ export default defineConfig({
 ```json
 {
   "peerDependencies": {
-    "@hili-player/player": "workspace:*"
+    "@lumina/nova": "workspace:*"
   },
   "devDependencies": {
     "vite": "^5.2.0",
@@ -397,8 +397,8 @@ export default defineConfig({
 ### 8.1 基础使用（URL 模式）
 
 ```typescript
-import { VideoPlayer } from '@hili-player/player';
-import { HlsPlugin } from '@hili-player/plugins/hls';
+import { VideoPlayer } from '@lumina/nova';
+import { HlsPlugin } from '@lumina/plugins/hls';
 
 const player = new VideoPlayer({
   src: 'https://example.com/stream.m3u8',
@@ -411,9 +411,9 @@ const player = new VideoPlayer({
 ### 8.2 对象注入模式
 
 ```typescript
-import { VideoPlayer } from '@hili-player/player';
-import { HlsPlugin } from '@hili-player/plugins/hls';
-import type { MediaManifest } from '@hili-player/plugins/hls';
+import { VideoPlayer } from '@lumina/nova';
+import { HlsPlugin } from '@lumina/plugins/hls';
+import type { MediaManifest } from '@lumina/plugins/hls';
 
 const manifest: MediaManifest = {
   duration: 3600,
@@ -453,8 +453,8 @@ hlsPlugin.load({ manifest, url: 'https://example.com/' });
 ### 8.3 传入外部实例
 
 ```typescript
-import Hls from '@hili-player/plugins/hls'; // 内含打包的 fork 版 hls.js
-import { HlsPlugin } from '@hili-player/plugins/hls';
+import Hls from '@lumina/plugins/hls'; // 内含打包的 fork 版 hls.js
+import { HlsPlugin } from '@lumina/plugins/hls';
 
 // 用户自己创建 hls.js 实例
 const hls = new Hls({ maxBufferLength: 60 });
@@ -470,8 +470,8 @@ const player = new VideoPlayer({
 ### 8.4 弹幕插件独立导入
 
 ```typescript
-import { VideoPlayer } from '@hili-player/player';
-import { DanmakuPlugin } from '@hili-player/plugins/danmaku';
+import { VideoPlayer } from '@lumina/nova';
+import { DanmakuPlugin } from '@lumina/plugins/danmaku';
 
 const player = new VideoPlayer({
   src: 'https://example.com/video.mp4',
@@ -489,8 +489,8 @@ const player = new VideoPlayer({
 ### 8.5 字幕插件独立导入
 
 ```typescript
-import { VideoPlayer } from '@hili-player/player';
-import { SubtitlePlugin } from '@hili-player/plugins/subtitle';
+import { VideoPlayer } from '@lumina/nova';
+import { SubtitlePlugin } from '@lumina/plugins/subtitle';
 
 const player = new VideoPlayer({
   src: 'https://example.com/video.mp4',
@@ -507,8 +507,8 @@ const player = new VideoPlayer({
 ### 8.6 互动插件独立导入
 
 ```typescript
-import { VideoPlayer } from '@hili-player/player';
-import { InteractionPlugin } from '@hili-player/plugins/interaction';
+import { VideoPlayer } from '@lumina/nova';
+import { InteractionPlugin } from '@lumina/plugins/interaction';
 
 const player = new VideoPlayer({
   src: 'https://example.com/video.mp4',
@@ -525,11 +525,11 @@ const player = new VideoPlayer({
 ### 8.7 组合使用
 
 ```typescript
-import { VideoPlayer } from '@hili-player/player';
-import { HlsPlugin } from '@hili-player/plugins/hls';
-import { DanmakuPlugin } from '@hili-player/plugins/danmaku';
-import { SubtitlePlugin } from '@hili-player/plugins/subtitle';
-import { InteractionPlugin } from '@hili-player/plugins/interaction';
+import { VideoPlayer } from '@lumina/nova';
+import { HlsPlugin } from '@lumina/plugins/hls';
+import { DanmakuPlugin } from '@lumina/plugins/danmaku';
+import { SubtitlePlugin } from '@lumina/plugins/subtitle';
+import { InteractionPlugin } from '@lumina/plugins/interaction';
 
 const player = new VideoPlayer({
   src: 'https://example.com/stream.m3u8',
@@ -548,13 +548,13 @@ const player = new VideoPlayer({
 
 | 插件 | 导入路径 | 说明 |
 |------|---------|------|
-| FLV 流媒体 | `@hili-player/plugins/flv` | 内含 flv.js |
-| HLS 流媒体 | `@hili-player/plugins/hls` | 内含 fork 版 hls.js + MediaManifest 类型 |
-| DASH 流媒体 | `@hili-player/plugins/dash` | 内含 dashjs + MediaManifest 类型 |
-| 弹幕 | `@hili-player/plugins/danmaku` | 无外部依赖 |
-| 字幕 | `@hili-player/plugins/subtitle` | 无外部依赖 |
-| 互动 | `@hili-player/plugins/interaction` | 无外部依赖 |
-| 全部插件 | `@hili-player/plugins` | 统一入口，按需 tree-shake |
+| FLV 流媒体 | `@lumina/plugins/flv` | 内含 flv.js |
+| HLS 流媒体 | `@lumina/plugins/hls` | 内含 fork 版 hls.js + MediaManifest 类型 |
+| DASH 流媒体 | `@lumina/plugins/dash` | 内含 dashjs + MediaManifest 类型 |
+| 弹幕 | `@lumina/plugins/danmaku` | 无外部依赖 |
+| 字幕 | `@lumina/plugins/subtitle` | 无外部依赖 |
+| 互动 | `@lumina/plugins/interaction` | 无外部依赖 |
+| 全部插件 | `@lumina/plugins` | 统一入口，按需 tree-shake |
 
 ## 十、迁移步骤
 

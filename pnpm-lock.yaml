@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@preact/signals-core':
-        specifier: ^1.14.4
-        version: 1.14.4
     devDependencies:
       '@babel/parser':
         specifier: ^8.0.0
@@ -69,10 +65,10 @@ importers:
 
   demo-prod:
     dependencies:
-      '@hili-player/player':
+      '@lumina/nova':
         specifier: workspace:*
         version: link:../packages/player
-      '@hili-player/plugins':
+      '@lumina/plugins':
         specifier: workspace:*
         version: link:../packages/plugins
 
@@ -94,7 +90,7 @@ importers:
 
   packages/plugins:
     dependencies:
-      '@hili-player/player':
+      '@lumina/nova':
         specifier: workspace:*
         version: link:../player
       dashjs:
@@ -528,9 +524,6 @@ packages:
   '@parcel/watcher@2.5.6':
     resolution: {integrity: sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==}
     engines: {node: '>= 10.0.0'}
-
-  '@preact/signals-core@1.14.4':
-    resolution: {integrity: sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA==}
 
   '@rollup/pluginutils@5.3.0':
     resolution: {integrity: sha512-5EdhGZtnu3V88ces7s53hhfK5KSASnJZv8Lulpc04cWO3REESroJXg73DFsOmgbU2BhwV0E20bu2IDZb3VKW4Q==}
@@ -2594,8 +2587,6 @@ snapshots:
       '@parcel/watcher-win32-ia32': 2.5.6
       '@parcel/watcher-win32-x64': 2.5.6
     optional: true
-
-  '@preact/signals-core@1.14.4': {}
 
   '@rollup/pluginutils@5.3.0(rollup@4.60.2)':
     dependencies:

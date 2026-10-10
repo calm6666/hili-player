@@ -82,7 +82,7 @@ export class EventBus {
         try {
           handler(payload);
         } catch (error) {
-          console.error(`[EventBus] 事件处理器执行错误 (${event}):`, error);
+          console.error(`[EventBus] Event handler execution failed (${event}):`, error);
         }
       });
     }

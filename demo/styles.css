@@ -159,6 +159,30 @@
   gap: 6px;
 }
 
+/* ============================================
+ * 语言切换按钮（i18n 动态切换测试）
+ * ============================================ */
+.btn-locale {
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 当前语言：高亮描边（与按钮组其它态区分） */
+.btn-locale.active {
+  border-color: var(--accent, #00aeec);
+  color: var(--accent, #00aeec);
+  background: rgba(0, 174, 236, 0.12);
+}
+
 .btn-success {
   padding: 8px 14px;
   cursor: pointer;
@@ -662,23 +686,38 @@
 
 .player-wrapper {
   width: 100%;
-  aspect-ratio: 16 / 9;         /* 内容区按 16:9 */
-  box-sizing: content-box;      /* 让 aspect-ratio 只管内容高度 */
-  padding-block: 23px;          /* 总高额外 +46px */
-  position: relative;           /* 作为绝对定位包含块 */
+  aspect-ratio: 16 / 9;
+  /* 内容区按 16:9 */
+  box-sizing: content-box;
+  /* 让 aspect-ratio 只管内容高度 */
+  padding-block: 23px;
+  /* 总高额外 +46px */
+  position: relative;
+  /* 作为绝对定位包含块 */
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* 内部元素铺满整个 padding box（含那多出的 46px） */
-.player-wrapper > div {
+.player-wrapper>div {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;   /* video/iframe 可留，普通 div 可删 */
+  object-fit: cover;
+  /* video/iframe 可留，普通 div 可删 */
+}
+
+.player-wrapper .nova-player-docker.mode-webscreen {
+  position: fixed;
+  border-radius: 0;
+  z-index: 100000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .player-controls {
@@ -874,4 +913,338 @@
   .source-btn {
     width: 100%;
   }
+}
+
+/* ============================================
+ * 插件 API 演示 / 交互卡片模式切换按钮行
+ * ============================================ */
+
+/* 演示按钮行容器：flex 布局自动换行 */
+.demo-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* 当前模式按钮高亮（展示模式 / 编辑模式二选一） */
+.demo-btn-row .btn.mode-active {
+  background: var(--accent, #00b4d8);
+  border-color: var(--accent, #00b4d8);
+  color: #ffffff;
+}
+
+.demo-btn-row .btn.mode-active:hover {
+  filter: brightness(0.92);
+}
+
+/* 隐藏编辑工具行：容器为 display:flex 会覆盖 HTML hidden 属性，须用类控制 */
+.demo-btn-row.is-hidden {
+  display: none;
+}
+
+/* ============================================
+ * 弹幕列表面板（mock 拉取 + 本地发送）
+ * ============================================ */
+
+/* 列表容器：条目过多时出竖向滚动（限高 320px） */
+.danmaku-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* 单条弹幕：时间徽标 + 内容（+ 本人「我」徽标） */
+.danmaku-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+
+.danmaku-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* 时间点徽标（mm:ss，等宽字体对齐） */
+.danmaku-item-time {
+  flex: none;
+  min-width: 40px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+  font-family: Consolas, Monaco, monospace;
+  text-align: center;
+  color: var(--accent, #00b4d8);
+  background: rgba(0, 180, 216, 0.12);
+  border-radius: 4px;
+}
+
+/* 弹幕内容：单行省略 */
+.danmaku-item-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 本人弹幕「我」徽标（uid=1，与引擎白框同一判定） */
+.danmaku-item-self {
+  flex: none;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #ffffff;
+  background: var(--accent, #00b4d8);
+  border-radius: 4px;
+}
+
+/* 空列表占位 */
+.danmaku-empty {
+  padding: 8px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ============================================
+ * 交互卡片内容编辑面板（仅编辑模式显示）
+ * ============================================ */
+
+/* 通用隐藏类：flex 容器会覆盖 HTML hidden 属性，统一用类控制显隐 */
+.is-hidden {
+  display: none !important;
+}
+
+/* 面板容器：纵向排布卡片分组 */
+.interaction-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 空面板提示 / 面板说明行 */
+.interaction-content-panel .ice-tip {
+  padding: 6px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* 单张卡片的编辑分组 */
+.ice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+/* 分组标题行：卡片名 + 删除按钮 */
+.ice-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ice-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent, #00b4d8);
+}
+
+/* 删除卡片按钮（危险色悬停） */
+.ice-remove {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.ice-remove:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+/* 单个字段行：标签 + 输入/选择器 */
+.ice-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ice-label {
+  flex: none;
+  min-width: 56px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* 文本输入与下拉选择（深色主题统一观感） */
+.ice-input,
+.ice-select {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  outline: none;
+}
+
+.ice-input:focus,
+.ice-select:focus {
+  border-color: var(--accent, #00b4d8);
+}
+
+.ice-select option {
+  background: #1a1a2e;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 投票选项行：输入框 + 增删按钮 */
+.ice-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 56px;
+}
+
+/* 投票选项容器行：多行内容顶对齐 */
+.ice-field.ice-field-options {
+  align-items: flex-start;
+}
+
+/* 选项输入组：多行纵向排布 */
+.ice-field-options .ice-option+.ice-option {
+  margin-top: 6px;
+}
+
+/* 选项增删小按钮 */
+.ice-mini {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.ice-mini:hover {
+  color: var(--accent, #00b4d8);
+  border-color: var(--accent, #00b4d8);
+}
+
+.ice-mini.ice-mini-remove:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+/* 添加选项入口按钮 */
+.ice-add-option {
+  align-self: flex-start;
+  margin-left: 56px;
+}
+
+/* ============================================
+ * 分段进度条列表面板（mock 拉取 + 运行时编辑）
+ * ============================================ */
+
+/* 面板容器：纵向排布分段行，条目过多时竖向滚动（限高 280px） */
+.seg-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* 单条分段行：标题 + 起止时间 + 删除按钮 */
+.seg-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+
+.seg-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* 分段标题：单行省略 */
+.seg-item-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 起止时间（等宽字体对齐） */
+.seg-item-time {
+  flex: none;
+  font-size: 11px;
+  font-family: Consolas, Monaco, monospace;
+  color: var(--accent, #00b4d8);
+}
+
+/* 删除分段按钮（危险色悬停，同来源/弹幕列表删除按钮风格） */
+.seg-item-remove {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.seg-item-remove:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+/* 空列表占位 */
+.seg-empty {
+  margin: 0;
+  padding: 8px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
 }

@@ -5,8 +5,6 @@
  * 定义 RowCmd 组件所需的所有类型和接口
  */
 
-import type { ProgressCloseProps } from '@/hili-player/components/ProgressClose';
-
 /**
  * 互动卡片类型
  */
@@ -68,7 +66,6 @@ export interface InteractionGuideThree {
  */
 export interface InteractionLink {
   element?: HTMLDivElement;
-  closeBtn?: ProgressCloseProps;
   id?: number;
   vid?: number;
   uid?: number;
@@ -87,7 +84,6 @@ export interface InteractionLink {
  */
 export interface InteractionVote {
   element?: HTMLDivElement;
-  closeBtn?: ProgressCloseProps;
   id?: number;
   vid?: number;
   uid?: number;
@@ -106,7 +102,6 @@ export interface InteractionVote {
  */
 export interface InteractionScore {
   element?: HTMLDivElement;
-  closeBtn?: ProgressCloseProps;
   id?: number;
   vid?: number;
   uid?: number;

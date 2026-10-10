@@ -9,6 +9,7 @@
 import type {
   VNode,
   VNodeChild,
+  ReactiveTextGetter,
   Component,
   FnComponent,
   ClassComponent,
@@ -18,8 +19,9 @@ import type {
   Ref,
   ComponentAttrs,
   VNodeInternalAttrs,
+  Signalify,
 } from "@/types";
-import type { Signal } from "@preact/signals-core";
+import type { Signal } from "./signalsCore";
 import {
   setCurrentVNode,
   getCurrentVNode,
@@ -28,13 +30,15 @@ import {
 } from "./context";
 import { reportError, ErrorSource } from "./warning";
 import { isRefObject, isSignalRef } from "./templateRef";
+import { maybeReactiveProps } from "./reactiveProps";
+import { isFlowComponent } from "./flow";
 
 /**
  * SVG 标签集合
  * 用于自动识别 SVG 元素并设置命名空间
  * 包含 SVG 1.1 规范中的所有元素
  *
- * 导出供 vite-plugin-hili-compile 复用（单一数据源，避免双份维护漂移）
+ * 导出供 vite-plugin-lumina-compile 复用（单一数据源，避免双份维护漂移）
  */
 export const SVG_TAGS = new Set([
   // 容器元素
@@ -102,12 +106,12 @@ export const SVG_TAGS = new Set([
 
 /**
  * 组件类型缓存
- * 编译期通过 __hili_type 标记注入，运行时直接读取，避免反射判断
+ * 编译期通过 __lumina_type 标记注入，运行时直接读取，避免反射判断
  * - 'fn': 函数组件
  * - 'class': 类组件
  * - undefined: 未编译的代码，fallback 到运行时判断
  */
-type HiliCompType = "fn" | "class";
+type LuminaCompType = "fn" | "class";
 
 /**
  * 可调用组件（函数组件或类组件构造函数）
@@ -120,27 +124,27 @@ type CallableComponent = (...args: never[]) => unknown;
 
 /**
  * 组件类型缓存（WeakMap）
- * 无 __hili_type 标记（dev/未编译代码）时，缓存反射判断结果，
+ * 无 __lumina_type 标记（dev/未编译代码）时，缓存反射判断结果，
  * 避免每次组件调用都执行 Object.getOwnPropertyDescriptor
  * class 身份稳定，缓存安全
  */
-const componentTypeCache = new WeakMap<CallableComponent, HiliCompType>();
+const componentTypeCache = new WeakMap<CallableComponent, LuminaCompType>();
 
 /**
  * 获取组件类型（优先使用编译期标记，fallback 到运行时反射判断）
  *
- * 编译期：vite-plugin-hili-compile 在 defineComponent 和 class 组件后注入
- *   Comp.__hili_type = 'fn' 或 Comp.__hili_type = 'class'
+ * 编译期：vite-plugin-lumina-compile 在 defineComponent 和 class 组件后注入
+ *   Comp.__lumina_type = 'fn' 或 Comp.__lumina_type = 'class'
  * 运行时：优先读取标记（O(1)），无标记时 fallback 到 isClassComponent/isFnComponent
  */
-function getComponentType(fn: unknown): HiliCompType | null {
+function getComponentType(fn: unknown): LuminaCompType | null {
   if (typeof fn !== "function") return null;
   const callable = fn as CallableComponent;
 
   // 优先检查编译期注入的标记（O(1) 属性读取，无需反射）
   const marker = (
-    callable as unknown as { __hili_type?: HiliCompType }
-  ).__hili_type;
+    callable as unknown as { __lumina_type?: LuminaCompType }
+  ).__lumina_type;
   if (marker === "fn" || marker === "class") return marker;
 
   // fallback：运行时反射判断（开发模式或未编译代码），结果缓存到 WeakMap
@@ -148,7 +152,7 @@ function getComponentType(fn: unknown): HiliCompType | null {
   if (cached !== undefined) return cached;
 
   // 只做一次 isClassComponent 反射检查，避免 isFnComponent 中再次调用
-  const type: HiliCompType = isClassComponent(callable) ? "class" : "fn";
+  const type: LuminaCompType = isClassComponent(callable) ? "class" : "fn";
   componentTypeCache.set(callable, type);
   return type;
 }
@@ -215,6 +219,13 @@ function flattenInto(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item === null || item === undefined) continue;
+    // ★ 显式响应式 getter 协议：零参箭头函数子节点 → __reactive_text VNode
+    // 与编译插件的 _reactiveText(fn) 转换产物一致，覆盖「未经过编译插件」的运行时路径；
+    // mount 创建 Text 节点 + effect，内部 signal 变化自动更新 textContent
+    if (typeof item === "function") {
+      out.push(reactiveTextVNode(item as ReactiveTextGetter));
+      continue;
+    }
     if (depth < 3 && Array.isArray(item)) {
       flattenInto(item, out, depth + 1);
     } else {
@@ -224,14 +235,37 @@ function flattenInto(
 }
 
 /**
+ * 构造响应式文本 VNode（tag 为 "__reactive_text" 内部标记）
+ *
+ * 统一供两处复用，保证结构单一来源：
+ * 1. h() 的 flattenInto：未编译路径将零参箭头函数子节点规范化为本 VNode
+ * 2. core/internal.ts 的 _reactiveText：编译产物的运行时入口
+ *
+ * materialize/SSR/hydrate 识别 __reactive 标记后创建 Text 节点并注册 effect
+ *
+ * @param getter - 返回当前文本值的函数（effect 中调用，自动追踪依赖的 signal）
+ */
+export function reactiveTextVNode(getter: ReactiveTextGetter): VNode {
+  return {
+    tag: "__reactive_text",
+    attrs: {},
+    children: [],
+    __reactive: { get: () => String(getter()) },
+  };
+}
+
+/**
  * h 函数属性类型
  */
 export type HAttrs = Record<string, unknown> | null | undefined;
 
 /**
  * h 函数子元素类型
+ *
+ * 函数类型（ReactiveTextGetter）为显式响应式 getter 协议：进入 VNode 树前
+ * 由 flattenInto 规范化为 __reactive_text VNode，故 VNodeChild 不含函数。
  */
-export type HChild = VNode | string | null | undefined;
+export type HChild = VNode | string | ReactiveTextGetter | null | undefined;
 
 /**
  * 创建虚拟节点 (VNode)
@@ -262,7 +296,7 @@ export function h<P, E extends Record<string, unknown>>(
 
 export function h<P>(
   tag: ExposedComponent<P, void>,
-  attrs?: P & VNodeInternalAttrs,
+  attrs?: Signalify<P> & VNodeInternalAttrs,
   ...children: HChild[]
 ): VNode;
 
@@ -326,12 +360,21 @@ export function h<P = Record<string, unknown>>(
     }
     props.children = flatChildren;
 
+    /**
+     * ★ 响应式 props：检测 Signal / _rp thunk 后包装为惰性代理
+     * 组件内部在 effect / 响应式 getter 中读取 props.x 即建立信号依赖
+     * （控制流组件豁免：each/when/component 需要 Signal/getter 本体）
+     */
+    const compProps = isFlowComponent(tag)
+      ? props
+      : maybeReactiveProps(props);
+
     const compType = getComponentType(tag);
 
     if (compType === "class") {
       const instance = new (tag as unknown as new (
         props: Record<string, unknown>,
-      ) => { render: () => VNode })(props);
+      ) => { render: () => VNode })(compProps);
       /**
        * 类组件渲染：调用 render 方法获取 VNode
        * 渲染路径中的错误不吞掉，报告后重新抛出
@@ -344,7 +387,7 @@ export function h<P = Record<string, unknown>>(
         const error = e instanceof Error ? e : new Error(String(e));
         reportError(
           ErrorSource.RENDER,
-          `类组件渲染失败: ${tag.name || "Anonymous"}`,
+          `Class component render failed: ${tag.name || "Anonymous"}`,
           error,
         );
         throw e;
@@ -374,13 +417,13 @@ export function h<P = Record<string, unknown>>(
       let vnode: VNode;
       try {
         vnode = (tag as unknown as (props: Record<string, unknown>) => VNode)(
-          props,
+          compProps,
         );
       } catch (e) {
         const error = e instanceof Error ? e : new Error(String(e));
         reportError(
           ErrorSource.RENDER,
-          `函数组件渲染失败: ${tag.name || "Anonymous"}`,
+          `Function component render failed: ${tag.name || "Anonymous"}`,
           error,
         );
         throw e;
@@ -553,7 +596,7 @@ export function defineComponent<P, E = void>(
       const error = e instanceof Error ? e : new Error(String(e));
       reportError(
         ErrorSource.SETUP,
-        `组件 setup 执行失败: ${setup.name || "Anonymous"}`,
+        `Component setup execution failed: ${setup.name || "Anonymous"}`,
         error,
       );
       throw e;

@@ -1,13 +1,13 @@
 import { defineConfig } from 'vite';
 import path from 'path';
-import { hiliCompile } from './plugins/vite-plugin-hili-compile';
+import { luminaCompile } from './plugins/vite-plugin-lumina-compile';
 
 export default defineConfig({
   root: '.',
   publicDir: 'public',
   plugins: [
     // 零配置编译插件：自动检测 dev/prod，dev 模式零开销，prod 模式全量优化
-    hiliCompile(),
+    luminaCompile(),
   ],
   resolve: {
     alias: [
@@ -20,8 +20,8 @@ export default defineConfig({
       { find: /^@\/directives$/, replacement: path.resolve(__dirname, 'directives/index.ts') },
 
       // ===== 子路径正则 =====
-      { find: /^@\/hili-player\/plugins\/(.*)/, replacement: path.resolve(__dirname, 'packages/plugins/src/$1') },
-      { find: /^@\/hili-player\/(.*)/, replacement: path.resolve(__dirname, 'packages/player/src/$1') },
+      { find: /^@\/lumina\/plugins\/(.*)/, replacement: path.resolve(__dirname, 'packages/plugins/src/$1') },
+      { find: /^@\/nova\/(.*)/, replacement: path.resolve(__dirname, 'packages/player/src/$1') },
       { find: /^@\/core\/(.*)/, replacement: path.resolve(__dirname, 'core/$1') },
       { find: /^@\/types\/(.*)/, replacement: path.resolve(__dirname, 'types/$1') },
       { find: /^@\/utils\/(.*)/, replacement: path.resolve(__dirname, 'utils/$1') },

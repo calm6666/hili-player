@@ -6,6 +6,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -30,9 +31,9 @@
       "@/events/*": ["events/*"],
       "@/error": ["error/index.ts"],
       "@/error/*": ["error/*"],
-      "@/hili-player/*": ["packages/player/src/*"],
-      "@/hili-player/plugins/*": ["packages/plugins/src/*"],
-      "@hili-player/player": ["packages/player/src/index.ts"],
+      "@/nova/*": ["packages/player/src/*"],
+      "@/lumina/plugins/*": ["packages/plugins/src/*"],
+      "@lumina/nova": ["packages/player/src/index.ts"],
       "hls.js": ["hls-fork/dist/hls"]
     }
   },

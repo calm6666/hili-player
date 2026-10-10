@@ -1,5 +1,5 @@
-.player-docker {
-  .player-ctrl-viewpoint {
+.nova-player-docker {
+  .nova-player-ctrl-viewpoint {
     cursor: default;
     -webkit-box-flex: 1;
     -ms-flex-positive: 1;
@@ -10,14 +10,14 @@
     max-width: 240px;
     min-width: 45px;
 
-    .player-ctrl-viewpoint-inner,
-    .player-ctrl-viewpoint-content {
+    .nova-player-ctrl-viewpoint-inner,
+    .nova-player-ctrl-viewpoint-content {
       display: -webkit-box;
       display: -ms-flexbox;
       display: flex;
     }
 
-    .player-ctrl-viewpoint-content {
+    .nova-player-ctrl-viewpoint-content {
       -webkit-box-align: center;
       -ms-flex-align: center;
       align-items: center;
@@ -27,13 +27,13 @@
       overflow: hidden;
 
       &:hover {
-        .player-ctrl-viewpoint-icon {
+        .nova-player-ctrl-viewpoint-icon {
           fill: #fff;
         }
       }
     }
 
-    .player-ctrl-viewpoint-text {
+    .nova-player-ctrl-viewpoint-text {
       -webkit-box-flex: 1;
       -ms-flex: 1 1 auto;
       flex: 1 1 auto;
@@ -45,7 +45,7 @@
       white-space: nowrap;
     }
 
-    .player-ctrl-viewpoint-icon {
+    .nova-player-ctrl-viewpoint-icon {
       -webkit-box-align: center;
       -ms-flex-align: center;
       align-items: center;
@@ -63,7 +63,7 @@
       }
     }
 
-    .player-ctrl-viewpoint-menu-wrap {
+    .nova-player-ctrl-viewpoint-menu-wrap {
       background-color: hsla(0, 0%, 8%, 0.9);
       border-radius: 2px;
       bottom: 41px;
@@ -79,13 +79,13 @@
       width: 210px;
     }
 
-    .player-ctrl-viewpoint-menu {
+    .nova-player-ctrl-viewpoint-menu {
       list-style: none;
       margin: 0;
       padding: 0;
     }
 
-    .player-ctrl-viewpoint-menu-item {
+    .nova-player-ctrl-viewpoint-menu-item {
       cursor: pointer;
       font-size: 12px;
       height: 30px;
@@ -100,7 +100,7 @@
         background-color: hsla(0, 0%, 100%, 0.1);
       }
 
-      .player-ctrl-viewpoint-menu-item-team {
+      .nova-player-ctrl-viewpoint-menu-item-team {
         border-radius: 2px;
         -webkit-box-sizing: border-box;
         box-sizing: border-box;
@@ -125,7 +125,7 @@
     }
 
     &.state-show {
-      .player-ctrl-viewpoint-menu-wrap {
+      .nova-player-ctrl-viewpoint-menu-wrap {
         opacity: 1;
         visibility: visible;
       }
@@ -134,8 +134,8 @@
 }
 
 @media screen and (max-width: 600px) {
-  .player-container[data-screen="full"] .player-ctrl-viewpoint,
-  .player-container[data-screen="web"] .player-ctrl-viewpoint {
+  .nova-player-container[data-screen="full"] .nova-player-ctrl-viewpoint,
+  .nova-player-container[data-screen="web"] .nova-player-ctrl-viewpoint {
     display: none;
   }
 }

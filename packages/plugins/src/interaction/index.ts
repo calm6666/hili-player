@@ -1,36 +1,59 @@
 /**
  * ============================================
- * 交互插件 (InteractionPlugin)
+ * 交互插件 (InteractionPlugin) — 响应式重构版
  * ============================================
  * 互动命令功能插件，通过 PlayerEventEnum 事件实现跨组件通信
- * 在 MOUNTED 时查找 .player-cmd-dm-inside 容器（不自行创建容器）
- * 使用 4 个子插件（GuidePlugin, LinkPlugin, VotePlugin, ScorePlugin）渲染卡片
- * 使用 diffAlgorithm（binarySearchByTime + updateCardsDiff）进行时间驱动的卡片可见性控制
- * 在编辑模式下使用 dragEditor（bindDragInEditMode）提供拖拽定位
+ * 在 MOUNTED 时查找 .nova-player-cmd-dm-inside 容器（不自行创建容器）
+ *
+ * 响应式架构（Lumina 框架 Signal + For 控制流）：
+ * - 4 个 For 控制流按 key（类型前缀 + 列表下标）精准创建/销毁卡片 DOM
+ * - 卡片 DOM 在显示时间点前 CARD_CREATE_LEAD（0.6s，与 diffAlgorithm 的
+ *   bufferTime 一致）才按需创建，默认 visibility:hidden + opacity:0，
+ *   到点由 show 信号翻转 .nova-danmaku-x-show 类播放 CSS 过渡
+ * - 播放越过 timeEnd（或被关闭）→ 淡出过渡结束后删除 DOM，
+ *   下次进入时间窗口重新创建并重播过渡（不保留任何关键帧动画）
+ * - 关闭环倒计时方向为 100% → 0：remaining 信号随播放推进从满环消隐到空环
+ * - 交互状态（点赞/投票/评分）由插件持有 Map（按列表下标），跨 DOM 重建保留
+ * - 时间驱动复用 diffAlgorithm（updateCardsDiff 的增量窗口 diff）
+ *
+ * 双模式 API（config.mode）：
+ * - 'interactive'（默认，展示模式）：订阅 TIME_UPDATE 按时间窗口显隐卡片，
+ *   注册全部交互监听（点赞/投币/收藏/关注/投票/评分/关闭/跳链），
+ *   关闭按钮点击即关闭并回传 config 业务回调
+ * - 'edit'（编辑模式）：全部卡片常驻显示（时间不驱动显隐），
+ *   仅订阅 MOUNTED 与 POSITION_CHANGE（位置上报是编辑模式的核心输出），
+ *   卡片不注册任何点击/关闭监听（关闭圆环仅渲染不可点），
+ *   bindDragInEditMode 提供拖拽定位，贴边经 AlignLines 响应式组件绘制辅助线；
+ *   关闭环与展示模式同口径随播放进度推进（视频暂停圆环随之停住）
+ *
+ * 内容编辑 API（updateCardContent / removeCard）：
+ * - 文本字段原地更新 + contentVersion 自增 → 响应式文本精准更新 DOM
+ * - 结构字段（形态/图标/选项数量）变化 → 条目按新数据重建
  *
  * 使用方式：
- * import { InteractionPlugin } from '@hili-player/plugins';
+ * import { InteractionPlugin } from '@lumina/plugins';
  *
  * plugins: [
  *   InteractionPlugin({
- *     isEdit: false,
+ *     mode: 'interactive',
  *     onLike: () => console.log('liked'),
  *     onVoteSelect: (voteIndex, optionIndex) => console.log(voteIndex, optionIndex)
  *   })
  * ]
  */
 
-import type { Plugin, PluginOptions } from '@/types/plugin';
-import type { VideoPlayer } from '../../../player/src/player/VideoPlayer';
-import type { PlayerEventBus } from '../../../player/src/core/plugin';
-import { PlayerEventEnum } from '@/core/events';
-import { GuidePlugin } from './GuidePlugin';
-import { LinkPlugin } from './LinkPlugin';
-import { VotePlugin } from './VotePlugin';
-import { ScorePlugin } from './ScorePlugin';
-import { binarySearchByTime, updateCardsDiff } from './diffAlgorithm';
-import { bindDragInEditMode } from './dragEditor';
-import { isBrowser } from '@/utils';
+import type { Plugin, PluginOptions } from "@/types/plugin";
+import type { VideoPlayer } from "../../../player/src/player/VideoPlayer";
+import type { PlayerEventBus } from "../../../player/src/core/plugin";
+import { PlayerEventEnum } from "@/core/events";
+import { h, signal, Fragment, For, mount, destroy } from "@/core";
+import type { Signal } from "@/core";
+import type { VNode } from "@/types";
+import { updateCardsDiff } from "./diffAlgorithm";
+import { isBrowser } from "@/utils";
+import { injectPluginStyle } from "../utils/injectStyle";
+// 交互插件样式以字符串形式内联导入（Vite `?inline`），install 时运行时注入
+import interactionCss from "./interaction.scss?inline";
 import type {
   CardType,
   PositionEvent,
@@ -40,8 +63,44 @@ import type {
   InteractionScore,
   InteractionCard,
   InteractionPluginConfig,
-  InteractionSubPlugin,
-} from './types';
+  InteractionPluginMode,
+  ActiveCardEntry,
+  CardContentPatch,
+  VoteOption,
+} from "./types";
+import { renderGuideCard, createGuideCardState } from "./GuideCard";
+import type { GuideCardOptions, GuideCardState } from "./GuideCard";
+import { renderLinkCard } from "./LinkCard";
+import type { LinkCardOptions } from "./LinkCard";
+import { renderVoteCard, createVoteCardState } from "./VoteCard";
+import type { VoteCardOptions, VoteCardState } from "./VoteCard";
+import { renderScoreCard, createScoreCardState } from "./ScoreCard";
+import type { ScoreCardOptions, ScoreCardState } from "./ScoreCard";
+import { CARD_FADE_MS } from "./closeCircle";
+import { bindDragInEditMode } from "./dragEditor";
+import type { AlignLineBounds } from "./dragEditor";
+import { createAlignLinesSignal, renderAlignLines } from "./AlignLines";
+import type { AlignLinesState } from "./AlignLines";
+
+// ============================================
+// 常量
+// ============================================
+
+/**
+ * 卡片提前创建的提前量（秒）
+ * 与 diffAlgorithm 的 bufferTime 保持一致：播放头进入
+ * [timeStart - 0.6, timeEnd] 即创建 DOM（隐藏态），
+ * 到 timeStart 翻转为显示态播放淡入过渡
+ */
+const CARD_CREATE_LEAD = 0.6;
+
+/** 活跃条目 id 的类型前缀（For 的 key 由前缀 + 列表下标构成） */
+const ENTRY_PREFIX = {
+  guideThree: "guideThree:",
+  link: "link:",
+  vote: "vote:",
+  score: "score:",
+} as const;
 
 // ============================================
 // 类型定义
@@ -49,7 +108,7 @@ import type {
 
 /** 交互插件已解析配置 */
 interface InteractionResolvedConfig {
-  isEdit: boolean;
+  mode: InteractionPluginMode;
   data: Partial<InteractionCard>;
   onPositionChange: ((event: PositionEvent) => void) | null;
   onCardClose: ((type: CardType, index: number) => void) | null;
@@ -62,8 +121,58 @@ interface InteractionResolvedConfig {
   onScoreSelect: ((scoreIndex: number, value: number) => void) | null;
 }
 
-/** 拖拽清理函数类型 */
-type DragCleanup = () => void;
+/**
+ * 时间同步引擎对卡片数据的最小结构要求
+ * （guide 卡片无 isClose/closeTime 字段，可缺省）
+ */
+interface SyncItem {
+  timeStart?: number;
+  timeEnd?: number;
+  isClose?: boolean;
+  closeTime?: number;
+}
+
+// ============================================
+// 运行时类型谓词（For 回调入参为 unknown，用谓词收窄替代 as 断言）
+// ============================================
+
+/** 判断未知值是否为含字符串 id 的对象 */
+const hasStringId = (item: unknown): item is { id: string } =>
+  typeof item === "object" &&
+  item !== null &&
+  "id" in item &&
+  typeof item.id === "string";
+
+/** 判断未知值是否为合法的卡片类型字符串 */
+const isCardType = (value: unknown): value is CardType =>
+  value === "guideThree" ||
+  value === "link" ||
+  value === "vote" ||
+  value === "score";
+
+/** 收窄到点赞关注条目 */
+const isGuideEntry = (
+  item: unknown,
+): item is ActiveCardEntry<InteractionGuideThree> =>
+  hasStringId(item) && item.id.startsWith(ENTRY_PREFIX.guideThree);
+
+/** 收窄到外链条目 */
+const isLinkEntry = (
+  item: unknown,
+): item is ActiveCardEntry<InteractionLink> =>
+  hasStringId(item) && item.id.startsWith(ENTRY_PREFIX.link);
+
+/** 收窄到投票条目 */
+const isVoteEntry = (
+  item: unknown,
+): item is ActiveCardEntry<InteractionVote> =>
+  hasStringId(item) && item.id.startsWith(ENTRY_PREFIX.vote);
+
+/** 收窄到评分条目 */
+const isScoreEntry = (
+  item: unknown,
+): item is ActiveCardEntry<InteractionScore> =>
+  hasStringId(item) && item.id.startsWith(ENTRY_PREFIX.score);
 
 // ============================================
 // 互动插件 API 接口
@@ -87,6 +196,10 @@ export interface InteractionPluginAPI extends Plugin {
   getStatus(): InteractionCard;
   /** 更新数据 */
   updateData(data: Partial<InteractionCard>): void;
+  /** 编辑卡片内容（文本精准更新 / 结构字段触发条目重建） */
+  updateCardContent(type: CardType, index: number, patch: CardContentPatch): void;
+  /** 从数据列表移除卡片并销毁其条目（编辑器删除语义） */
+  removeCard(type: CardType, index: number): void;
 }
 
 // ============================================
@@ -94,9 +207,9 @@ export interface InteractionPluginAPI extends Plugin {
 // ============================================
 
 class InteractionPluginClass implements InteractionPluginAPI {
-  readonly name = 'interaction';
-  readonly version = '1.0.0';
-  readonly description = '互动命令插件';
+  readonly name = "interaction";
+  readonly version = "1.0.0";
+  readonly description = "互动命令插件";
   readonly options?: PluginOptions;
 
   private container: HTMLElement | null = null;
@@ -110,16 +223,91 @@ class InteractionPluginClass implements InteractionPluginAPI {
     scoreList: [],
   };
 
-  // 子插件实例列表
-  private guidePlugins: GuidePlugin[] = [];
-  private linkPlugins: LinkPlugin[] = [];
-  private votePlugins: VotePlugin[] = [];
-  private scorePlugins: ScorePlugin[] = [];
+  // ============================================
+  // 响应式数据源：4 个活跃条目 signal 数组（For 控制流消费）
+  // 条目加入数组 = 挂载 DOM，移除 = 销毁 DOM
+  // ============================================
 
-  // 拖拽清理函数列表
-  private dragCleanups: DragCleanup[] = [];
+  private guideActive = signal<ActiveCardEntry<InteractionGuideThree>[]>([]);
+  private linkActive = signal<ActiveCardEntry<InteractionLink>[]>([]);
+  private voteActive = signal<ActiveCardEntry<InteractionVote>[]>([]);
+  private scoreActive = signal<ActiveCardEntry<InteractionScore>[]>([]);
 
-  // 时间追踪（用于 diffAlgorithm）
+  // ============================================
+  // 交互状态（按列表下标持有，跨 DOM 重建保留：
+  // 卡片淡出删除后再次进入窗口重建 DOM，投票/评分/点赞结果不丢失）
+  // ============================================
+
+  private guideStates = new Map<number, GuideCardState>();
+  private voteStates = new Map<number, VoteCardState>();
+  private scoreStates = new Map<number, ScoreCardState>();
+
+  /** 响应式根（Fragment 包裹 4 个 For），uninstall 时 destroy */
+  private rootVNode: VNode | null = null;
+
+  // ============================================
+  // 编辑模式状态
+  // ============================================
+
+  /** 是否编辑模式（构造时由 config.mode 派生，运行期不变） */
+  private readonly isEditMode: boolean;
+
+  /**
+   * 对齐辅助线状态 signal（仅编辑模式消费：
+   * mountRoot 时挂载 AlignLines 组件，拖拽贴边回调驱动显隐）
+   */
+  private alignLines: Signal<AlignLinesState> = createAlignLinesSignal();
+
+  /**
+   * 播放器实例引用（install 时保存）：
+   * 编辑模式常驻条目创建后用于读取当前播放时间校准关闭环
+   * （后装场景视频可能已播放过半，满环起步与展示模式口径不一致）
+   */
+  private playerRef: VideoPlayer | null = null;
+
+  /**
+   * 拖拽贴边回调：把 dragEditor 报告的边界写入辅助线 signal
+   * （bounds 为 null 或某方向字段缺省时，对应线段隐藏，位置保留上次值）
+   */
+  private readonly handleAlignLines = (
+    bounds: AlignLineBounds | null,
+  ): void => {
+    const prev = this.alignLines.value;
+    this.alignLines.value = {
+      left: bounds?.left ?? prev.left,
+      right: bounds?.right ?? prev.right,
+      top: bounds?.top ?? prev.top,
+      bottom: bounds?.bottom ?? prev.bottom,
+      leftShow: bounds?.left !== undefined,
+      rightShow: bounds?.right !== undefined,
+      topShow: bounds?.top !== undefined,
+      bottomShow: bounds?.bottom !== undefined,
+    };
+  };
+
+  /**
+   * 组装编辑模式的拖拽绑定器：绑定 dragEditor + 位置回写 + 辅助线回调
+   *
+   * @param type - 卡片类型（位置变更事件回传 payload 使用）
+   * @param index - 卡片在数据列表中的下标
+   * @param item - 卡片原始数据（拖拽落点直接回写 top/left）
+   */
+  private makeBindDrag(
+    type: CardType,
+    index: number,
+    item: { top: number; left: number },
+  ): (el: HTMLDivElement) => () => void {
+    return (el: HTMLDivElement): (() => void) =>
+      bindDragInEditMode(
+        el,
+        (top: number, left: number): void => {
+          this.handlePositionChange(type, index, item, top, left);
+        },
+        this.handleAlignLines,
+      );
+  }
+
+  // 时间追踪（用于 diffAlgorithm 与关闭时间点记录）
   private currentTime = 0;
   private prevTime = 0;
 
@@ -131,7 +319,7 @@ class InteractionPluginClass implements InteractionPluginAPI {
 
   constructor(config?: InteractionPluginConfig) {
     this.config = {
-      isEdit: config?.isEdit ?? false,
+      mode: config?.mode ?? "interactive",
       data: config?.data ?? {},
       onPositionChange: config?.onPositionChange ?? null,
       onCardClose: config?.onCardClose ?? null,
@@ -154,429 +342,844 @@ class InteractionPluginClass implements InteractionPluginAPI {
       };
     }
 
+    // 模式派生（运行期只读）：后续所有分支判断统一走 isEditMode
+    this.isEditMode = this.config.mode === "edit";
+
     this.options = undefined;
   }
 
   install(player: VideoPlayer): void {
     if (!isBrowser()) return;
 
+    // 运行时注入交互插件样式：样式随插件分发，与播放器样式包彻底解耦
+    // injectPluginStyle 幂等，多播放器实例共享同一样式节点
+    injectPluginStyle("interaction", interactionCss);
+
+    // 保存播放器引用：编辑模式常驻条目创建后读取当前播放时间校准关闭环
+    this.playerRef = player;
+
     const events: PlayerEventBus = player.events;
-    // 保存事件总线引用，供互动子插件在交互发生时发布事件
+    // 保存事件总线引用，供卡片交互发生时发布互动事件
     this.eventBus = player.events;
 
+    // 公共订阅：MOUNTED 挂载响应式根（两种模式都需要）
     const unsubMounted = events.on(PlayerEventEnum.MOUNTED, (data): void => {
       if (data.container) {
-        this.container = data.container;
-        // 查找 .player-cmd-dm-inside 容器（不自行创建）
-        this.dmInsideElement = data.container.querySelector('.player-cmd-dm-inside') ?? null;
-
-        // 渲染初始数据
-        if (this.dmInsideElement) {
-          this.renderInitialData();
-        }
+        this.initAfterMounted(data.container);
       }
     });
     this.unsubscribers.push(unsubMounted);
 
-    // 订阅 TIME_UPDATE 事件：使用 diffAlgorithm 更新卡片可见性
-    const unsubTimeUpdate = events.on(PlayerEventEnum.TIME_UPDATE, (data): void => {
-      this.handleTimeUpdate(data.time);
-    });
+    // 运行期后装（player.use）场景：播放器已挂载时 MOUNTED 已错过不再触发，
+    // 检测到容器就地补一次初始化（initAfterMounted 幂等，重复调用无副作用）
+    if (player.el) {
+      this.initAfterMounted(player.el);
+    }
+
+    // 公共订阅：时间更新（两种模式都需要）：
+    // - 展示模式：diffAlgorithm 增量同步卡片时间窗口显隐与关闭环
+    // - 编辑模式：卡片常驻不参与窗口显隐，仅随播放进度推进关闭环
+    //   （视频暂停时 TIME_UPDATE 停发 → 圆环随之停住，与展示模式一致）
+    const unsubTimeUpdate = events.on(
+      PlayerEventEnum.TIME_UPDATE,
+      (data): void => {
+        this.handleTimeUpdate(data.time);
+      },
+    );
     this.unsubscribers.push(unsubTimeUpdate);
 
-    // 订阅 INTERACTION_LIKE 事件
+    // 公共订阅：位置变更转发（类型谓词收窄替代 as 断言）
+    // 编辑模式下拖拽落点是核心输出，config.onPositionChange 必须收到回传
+    const unsubPositionChange = events.on(
+      PlayerEventEnum.INTERACTION_POSITION_CHANGE,
+      (data): void => {
+        if (isCardType(data.type)) {
+          this.config.onPositionChange?.({
+            type: data.type,
+            index: data.index,
+            top: data.top,
+            left: data.left,
+          });
+        }
+      },
+    );
+    this.unsubscribers.push(unsubPositionChange);
+
+    // 编辑模式：不注册任何业务交互监听——编辑模式下卡片不注册点击/
+    // 投票/评分/关闭监听，对应事件根本不会发出，订阅无意义
+    if (this.isEditMode) return;
+
+    // ==================== 以下订阅仅展示模式注册 ====================
+
+    // 订阅互动事件：转发外部 config 回调（卡片交互由插件内部发布到总线）
+
     const unsubLike = events.on(PlayerEventEnum.INTERACTION_LIKE, (): void => {
       this.config.onLike?.();
     });
     this.unsubscribers.push(unsubLike);
 
-    // 订阅 INTERACTION_COIN 事件
     const unsubCoin = events.on(PlayerEventEnum.INTERACTION_COIN, (): void => {
       this.config.onCoin?.();
     });
     this.unsubscribers.push(unsubCoin);
 
-    // 订阅 INTERACTION_COLLECT 事件
-    const unsubCollect = events.on(PlayerEventEnum.INTERACTION_COLLECT, (): void => {
-      this.config.onCollect?.();
-    });
+    const unsubCollect = events.on(
+      PlayerEventEnum.INTERACTION_COLLECT,
+      (): void => {
+        this.config.onCollect?.();
+      },
+    );
     this.unsubscribers.push(unsubCollect);
 
-    // 订阅 INTERACTION_FOLLOW 事件
-    const unsubFollow = events.on(PlayerEventEnum.INTERACTION_FOLLOW, (): void => {
-      this.config.onFollow?.();
-    });
+    const unsubFollow = events.on(
+      PlayerEventEnum.INTERACTION_FOLLOW,
+      (): void => {
+        this.config.onFollow?.();
+      },
+    );
     this.unsubscribers.push(unsubFollow);
 
-    // 订阅 INTERACTION_LINK_CLICK 事件
-    const unsubLinkClick = events.on(PlayerEventEnum.INTERACTION_LINK_CLICK, (): void => {
-      // 链接点击回调由子插件内部触发
-    });
-    this.unsubscribers.push(unsubLinkClick);
+    // 说明：LINK_CLICK 不在总线订阅后转发——事件无 payload，link 数据无法
+    // 经总线透传；config.onLinkClick 由渲染层回调直接携带卡片数据调用（见
+    // renderLinkEntry），总线仅承担向外部监听者广播的职责
 
-    // 订阅 INTERACTION_VOTE_SELECT 事件
-    const unsubVoteSelect = events.on(PlayerEventEnum.INTERACTION_VOTE_SELECT, (data): void => {
-      this.config.onVoteSelect?.(data.voteIndex, data.optionIndex);
-    });
+    const unsubVoteSelect = events.on(
+      PlayerEventEnum.INTERACTION_VOTE_SELECT,
+      (data): void => {
+        this.config.onVoteSelect?.(data.voteIndex, data.optionIndex);
+      },
+    );
     this.unsubscribers.push(unsubVoteSelect);
 
-    // 订阅 INTERACTION_SCORE_SELECT 事件
-    const unsubScoreSelect = events.on(PlayerEventEnum.INTERACTION_SCORE_SELECT, (data): void => {
-      this.config.onScoreSelect?.(data.scoreIndex, data.value);
-    });
+    const unsubScoreSelect = events.on(
+      PlayerEventEnum.INTERACTION_SCORE_SELECT,
+      (data): void => {
+        this.config.onScoreSelect?.(data.scoreIndex, data.value);
+      },
+    );
     this.unsubscribers.push(unsubScoreSelect);
 
-    // 订阅 INTERACTION_CARD_CLOSE 事件
-    const unsubCardClose = events.on(PlayerEventEnum.INTERACTION_CARD_CLOSE, (data): void => {
-      this.config.onCardClose?.(data.type as CardType, data.index);
-    });
+    // 卡片关闭：类型谓词收窄替代旧实现的 as 断言
+    const unsubCardClose = events.on(
+      PlayerEventEnum.INTERACTION_CARD_CLOSE,
+      (data): void => {
+        if (isCardType(data.type)) {
+          this.config.onCardClose?.(data.type, data.index);
+        }
+      },
+    );
     this.unsubscribers.push(unsubCardClose);
-
-    // 订阅 INTERACTION_POSITION_CHANGE 事件
-    const unsubPositionChange = events.on(PlayerEventEnum.INTERACTION_POSITION_CHANGE, (data): void => {
-      this.config.onPositionChange?.({
-        type: data.type as CardType,
-        index: data.index,
-        top: data.top,
-        left: data.left,
-      });
-    });
-    this.unsubscribers.push(unsubPositionChange);
   }
 
   uninstall(): void {
     // 取消所有事件订阅
-    this.unsubscribers.forEach(unsub => unsub());
+    this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
 
-    // 清理拖拽
-    this.dragCleanups.forEach(cleanup => cleanup());
-    this.dragCleanups = [];
+    // 释放条目级资源（移除定时器 / 拖拽绑定）并清空条目数组
+    this.disposeEntries(this.guideActive);
+    this.disposeEntries(this.linkActive);
+    this.disposeEntries(this.voteActive);
+    this.disposeEntries(this.scoreActive);
 
-    // 销毁所有子插件
-    this.guidePlugins.forEach(p => p.destroy());
-    this.linkPlugins.forEach(p => p.destroy());
-    this.votePlugins.forEach(p => p.destroy());
-    this.scorePlugins.forEach(p => p.destroy());
+    // 清理交互状态
+    this.guideStates.clear();
+    this.voteStates.clear();
+    this.scoreStates.clear();
 
-    this.guidePlugins = [];
-    this.linkPlugins = [];
-    this.votePlugins = [];
-    this.scorePlugins = [];
+    // 销毁响应式根（For dispose 同步销毁全部卡片 DOM 与响应式 effect）
+    if (this.rootVNode !== null) {
+      destroy(this.rootVNode);
+      this.rootVNode = null;
+    }
 
     this.dmInsideElement = null;
     this.container = null;
     this.eventBus = null;
+    this.playerRef = null;
+    this.currentTime = 0;
+    this.prevTime = 0;
   }
 
-  // ==================== 渲染方法 ====================
+  // ==================== 响应式根挂载 ====================
 
   /**
-   * 渲染初始数据
+   * MOUNTED 后初始化：定位互动容器并挂载响应式根
+   *
+   * 两个触发时机共用（幂等，重复调用无副作用）：
+   * - MOUNTED 事件回调（随 plugins.list 在构造期注入的正常路径）
+   * - install 时检测 player.el 已存在（播放器先挂载、后 player.use 的后装路径）
+   *
+   * @param container - 播放器容器（MOUNTED 载荷或 player.el）
    */
-  private renderInitialData(): void {
-    if (!this.dmInsideElement) return;
+  private initAfterMounted(container: HTMLElement): void {
+    this.container = container;
+    // 查找 .nova-player-cmd-dm-inside 容器（不自行创建）
+    this.dmInsideElement =
+      container.querySelector(".nova-player-cmd-dm-inside") ?? null;
 
-    this.interactCard.guideList.forEach((item): void => {
-      this.addGuide(item);
-    });
-    this.interactCard.linkList.forEach((item): void => {
-      this.addLink(item);
-    });
-    this.interactCard.voteList.forEach((item): void => {
-      this.addVote(item);
-    });
-    this.interactCard.scoreList.forEach((item): void => {
-      this.addScore(item);
-    });
-  }
-
-  /**
-   * 添加点赞关注卡片（使用 GuidePlugin 子插件）
-   */
-  addGuide(item: InteractionGuideThree): void {
-    if (!this.dmInsideElement) return;
-
-    const plugin = new GuidePlugin(item);
-    plugin.render(this.dmInsideElement);
-    this.guidePlugins.push(plugin);
-
-    // 在编辑模式下绑定拖拽
-    if (this.config.isEdit) {
-      const element = this.getLastGuideElement();
-      if (element) {
-        const index = this.guidePlugins.length - 1;
-        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
-          item.top = top;
-          item.left = left;
-          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
-          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
-            type: 'guideThree',
-            index,
-            top,
-            left,
-          });
-        });
-        this.dragCleanups.push(cleanup);
+    if (this.dmInsideElement) {
+      // 挂载响应式根（4 个 For 控制流，编辑模式追加对齐辅助线）
+      this.mountRoot();
+      // 编辑模式：全部卡片立即创建并常驻显示（供拖拽编辑）
+      if (this.isEditMode) {
+        this.createEditEntries();
+        // 常驻条目创建后按当前播放位置校准关闭环：
+        // 后装场景视频可能已播放过半，满环起步会与展示模式口径不一致；
+        // 视频暂停时校准一次后停住，与「随播放进度变化」的语义一致
+        this.currentTime = this.playerRef?.getCurrentTime() ?? 0;
+        this.refreshEditRemaining(this.linkActive.value);
+        this.refreshEditRemaining(this.voteActive.value);
+        this.refreshEditRemaining(this.scoreActive.value);
       }
     }
   }
 
   /**
-   * 添加外链卡片（使用 LinkPlugin 子插件）
+   * 挂载响应式根：Fragment 包裹 4 个 For 控制流
+   * For 按 key（类型前缀 + 列表下标）精准创建/销毁卡片 DOM
+   * 编辑模式追加对齐辅助线（alignLines signal 驱动的响应式组件）
    */
-  addLink(item: InteractionLink): void {
-    if (!this.dmInsideElement) return;
+  private mountRoot(): void {
+    if (this.rootVNode !== null || this.dmInsideElement === null) return;
+    // 卡片控制流（两种模式共用）
+    const flows: VNode[] = [
+      h(For, {
+        each: this.guideActive,
+        key: entryKey,
+        render: this.renderGuideEntry,
+      }),
+      h(For, {
+        each: this.linkActive,
+        key: entryKey,
+        render: this.renderLinkEntry,
+      }),
+      h(For, {
+        each: this.voteActive,
+        key: entryKey,
+        render: this.renderVoteEntry,
+      }),
+      h(For, {
+        each: this.scoreActive,
+        key: entryKey,
+        render: this.renderScoreEntry,
+      }),
+    ];
+    // 编辑模式：追加对齐辅助线（拖拽贴边时由 handleAlignLines 写 signal 驱动显隐）
+    if (this.isEditMode) {
+      flows.push(renderAlignLines(this.alignLines));
+    }
+    this.rootVNode = h(Fragment, null, ...flows);
+    mount(this.rootVNode, this.dmInsideElement);
+  }
 
-    // 当前卡片在链接列表中的下标（用于事件 payload）
-    const index = this.linkPlugins.length;
+  // ==================== For 渲染回调（每 key 只调用一次） ====================
 
-    const plugin = new LinkPlugin(item, {
-      onLinkClick: (): void => {
-        // 外链卡片被点击时向播放器总线发布事件
+  /**
+   * 渲染点赞关注卡片
+   * 展示模式注册业务回调（写状态信号与发布事件，渲染层随信号自动更新）；
+   * 编辑模式仅绑定拖拽（点击监听一律不注册）
+   */
+  private readonly renderGuideEntry = (item: unknown): VNode => {
+    if (!isGuideEntry(item)) return h("div", {});
+    const { listIndex, item: card } = item;
+    // 状态按列表下标获取/创建，跨 DOM 重建保留
+    const state =
+      this.guideStates.get(listIndex) ?? createGuideCardState();
+    this.guideStates.set(listIndex, state);
+
+    // 编辑模式：仅传 bindDrag（业务回调缺省 → 点击监听不注册）
+    if (this.isEditMode) {
+      return renderGuideCard(item, state, {
+        bindDrag: this.makeBindDrag("guideThree", listIndex, card),
+      });
+    }
+
+    const options: GuideCardOptions = {
+      onLike: (): void => {
+        // 切换激活态（对齐旧实现的 classList.toggle 语义）
+        state.likeActive.value = !state.likeActive.value;
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_LIKE);
+      },
+      onCoin: (): void => {
+        state.coinActive.value = !state.coinActive.value;
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_COIN);
+      },
+      onCollect: (): void => {
+        state.collectActive.value = !state.collectActive.value;
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_COLLECT);
+      },
+      onFollow: (): void => {
+        // no-follow / following 互斥切换（对齐旧实现）
+        state.following.value = !state.following.value;
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_FOLLOW);
+      },
+    };
+    return renderGuideCard(item, state, options);
+  };
+
+  /**
+   * 渲染外链卡片
+   * 展示模式注册跳链与关闭回调；编辑模式仅绑定拖拽（关闭圆环仅渲染不可点）
+   */
+  private readonly renderLinkEntry = (item: unknown): VNode => {
+    if (!isLinkEntry(item)) return h("div", {});
+    const { listIndex, item: card } = item;
+
+    // 编辑模式：仅传 bindDrag（onClose 缺省 → 关闭圆环不注册点击）
+    if (this.isEditMode) {
+      return renderLinkCard(item, {
+        bindDrag: this.makeBindDrag("link", listIndex, card),
+      });
+    }
+
+    const options: LinkCardOptions = {
+      onLinkClick: (link: InteractionLink): void => {
+        // 渲染层直接携带卡片数据调用外部回调（旧实现经事件订阅转发，
+        // 但 LINK_CLICK 事件无 payload，link 参数无法透传导致回调丢失）
+        this.config.onLinkClick?.(link);
+        // 同时向事件总线广播（供外部 on() 监听者消费，无 payload）
         this.eventBus?.emit(PlayerEventEnum.INTERACTION_LINK_CLICK);
       },
       onClose: (): void => {
-        // 子插件关闭按钮点击后回调，向播放器总线发布卡片关闭事件
-        this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type: 'link', index });
+        this.closeEntry("link", item, this.linkActive);
       },
-    });
-    plugin.render(this.dmInsideElement);
-    this.linkPlugins.push(plugin);
-
-    // 在编辑模式下绑定拖拽
-    if (this.config.isEdit) {
-      const element = this.getLastLinkElement();
-      if (element) {
-        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
-          item.top = top;
-          item.left = left;
-          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
-          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
-            type: 'link',
-            index,
-            top,
-            left,
-          });
-        });
-        this.dragCleanups.push(cleanup);
-      }
-    }
-  }
+    };
+    return renderLinkCard(item, options);
+  };
 
   /**
-   * 添加投票卡片（使用 VotePlugin 子插件）
+   * 渲染投票卡片
+   * 展示模式注册投票与关闭回调；编辑模式仅绑定拖拽（选项点击与关闭均不注册）
    */
-  addVote(item: InteractionVote): void {
-    if (!this.dmInsideElement) return;
+  private readonly renderVoteEntry = (item: unknown): VNode => {
+    if (!isVoteEntry(item)) return h("div", {});
+    const { listIndex, item: card } = item;
+    const state = this.voteStates.get(listIndex) ?? createVoteCardState();
+    this.voteStates.set(listIndex, state);
 
-    // 当前卡片在投票列表中的下标（用于事件 payload）
-    const index = this.votePlugins.length;
+    // 编辑模式：仅传 bindDrag（onVoteSelect/onClose 缺省 → 监听不注册）
+    if (this.isEditMode) {
+      return renderVoteCard(item, state, {
+        bindDrag: this.makeBindDrag("vote", listIndex, card),
+      });
+    }
 
-    const plugin = new VotePlugin(item, {
-      index,
-      onVoteSelect: (voteIndex: number, optionIndex: number): void => {
-        // 投票选项被选中时向播放器总线发布事件
-        this.eventBus?.emit(PlayerEventEnum.INTERACTION_VOTE_SELECT, { voteIndex, optionIndex });
+    const options: VoteCardOptions = {
+      onVoteSelect: (optionIndex: number): void => {
+        // 校验未投票（信号写入同步生效，重复点击立即被拦截）
+        if (state.votedIndex.value >= 0) return;
+        const option = card.options[optionIndex];
+        if (!option) return;
+        // 累加选中选项票数（对齐旧实现：undefined 视为 0 后 +1）
+        option.votes = (option.votes ?? 0) + 1;
+        state.votedIndex.value = optionIndex;
+        // 总票数 = 全部选项票数之和（对齐旧实现的 forEach 累加）
+        state.totalVotes.value = card.options.reduce(
+          (sum: number, opt: VoteOption): number => sum + (opt.votes ?? 0),
+          0,
+        );
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_VOTE_SELECT, {
+          voteIndex: listIndex,
+          optionIndex,
+        });
       },
       onClose: (): void => {
-        // 子插件关闭按钮点击后回调，向播放器总线发布卡片关闭事件
-        this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type: 'vote', index });
+        this.closeEntry("vote", item, this.voteActive);
       },
-    });
-    plugin.render(this.dmInsideElement);
-    this.votePlugins.push(plugin);
-
-    // 在编辑模式下绑定拖拽
-    if (this.config.isEdit) {
-      const element = this.getLastVoteElement();
-      if (element) {
-        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
-          item.top = top;
-          item.left = left;
-          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
-          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
-            type: 'vote',
-            index,
-            top,
-            left,
-          });
-        });
-        this.dragCleanups.push(cleanup);
-      }
-    }
-  }
+    };
+    return renderVoteCard(item, state, options);
+  };
 
   /**
-   * 添加评分卡片（使用 ScorePlugin 子插件）
+   * 渲染评分卡片
+   * 展示模式注册评分与关闭回调；编辑模式仅绑定拖拽（评分项点击与关闭均不注册）
    */
-  addScore(item: InteractionScore): void {
-    if (!this.dmInsideElement) return;
+  private readonly renderScoreEntry = (item: unknown): VNode => {
+    if (!isScoreEntry(item)) return h("div", {});
+    const { listIndex, item: card } = item;
+    const state = this.scoreStates.get(listIndex) ?? createScoreCardState();
+    this.scoreStates.set(listIndex, state);
 
-    // 当前卡片在评分列表中的下标（用于事件 payload）
-    const index = this.scorePlugins.length;
+    // 编辑模式：仅传 bindDrag（onScoreSelect/onClose 缺省 → 监听不注册）
+    if (this.isEditMode) {
+      return renderScoreCard(item, state, {
+        bindDrag: this.makeBindDrag("score", listIndex, card),
+      });
+    }
 
-    const plugin = new ScorePlugin(item, {
-      index,
-      onScoreSelect: (scoreIndex: number, value: number): void => {
-        // 评分被选择时向播放器总线发布事件
-        this.eventBus?.emit(PlayerEventEnum.INTERACTION_SCORE_SELECT, { scoreIndex, value });
+    const options: ScoreCardOptions = {
+      onScoreSelect: (value: number): void => {
+        // 校验未评分（信号写入同步生效，重复点击立即被拦截）
+        if (state.selected.value > 0) return;
+        state.selected.value = value;
+        // 对齐旧实现：总分累加、人数 +1，平均分 = 总分 / 人数
+        state.totalScore.value = state.totalScore.value + value;
+        state.count.value = state.count.value + 1;
+        this.eventBus?.emit(PlayerEventEnum.INTERACTION_SCORE_SELECT, {
+          scoreIndex: listIndex,
+          value,
+        });
       },
       onClose: (): void => {
-        // 子插件关闭按钮点击后回调，向播放器总线发布卡片关闭事件
-        this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type: 'score', index });
+        this.closeEntry("score", item, this.scoreActive);
       },
-    });
-    plugin.render(this.dmInsideElement);
-    this.scorePlugins.push(plugin);
+    };
+    return renderScoreCard(item, state, options);
+  };
 
-    // 在编辑模式下绑定拖拽
-    if (this.config.isEdit) {
-      const element = this.getLastScoreElement();
-      if (element) {
-        const cleanup = bindDragInEditMode(element, (top: number, left: number): void => {
-          item.top = top;
-          item.left = left;
-          // 拖拽落点变化时向播放器总线发布位置变更事件（config.onPositionChange 由 install 中的监听器回调）
-          this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
-            type: 'score',
-            index,
-            top,
-            left,
-          });
-        });
-        this.dragCleanups.push(cleanup);
-      }
-    }
-  }
-
-  // ==================== 时间更新与 diffAlgorithm ====================
+  // ==================== 时间更新与窗口同步 ====================
 
   /**
-   * 处理时间更新：使用 diffAlgorithm 增量更新卡片可见性
-   * 使用 binarySearchByTime 定位起始索引，updateCardsDiff 增量更新
+   * 处理时间更新：diffAlgorithm 增量找出受播放窗口影响的卡片，
+   * 逐张同步时间窗口状态（创建/显示/刷新倒计时/淡出移除）
    */
   private handleTimeUpdate(currentTime: number): void {
     this.prevTime = this.currentTime;
     this.currentTime = currentTime;
 
-    // 使用 binarySearchByTime 快速定位当前时间点在各类卡片列表中的位置
-    // 用于日志和调试追踪
-    const guideStartIndex = binarySearchByTime(this.interactCard.guideList, this.currentTime);
-    const linkStartIndex = binarySearchByTime(this.interactCard.linkList, this.currentTime);
-    const voteStartIndex = binarySearchByTime(this.interactCard.voteList, this.currentTime);
-    const scoreStartIndex = binarySearchByTime(this.interactCard.scoreList, this.currentTime);
+    // 根未挂载：无从创建卡片（数据已持有，待挂载后由时间驱动）
+    if (this.rootVNode === null) return;
 
-    // 使用 updateCardsDiff 对各类卡片进行增量 diff 更新
-    updateCardsDiff(
+    // 编辑模式：卡片常驻显示不参与窗口显隐，
+    // 仅随播放进度推进关闭环（与展示模式同一口径；
+    // 视频暂停时 TIME_UPDATE 停发 → 圆环随之停住）
+    if (this.isEditMode) {
+      this.refreshEditRemaining(this.linkActive.value);
+      this.refreshEditRemaining(this.voteActive.value);
+      this.refreshEditRemaining(this.scoreActive.value);
+      return;
+    }
+
+    this.syncList(
+      ENTRY_PREFIX.guideThree,
       this.interactCard.guideList,
-      this.currentTime,
-      this.prevTime,
-      (card: InteractionGuideThree): void => {
-        const index = this.interactCard.guideList.indexOf(card);
-        if (index >= guideStartIndex && index < this.guidePlugins.length) {
-          this.guidePlugins[index].updateTime(this.currentTime);
-        }
-      }
+      this.guideActive,
+      currentTime,
     );
-
-    updateCardsDiff(
+    this.syncList(
+      ENTRY_PREFIX.link,
       this.interactCard.linkList,
-      this.currentTime,
-      this.prevTime,
-      (card: InteractionLink): void => {
-        const index = this.interactCard.linkList.indexOf(card);
-        if (index >= linkStartIndex && index < this.linkPlugins.length) {
-          this.linkPlugins[index].updateTime(this.currentTime);
-        }
-      }
+      this.linkActive,
+      currentTime,
     );
-
-    updateCardsDiff(
+    this.syncList(
+      ENTRY_PREFIX.vote,
       this.interactCard.voteList,
-      this.currentTime,
-      this.prevTime,
-      (card: InteractionVote): void => {
-        const index = this.interactCard.voteList.indexOf(card);
-        if (index >= voteStartIndex && index < this.votePlugins.length) {
-          this.votePlugins[index].updateTime(this.currentTime);
-        }
-      }
+      this.voteActive,
+      currentTime,
     );
-
-    updateCardsDiff(
+    this.syncList(
+      ENTRY_PREFIX.score,
       this.interactCard.scoreList,
-      this.currentTime,
-      this.prevTime,
-      (card: InteractionScore): void => {
-        const index = this.interactCard.scoreList.indexOf(card);
-        if (index >= scoreStartIndex && index < this.scorePlugins.length) {
-          this.scorePlugins[index].updateTime(this.currentTime);
-        }
-      }
+      this.scoreActive,
+      currentTime,
     );
   }
 
-  // ==================== 辅助方法 ====================
-
   /**
-   * 获取最后一个 GuidePlugin 渲染的元素
+   * 对单个卡片列表执行增量 diff，受影响卡片逐张同步时间窗口状态
+   *
+   * updateCardsDiff 已按 [prevTime, currentTime] 时间交集过滤出受影响的
+   * 卡片，此处按列表下标转发给 syncCard。
    */
-  private getLastGuideElement(): HTMLDivElement | null {
-    if (this.guidePlugins.length === 0) return null;
-    return this.getSubPluginElement(this.guidePlugins[this.guidePlugins.length - 1]);
+  private syncList<T extends SyncItem>(
+    idPrefix: string,
+    list: T[],
+    active: Signal<ActiveCardEntry<T>[]>,
+    currentTime: number,
+  ): void {
+    updateCardsDiff(list, currentTime, this.prevTime, (card: T): void => {
+      const listIndex = list.indexOf(card);
+      if (listIndex < 0) return;
+      this.syncCard(idPrefix, listIndex, card, currentTime, active);
+    });
   }
 
   /**
-   * 获取最后一个 LinkPlugin 渲染的元素
+   * 同步单张卡片的时间窗口状态（核心状态机）：
+   * - 窗口内且无条目：创建 DOM（隐藏态）；已过 timeStart 则双 rAF 后翻转为显示态
+   * - 窗口内且有条目：取消排队移除，刷新关闭环剩余比例，未显示且到点则显示
+   * - 越过 timeEnd / 被关闭：翻转隐藏类播放淡出，过渡结束后删除 DOM
+   * - seek 回窗口之前：直接删除（再次到点时重建重播过渡）
+   *
+   * @param idPrefix - 条目 id 的类型前缀（For 的 key）
+   * @param listIndex - 卡片在数据列表中的下标
+   * @param item - 卡片原始数据
+   * @param currentTime - 当前播放时间（秒）
+   * @param active - 该类型的活跃条目 signal 数组
    */
-  private getLastLinkElement(): HTMLDivElement | null {
-    if (this.linkPlugins.length === 0) return null;
-    return this.getSubPluginElement(this.linkPlugins[this.linkPlugins.length - 1]);
-  }
+  private syncCard<T extends SyncItem>(
+    idPrefix: string,
+    listIndex: number,
+    item: T,
+    currentTime: number,
+    active: Signal<ActiveCardEntry<T>[]>,
+  ): void {
+    const { timeStart, timeEnd } = item;
+    // 时间范围不完整的卡片不参与时间驱动（对齐旧实现）
+    if (timeStart === undefined || timeEnd === undefined) return;
 
-  /**
-   * 获取最后一个 VotePlugin 渲染的元素
-   */
-  private getLastVoteElement(): HTMLDivElement | null {
-    if (this.votePlugins.length === 0) return null;
-    return this.getSubPluginElement(this.votePlugins[this.votePlugins.length - 1]);
-  }
+    // seek 回关闭时间点之前：重置关闭状态，卡片可重新显示（对齐旧实现）
+    if (item.closeTime !== undefined && item.closeTime > currentTime) {
+      item.isClose = false;
+    }
+    // 已关闭且关闭时间已过：视同窗口外（关闭后不再显示）
+    const closedNow =
+      item.isClose === true &&
+      item.closeTime !== undefined &&
+      item.closeTime <= currentTime;
 
-  /**
-   * 获取最后一个 ScorePlugin 渲染的元素
-   */
-  private getLastScoreElement(): HTMLDivElement | null {
-    if (this.scorePlugins.length === 0) return null;
-    return this.getSubPluginElement(this.scorePlugins[this.scorePlugins.length - 1]);
-  }
+    // 显示窗口：[timeStart - 提前量, timeEnd]；被关闭的卡片视为出窗
+    const inWindow =
+      !closedNow &&
+      currentTime >= timeStart - CARD_CREATE_LEAD &&
+      currentTime <= timeEnd;
 
-  /**
-   * 从子插件获取其渲染的 DOM 元素
-   * 通过子插件的 element 属性获取其渲染的根元素
-   */
-  private getSubPluginElement(plugin: InteractionSubPlugin): HTMLDivElement | null {
-    // 子插件渲染后会在容器中创建元素，通过子插件类型和容器查找对应元素
-    const className = this.getSubPluginClassName(plugin);
-    if (!className || !this.dmInsideElement) return null;
-    const elements = this.dmInsideElement.querySelectorAll(`.${className}`);
-    const lastElement = elements[elements.length - 1];
-    return lastElement instanceof HTMLDivElement ? lastElement : null;
-  }
+    /** 当前条目（未创建时为 undefined） */
+    const existing = active.value.find(
+      (entry: ActiveCardEntry<T>) => entry.listIndex === listIndex,
+    );
 
-  /**
-   * 根据子插件类型获取对应的 CSS 类名
-   */
-  private getSubPluginClassName(plugin: InteractionSubPlugin): string {
-    switch (plugin.type) {
-      case 'guide': return 'hl-guide';
-      case 'link': return 'hl-link';
-      case 'vote': return 'hl-vote';
-      case 'score': return 'hl-score';
+    if (inWindow) {
+      // 窗口内：创建（或复用）条目并刷新状态
+      const entry = existing ?? this.createEntry(idPrefix, listIndex, item);
+      if (existing === undefined) {
+        // For 按 key 精准挂载新 DOM（默认 visibility:hidden + opacity:0）
+        active.value = [...active.value, entry];
+      }
+      // 取消排队中的移除（seek 回窗口内：淡出中的卡片重新接管）
+      this.cancelRemoval(entry);
+      // 未显示且已到显示时间：双 rAF 后翻转为显示态（保证过渡可播放）
+      if (!entry.show.value && currentTime >= timeStart) {
+        this.scheduleShow(entry);
+      }
+      // 刷新关闭环剩余比例：1（满环）→ 0（空环），随播放推进消隐
+      const total = timeEnd - timeStart;
+      const elapsedRatio =
+        total > 0 ? (currentTime - timeStart) / total : 0;
+      entry.remaining.value =
+        1 - Math.min(Math.max(elapsedRatio, 0), 1);
+    } else if (existing !== undefined) {
+      if (currentTime > timeEnd || closedNow) {
+        // 播完 / 被关闭：翻转隐藏类播放淡出，过渡结束后删除 DOM
+        this.scheduleRemoval(active, existing);
+      } else {
+        // seek 回显示窗口之前：直接删除（未展示无需过渡，再次到点重建）
+        this.removeEntry(active, existing);
+      }
     }
   }
 
+  // ==================== 条目生命周期辅助 ====================
+
+  /**
+   * 创建活跃条目（不含挂载：写入 signal 数组后由 For 挂载 DOM）
+   *
+   * @param idPrefix - 条目 id 的类型前缀
+   * @param listIndex - 卡片在数据列表中的下标
+   * @param item - 卡片原始数据
+   */
+  private createEntry<T>(
+    idPrefix: string,
+    listIndex: number,
+    item: T,
+  ): ActiveCardEntry<T> {
+    return {
+      // For 的稳定 key：类型前缀 + 列表下标
+      id: `${idPrefix}${listIndex}`,
+      listIndex,
+      item,
+      // 默认隐藏：卡片根类基础态为 visibility:hidden + opacity:0，
+      // show 翻转时追加 .nova-danmaku-x-show 播放过渡
+      show: signal(false),
+      // 关闭环满环（100%），随播放推进递减到 0（空环）
+      remaining: signal(1),
+      // 内容版本号：文本编辑时自增驱动响应式文本更新
+      contentVersion: signal(0),
+      removeTimer: null,
+      dragCleanup: null,
+    };
+  }
+
+  /**
+   * 双 rAF 后翻转为显示态
+   *
+   * 先让浏览器完成一次「隐藏态」的样式计算与绘制，再追加显示类，
+   * 确保 opacity/visibility 的 CSS 过渡能被触发（元素与显示类同帧
+   * 挂载时，浏览器视为初始即显示态，不播放过渡）
+   */
+  private scheduleShow(entry: { show: Signal<boolean> }): void {
+    requestAnimationFrame((): void => {
+      requestAnimationFrame((): void => {
+        entry.show.value = true;
+      });
+    });
+  }
+
+  /** 取消排队中的移除定时器（seek 回窗口内时恢复卡片） */
+  private cancelRemoval(entry: { removeTimer: number | null }): void {
+    if (entry.removeTimer !== null) {
+      window.clearTimeout(entry.removeTimer);
+      entry.removeTimer = null;
+    }
+  }
+
+  /**
+   * 淡出后移除：翻转隐藏类播放淡出过渡，
+   * CARD_FADE_MS（与 CSS 过渡时长一致）后删除 DOM
+   * 幂等：已在移除流程中的条目跳过
+   */
+  private scheduleRemoval<T>(
+    active: Signal<ActiveCardEntry<T>[]>,
+    entry: ActiveCardEntry<T>,
+  ): void {
+    if (entry.removeTimer !== null) return;
+    entry.show.value = false;
+    entry.removeTimer = window.setTimeout((): void => {
+      entry.removeTimer = null;
+      this.removeEntry(active, entry);
+    }, CARD_FADE_MS);
+  }
+
+  /**
+   * 立即移除条目：清理定时器与拖拽绑定，
+   * 从 signal 数组过滤后由 For 按 key 销毁对应 DOM
+   */
+  private removeEntry<T>(
+    active: Signal<ActiveCardEntry<T>[]>,
+    entry: ActiveCardEntry<T>,
+  ): void {
+    this.cancelRemoval(entry);
+    entry.dragCleanup?.();
+    entry.dragCleanup = null;
+    const next = active.value.filter(
+      (candidate: ActiveCardEntry<T>) => candidate !== entry,
+    );
+    if (next.length !== active.value.length) {
+      active.value = next;
+    }
+  }
+
+  /** 释放条目数组内全部条目的资源并清空数组 */
+  private disposeEntries<T>(active: Signal<ActiveCardEntry<T>[]>): void {
+    for (const entry of active.value) {
+      this.cancelRemoval(entry);
+      entry.dragCleanup?.();
+      entry.dragCleanup = null;
+    }
+    active.value = [];
+  }
+
+  // ==================== 关闭与位置 ====================
+
+  /**
+   * 关闭卡片：标记关闭时间点（seek 回退可恢复）、淡出后删除 DOM、
+   * 发布卡片关闭事件（外部 config.onCardClose 由 install 订阅转发）
+   */
+  private closeEntry<T extends SyncItem>(
+    type: CardType,
+    entry: ActiveCardEntry<T>,
+    active: Signal<ActiveCardEntry<T>[]>,
+  ): void {
+    entry.item.isClose = true;
+    entry.item.closeTime = this.currentTime;
+    this.scheduleRemoval(active, entry);
+    this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, {
+      type,
+      index: entry.listIndex,
+    });
+  }
+
+  /**
+   * 拖拽落点：回写卡片数据定位并发布位置变更事件
+   */
+  private handlePositionChange(
+    type: CardType,
+    index: number,
+    item: { top: number; left: number },
+    top: number,
+    left: number,
+  ): void {
+    item.top = top;
+    item.left = left;
+    this.eventBus?.emit(PlayerEventEnum.INTERACTION_POSITION_CHANGE, {
+      type,
+      index,
+      top,
+      left,
+    });
+  }
+
+  // ==================== 数据增删与编辑模式 ====================
+
+  /**
+   * 编辑模式：为全部卡片立即创建常驻条目（显示态可拖拽编辑）
+   * 幂等：已存在的下标跳过
+   */
+  private createEditEntries(): void {
+    this.interactCard.guideList.forEach(
+      (item: InteractionGuideThree, index: number): void => {
+        this.appendEditEntry(
+          ENTRY_PREFIX.guideThree,
+          index,
+          item,
+          this.guideActive,
+        );
+      },
+    );
+    this.interactCard.linkList.forEach(
+      (item: InteractionLink, index: number): void => {
+        this.appendEditEntry(ENTRY_PREFIX.link, index, item, this.linkActive);
+      },
+    );
+    this.interactCard.voteList.forEach(
+      (item: InteractionVote, index: number): void => {
+        this.appendEditEntry(ENTRY_PREFIX.vote, index, item, this.voteActive);
+      },
+    );
+    this.interactCard.scoreList.forEach(
+      (item: InteractionScore, index: number): void => {
+        this.appendEditEntry(ENTRY_PREFIX.score, index, item, this.scoreActive);
+      },
+    );
+  }
+
+  /**
+   * 编辑模式：按当前播放进度刷新一批条目的关闭环剩余比例
+   *
+   * 口径与展示模式的 syncCard 完全一致：
+   * remaining = 1 - clamp((now - timeStart) / (timeEnd - timeStart), 0, 1)；
+   * 播放头在窗口前为满环（1）、越过 timeEnd 为空环（0）；
+   * 时间窗缺失/非法的卡片保持在满环（无倒计时语义可推进）
+   */
+  private refreshEditRemaining(
+    entries: ReadonlyArray<ActiveCardEntry<SyncItem>>,
+  ): void {
+    const now = this.currentTime;
+    for (const entry of entries) {
+      const { timeStart, timeEnd } = entry.item;
+      if (
+        timeStart === undefined ||
+        timeEnd === undefined ||
+        timeEnd <= timeStart
+      ) {
+        entry.remaining.value = 1;
+        continue;
+      }
+      const ratio = (now - timeStart) / (timeEnd - timeStart);
+      entry.remaining.value = 1 - Math.min(Math.max(ratio, 0), 1);
+    }
+  }
+
+  /**
+   * 编辑模式追加单张卡片条目（幂等）
+   *
+   * @param idPrefix - 条目 id 的类型前缀
+   * @param listIndex - 卡片在数据列表中的下标
+   * @param item - 卡片原始数据
+   * @param active - 该类型的活跃条目 signal 数组
+   * @param immediate - true 时直接以显示态渲染（不播淡入过渡）：
+   *   内容编辑的结构性重建场景使用，避免每次编辑重播过渡闪烁
+   */
+  private appendEditEntry<T>(
+    idPrefix: string,
+    listIndex: number,
+    item: T,
+    active: Signal<ActiveCardEntry<T>[]>,
+    immediate = false,
+  ): void {
+    const existing = active.value.find(
+      (entry: ActiveCardEntry<T>) => entry.listIndex === listIndex,
+    );
+    if (existing !== undefined) return;
+    const entry = this.createEntry(idPrefix, listIndex, item);
+    if (immediate) {
+      // 渲染前即置为显示态：class 初始计算即含过渡类，挂载即显示无过渡
+      entry.show.value = true;
+      active.value = [...active.value, entry];
+      return;
+    }
+    active.value = [...active.value, entry];
+    this.scheduleShow(entry);
+  }
+
+  /**
+   * 运行时添加卡片后的即时同步：
+   * 根未挂载则仅入列表（待 MOUNTED 后由时间驱动）；
+   * 编辑模式立即常显；展示模式按当前时间窗口判断是否立即创建
+   */
+  private syncAddedCard<T extends SyncItem>(
+    idPrefix: string,
+    list: T[],
+    item: T,
+    active: Signal<ActiveCardEntry<T>[]>,
+  ): void {
+    // 根未挂载：数据已入列表，MOUNTED 后由时间更新驱动创建
+    if (this.rootVNode === null) return;
+    const listIndex = list.indexOf(item);
+    if (listIndex < 0) return;
+    if (this.isEditMode) {
+      this.appendEditEntry(idPrefix, listIndex, item, active);
+      return;
+    }
+    // 展示模式：按当前时间窗口判断（未来卡片由后续 TIME_UPDATE 驱动）
+    this.syncCard(idPrefix, listIndex, item, this.currentTime, active);
+  }
+
   // ==================== 公共 API ====================
+
+  /**
+   * 添加点赞关注卡片（入数据列表 + 立即同步时间窗口）
+   */
+  addGuide(item: InteractionGuideThree): void {
+    this.interactCard.guideList.push(item);
+    this.syncAddedCard(
+      ENTRY_PREFIX.guideThree,
+      this.interactCard.guideList,
+      item,
+      this.guideActive,
+    );
+  }
+
+  /**
+   * 添加外链卡片（入数据列表 + 立即同步时间窗口）
+   */
+  addLink(item: InteractionLink): void {
+    this.interactCard.linkList.push(item);
+    this.syncAddedCard(
+      ENTRY_PREFIX.link,
+      this.interactCard.linkList,
+      item,
+      this.linkActive,
+    );
+  }
+
+  /**
+   * 添加投票卡片（入数据列表 + 立即同步时间窗口）
+   */
+  addVote(item: InteractionVote): void {
+    this.interactCard.voteList.push(item);
+    this.syncAddedCard(
+      ENTRY_PREFIX.vote,
+      this.interactCard.voteList,
+      item,
+      this.voteActive,
+    );
+  }
+
+  /**
+   * 添加评分卡片（入数据列表 + 立即同步时间窗口）
+   */
+  addScore(item: InteractionScore): void {
+    this.interactCard.scoreList.push(item);
+    this.syncAddedCard(
+      ENTRY_PREFIX.score,
+      this.interactCard.scoreList,
+      item,
+      this.scoreActive,
+    );
+  }
 
   /**
    * 获取互动层容器元素
@@ -587,28 +1190,44 @@ class InteractionPluginClass implements InteractionPluginAPI {
   }
 
   /**
-   * 关闭卡片
+   * 关闭卡片（外部调用）
+   * 走统一关闭流程：标记关闭时间点 → 淡出过渡 → 删除 DOM → 发布关闭事件
    */
   closeCard(type: CardType, index: number): void {
-    let list: (InteractionLink | InteractionVote | InteractionScore)[] = [];
+    // guide 卡片无关闭概念（对齐旧实现），仅处理 link/vote/score
     switch (type) {
-      case 'link':
-        list = this.interactCard.linkList;
+      case "link": {
+        const entry = this.linkActive.value.find(
+          (candidate: ActiveCardEntry<InteractionLink>) =>
+            candidate.listIndex === index,
+        );
+        if (entry !== undefined) {
+          this.closeEntry("link", entry, this.linkActive);
+        }
         break;
-      case 'vote':
-        list = this.interactCard.voteList;
+      }
+      case "vote": {
+        const entry = this.voteActive.value.find(
+          (candidate: ActiveCardEntry<InteractionVote>) =>
+            candidate.listIndex === index,
+        );
+        if (entry !== undefined) {
+          this.closeEntry("vote", entry, this.voteActive);
+        }
         break;
-      case 'score':
-        list = this.interactCard.scoreList;
+      }
+      case "score": {
+        const entry = this.scoreActive.value.find(
+          (candidate: ActiveCardEntry<InteractionScore>) =>
+            candidate.listIndex === index,
+        );
+        if (entry !== undefined) {
+          this.closeEntry("score", entry, this.scoreActive);
+        }
         break;
-    }
-
-    const item = list[index];
-    if (item) {
-      item.isClose = true;
-      item.closeTime = this.currentTime;
-      // 卡片被关闭时向播放器总线发布关闭事件（config.onCardClose 由 install 中的监听器回调）
-      this.eventBus?.emit(PlayerEventEnum.INTERACTION_CARD_CLOSE, { type, index });
+      }
+      default:
+        break;
     }
   }
 
@@ -620,25 +1239,22 @@ class InteractionPluginClass implements InteractionPluginAPI {
   }
 
   /**
-   * 更新数据
+   * 更新数据：清空全部活跃条目与交互状态，替换提供的列表后重建
+   * （编辑模式立即常显重建；播放模式由后续 TIME_UPDATE 按窗口重建）
    */
   updateData(data: Partial<InteractionCard>): void {
-    // 销毁旧的子插件
-    this.guidePlugins.forEach(p => p.destroy());
-    this.linkPlugins.forEach(p => p.destroy());
-    this.votePlugins.forEach(p => p.destroy());
-    this.scorePlugins.forEach(p => p.destroy());
+    // 清空全部活跃条目（含移除定时器与拖拽绑定）
+    this.disposeEntries(this.guideActive);
+    this.disposeEntries(this.linkActive);
+    this.disposeEntries(this.voteActive);
+    this.disposeEntries(this.scoreActive);
 
-    this.guidePlugins = [];
-    this.linkPlugins = [];
-    this.votePlugins = [];
-    this.scorePlugins = [];
+    // 数据更换后旧交互状态不再适用
+    this.guideStates.clear();
+    this.voteStates.clear();
+    this.scoreStates.clear();
 
-    // 清理拖拽
-    this.dragCleanups.forEach(cleanup => cleanup());
-    this.dragCleanups = [];
-
-    // 更新数据
+    // 替换提供的列表（对齐旧实现：仅覆盖显式传入的列表）
     if (data.guideList) {
       this.interactCard.guideList = data.guideList;
     }
@@ -652,29 +1268,244 @@ class InteractionPluginClass implements InteractionPluginAPI {
       this.interactCard.scoreList = data.scoreList;
     }
 
-    // 重新渲染
-    this.renderInitialData();
+    // 编辑模式：立即重建常显条目
+    if (this.isEditMode && this.rootVNode !== null) {
+      this.createEditEntries();
+      // 常显重建后按当前播放位置校准关闭环（新条目满环起步需校准）
+      this.currentTime = this.playerRef?.getCurrentTime() ?? this.currentTime;
+      this.refreshEditRemaining(this.linkActive.value);
+      this.refreshEditRemaining(this.voteActive.value);
+      this.refreshEditRemaining(this.scoreActive.value);
+    }
   }
+
+  // ==================== 内容编辑（updateCardContent / removeCard） ====================
+
+  /**
+   * 自增条目的内容版本号（文本类编辑的响应式驱动）
+   * 渲染层文本 getter 读取 contentVersion 建立依赖，版本号自增后
+   * 文本节点精准更新，无需重建卡片 DOM（输入态/滚动位置不受影响）
+   */
+  private bumpEntryContent<T>(
+    active: Signal<ActiveCardEntry<T>[]>,
+    listIndex: number,
+  ): void {
+    const entry = active.value.find(
+      (candidate: ActiveCardEntry<T>) => candidate.listIndex === listIndex,
+    );
+    if (entry !== undefined) {
+      entry.contentVersion.value = entry.contentVersion.value + 1;
+    }
+  }
+
+  /**
+   * 结构性变更的条目重建：移除旧条目后按新数据重建
+   *
+   * 编辑模式以显示态直接重建（不播淡入过渡，避免编辑过程闪烁）；
+   * 展示模式交由 syncCard 按当前时间窗口决定是否重建。
+   */
+  private rebuildEntry<T extends SyncItem>(
+    idPrefix: string,
+    listIndex: number,
+    item: T,
+    active: Signal<ActiveCardEntry<T>[]>,
+  ): void {
+    const existing = active.value.find(
+      (candidate: ActiveCardEntry<T>) => candidate.listIndex === listIndex,
+    );
+    if (existing !== undefined) {
+      this.removeEntry(active, existing);
+    }
+    // 根未挂载：数据已更新，待挂载后由时间驱动/常显重建兜底
+    if (this.rootVNode === null) return;
+    if (this.isEditMode) {
+      this.appendEditEntry(idPrefix, listIndex, item, active, true);
+      return;
+    }
+    // 展示模式：按当前时间窗口判断（未来卡片由后续 TIME_UPDATE 驱动）
+    this.syncCard(idPrefix, listIndex, item, this.currentTime, active);
+  }
+
+  /**
+   * 编辑卡片内容
+   *
+   * 文本字段（linkContent / question / optionTexts 等长 / title）：
+   * 原地更新 + contentVersion 自增 → 响应式文本精准更新 DOM；
+   * 结构字段（guideType / scoreType / optionTexts 变长）：
+   * 类名变体、图标与选项行数为渲染期静态结构，条目按新数据重建。
+   *
+   * @param type - 卡片类型
+   * @param index - 卡片在对应数据列表中的下标
+   * @param patch - 内容补丁（未提供的字段保持原值）
+   */
+  updateCardContent(type: CardType, index: number, patch: CardContentPatch): void {
+    switch (type) {
+      case "guideThree": {
+        const item = this.interactCard.guideList[index];
+        if (item === undefined) return;
+        if (patch.guideType !== undefined && patch.guideType !== item.type) {
+          item.type = patch.guideType;
+          this.rebuildEntry(ENTRY_PREFIX.guideThree, index, item, this.guideActive);
+        }
+        return;
+      }
+      case "link": {
+        const item = this.interactCard.linkList[index];
+        if (item === undefined) return;
+        if (patch.linkContent !== undefined) {
+          item.linkContent = patch.linkContent;
+          this.bumpEntryContent(this.linkActive, index);
+        }
+        return;
+      }
+      case "vote": {
+        const item = this.interactCard.voteList[index];
+        if (item === undefined) return;
+        if (patch.question !== undefined) {
+          item.question = patch.question;
+          this.bumpEntryContent(this.voteActive, index);
+        }
+        if (patch.optionTexts !== undefined) {
+          const sameLength = patch.optionTexts.length === item.options.length;
+          if (sameLength) {
+            // 等长：原地改写各选项文案 + 版本号自增（不重建 DOM）
+            patch.optionTexts.forEach((text: string, i: number): void => {
+              const option = item.options[i];
+              if (option) option.optionText = text;
+            });
+            this.bumpEntryContent(this.voteActive, index);
+          } else {
+            // 变长：选项行数为渲染期静态结构，替换数组并重建条目
+            item.options = patch.optionTexts.map((text: string): VoteOption => {
+              const previous = item.options.find(
+                (candidate: VoteOption): boolean =>
+                  candidate.optionText === text,
+              );
+              return { optionText: text, votes: previous?.votes };
+            });
+            this.rebuildEntry(ENTRY_PREFIX.vote, index, item, this.voteActive);
+          }
+        }
+        return;
+      }
+      case "score": {
+        const item = this.interactCard.scoreList[index];
+        if (item === undefined) return;
+        if (patch.title !== undefined) {
+          item.title = patch.title;
+          this.bumpEntryContent(this.scoreActive, index);
+        }
+        if (patch.scoreType !== undefined && patch.scoreType !== item.scoreType) {
+          item.scoreType = patch.scoreType;
+          // 图标为渲染期静态结构，类型变化触发条目重建
+          this.rebuildEntry(ENTRY_PREFIX.score, index, item, this.scoreActive);
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /**
+   * 从数据列表移除卡片并销毁其条目
+   *
+   * 编辑器的删除语义（与 closeCard 的「本次播放关闭」语义不同）：
+   * 数据从列表删除，跨快照/重建不再出现。
+   * 删除后重建全部条目（列表 splice 导致下标位移，
+   * 条目 key 与下标的映射需整体刷新）。
+   */
+  removeCard(type: CardType, index: number): void {
+    let removed = false;
+    switch (type) {
+      case "guideThree":
+        removed = this.interactCard.guideList.splice(index, 1).length > 0;
+        break;
+      case "link":
+        removed = this.interactCard.linkList.splice(index, 1).length > 0;
+        break;
+      case "vote":
+        removed = this.interactCard.voteList.splice(index, 1).length > 0;
+        break;
+      case "score":
+        removed = this.interactCard.scoreList.splice(index, 1).length > 0;
+        break;
+      default:
+        return;
+    }
+    if (!removed) return;
+
+    // 下标位移后旧条目全部失效：整体清空重建
+    this.disposeEntries(this.guideActive);
+    this.disposeEntries(this.linkActive);
+    this.disposeEntries(this.voteActive);
+    this.disposeEntries(this.scoreActive);
+    this.guideStates.clear();
+    this.voteStates.clear();
+    this.scoreStates.clear();
+
+    if (this.rootVNode === null) return;
+    if (this.isEditMode) {
+      this.createEditEntries();
+      this.currentTime = this.playerRef?.getCurrentTime() ?? this.currentTime;
+      this.refreshEditRemaining(this.linkActive.value);
+      this.refreshEditRemaining(this.voteActive.value);
+      this.refreshEditRemaining(this.scoreActive.value);
+      return;
+    }
+    // 展示模式：四类列表按当前时间窗口立即重建（在窗卡片恢复显示）
+    this.syncList(
+      ENTRY_PREFIX.guideThree,
+      this.interactCard.guideList,
+      this.guideActive,
+      this.currentTime,
+    );
+    this.syncList(ENTRY_PREFIX.link, this.interactCard.linkList, this.linkActive, this.currentTime);
+    this.syncList(ENTRY_PREFIX.vote, this.interactCard.voteList, this.voteActive, this.currentTime);
+    this.syncList(ENTRY_PREFIX.score, this.interactCard.scoreList, this.scoreActive, this.currentTime);
+  }
+}
+
+/**
+ * For 控制流的 key 函数：条目 id（类型前缀 + 列表下标），
+ * 非法入参回退到下标（理论不可达，防御式兜底）
+ */
+function entryKey(item: unknown, index: number): string {
+  return hasStringId(item) ? item.id : `unknown:${index}`;
 }
 
 /**
  * 交互插件工厂函数
  *
- * @param config - 插件配置
+ * @param config - 插件配置（mode: 'interactive' 展示模式 | 'edit' 编辑模式）
  * @returns Plugin 实例
  *
  * @example
  * plugins: [
  *   InteractionPlugin({
- *     isEdit: false,
+ *     mode: 'interactive',
  *     onLike: () => console.log('liked'),
  *     onVoteSelect: (voteIndex, optionIndex) => console.log(voteIndex, optionIndex)
  *   })
  * ]
  */
-export function InteractionPlugin(config?: InteractionPluginConfig): InteractionPluginAPI {
+export function InteractionPlugin(
+  config?: InteractionPluginConfig,
+): InteractionPluginAPI {
   return new InteractionPluginClass(config);
 }
 
-// 重新导出类型
-export type { InteractionPluginConfig } from './types';
+// 重新导出类型（外部编辑器构造数据 / 类型标注使用）
+export type {
+  CardType,
+  CardContentPatch,
+  PositionEvent,
+  InteractionPluginConfig,
+  InteractionPluginMode,
+  InteractionCard,
+  InteractionGuideThree,
+  InteractionLink,
+  InteractionVote,
+  InteractionScore,
+  VoteOption,
+} from "./types";

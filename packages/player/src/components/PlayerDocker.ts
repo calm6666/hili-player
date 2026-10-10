@@ -15,68 +15,55 @@ import {
 } from "@/core";
 import type { TypedStateManager } from "@/core";
 import type { PlayerEventBus } from "@/core/events";
-import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
-import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
-import type { EnergyProgressData } from "@/hili-player/utils/media/energyProgress";
-import {
-  createHotkeyHandlers,
-  type HotkeyContext,
-} from "@/hili-player/core/hotkeys";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
+import type { EnergyProgressProvider, ProgressPreviewProvider } from "@/types";
+import { createHotkeyHandlers, type HotkeyContext } from "@/nova/core/hotkeys";
 import {
   isBrowser,
   safeResizeObserver,
   safeIntersectionObserver,
 } from "@/utils";
-import { Controls } from "@/hili-player/components/Controls";
-import type { ControlsAPI } from "@/hili-player/components/Controls";
-import type { Tooltip } from "@/hili-player/types";
-import type { ProgressBarApi } from "@/hili-player/components/ProgressBar";
-import { VolumeHint } from "@/hili-player/components/VolumeHint";
-import {
-  Tooltips,
-} from "@/hili-player/components/Tooltips";
-import { RowDm } from "@/hili-player/components/RowDm";
-import { SubtitleLayer } from "@/hili-player/components/SubtitleLayer";
-import { InteractionLayer } from "@/hili-player/components/InteractionLayer";
-import { Dialog } from "@/hili-player/components/Dialog";
-import { Context as ContextMenu } from "@/hili-player/components/Context";
+import { Controls } from "@/nova/components/Controls";
+import type { ControlsAPI } from "@/nova/components/Controls";
+import type { Tooltip } from "@/nova/types";
+import type { ProgressBarApi } from "@/nova/components/ProgressBar";
+import { VolumeHint } from "@/nova/components/VolumeHint";
+import { Tooltips } from "@/nova/components/Tooltips";
+import { RowDm } from "@/nova/components/RowDm";
+import { SubtitleLayer } from "@/nova/components/SubtitleLayer";
+import { InteractionLayer } from "@/nova/components/InteractionLayer";
+import { Dialog } from "@/nova/components/Dialog";
+import { Context as ContextMenu } from "@/nova/components/Context";
 import {
   HotkeyPanel,
   type HotkeyPanelApi,
-} from "@/hili-player/components/HotkeyPanel";
+} from "@/nova/components/HotkeyPanel";
 import { PlayerEventEnum } from "@/core/events";
 import {
   PlayerStateKeyEnum,
   StateContext,
   type PlayerStateMap,
 } from "@/store/runtimeState";
-import {
-  ConfigStoreContext,
-  type ConfigStore,
-} from "@/store/configStore";
+import { ConfigStoreContext, type ConfigStore } from "@/store/configStore";
 import { PlayerState } from "@/types";
-import type { DisplayMode, PlayerConfig, ProgressSegment, VNode } from "@/types";
+import type {
+  DisplayMode,
+  PlayerConfig,
+  ProgressSegment,
+  VNode,
+} from "@/types";
 import type { QualityLevel } from "@/types/streamPlugin";
-import { Toast } from "@/hili-player/components/Toast";
-import { Loading } from "@/hili-player/components/Loading";
-import { State } from "@/hili-player/components/State";
-import { createBufferSpeedSampler } from "@/hili-player/utils/media/bufferSpeed";
-import type { BufferSpeedSampler } from "@/hili-player/utils/media/bufferSpeed";
-import { SendBar } from "@/hili-player/components/SendBar";
-import { Top } from "@/hili-player/components/Top";
-import {
-  ColorPanel,
-  type ColorPanelApi,
-} from "@/hili-player/components/ColorPanel";
-import {
-  VideoInfo,
-  type VideoInfoApi,
-} from "@/hili-player/components/VideoInfo";
-import {
-  Ending,
-  type EndingApi,
-} from "@/hili-player/components/Ending";
-import { Mini, type MiniApi } from "@/hili-player/components/Mini";
+import { Toast } from "@/nova/components/Toast";
+import { Loading } from "@/nova/components/Loading";
+import { State } from "@/nova/components/State";
+import { createBufferSpeedSampler } from "@/nova/utils/media/bufferSpeed";
+import type { BufferSpeedSampler } from "@/nova/utils/media/bufferSpeed";
+import { SendBar } from "@/nova/components/SendBar";
+import { Top } from "@/nova/components/Top";
+import { ColorPanel, type ColorPanelApi } from "@/nova/components/ColorPanel";
+import { VideoInfo, type VideoInfoApi } from "@/nova/components/VideoInfo";
+import { Ending, type EndingApi } from "@/nova/components/Ending";
+import { Mini, type MiniApi } from "@/nova/components/Mini";
 
 // ============================================
 // 组件 API 接口定义
@@ -84,16 +71,12 @@ import { Mini, type MiniApi } from "@/hili-player/components/Mini";
 
 /** 弹幕层 API */
 interface DanmakuLayerAPI {
-  /** 根据当前时间创建弹幕 */
-  createDanmaku: (currentTime: number) => void;
-  /** 切换弹幕播放/暂停状态 */
+  /** 切换弹幕播放/暂停状态（根容器 danmaku-x-paused 类，原版暂停机制） */
   playPause: (state: "playing" | "paused") => void;
   /** 显示弹幕提示信息 */
   showDmTip: (event: MouseEvent, element: HTMLElement) => void;
   /** 隐藏弹幕提示信息 */
   hideDmTip: (element: HTMLElement) => void;
-  /** 弹幕外层容器（供可见性 / 透明度 / 速度的命令式操作） */
-  playerRowDmWrap?: HTMLElement | null;
 }
 
 /** SendBar 组件挂载后回传的控制 API */
@@ -340,9 +323,9 @@ export interface QualitySnapshot {
   /** 当前生效档位 id（'auto' 或档位 id） */
   current: string;
   /** 清晰度切换生命周期：idle | switching | switched | failed */
-  switchState: 'idle' | 'switching' | 'switched' | 'failed';
+  switchState: "idle" | "switching" | "switched" | "failed";
   /** 清晰度能力：none | static | adaptive */
-  mode: 'none' | 'static' | 'adaptive';
+  mode: "none" | "static" | "adaptive";
 }
 
 export interface PlayerDockerProps {
@@ -372,20 +355,20 @@ export interface PlayerDockerProps {
   getStreamDownloadSpeed?: () => number;
 
   /**
-   * 分段预览数据提供者（雪碧图参数或逐帧 data URL）
+   * 预览图提供者（progress.previewProvider 配置注入）
    *
-   * 由 VideoPlayer 注入（其持有 setProgressPreview() 写入的数据），
-   * 顶部进度条在悬停时懒取值，两种形态都兼容。
+   * 进度条悬停时按「悬停时间 + 总时长」询问外部预览帧，
+   * 支持同步或异步（Promise）返回；数据获取逻辑完全由外部实现。
    */
-  getProgressPreviewFrames?: () => ProgressPreviewSource | string[] | null;
+  previewProvider?: ProgressPreviewProvider;
 
   /**
-   * 高能进度条数据提供者（/x/player/pbp 的采样点）
+   * 高能进度条数据提供者（progress.energyProvider 配置注入）
    *
-   * 由 VideoPlayer 注入；PbpControls 在数据到达后绘制曲线，
+   * 支持同步或异步（Promise）返回；数据到达后 PbpControls 绘制曲线，
    * 未提供数据时该层不渲染（保持不可见）。
    */
-  getEnergyProgress?: () => EnergyProgressData | null;
+  energyProvider?: EnergyProgressProvider;
 }
 
 // ============================================
@@ -404,25 +387,43 @@ export const PlayerDocker = defineComponent<
   // ============================================
 
   /** 视频元素 */
-  const videoRef = useTemplateRef<HTMLVideoElement>(lifecycle, 'videoRef');
+  const videoRef = useTemplateRef<HTMLVideoElement>(lifecycle, "videoRef");
 
   /** 播放器外层容器 */
-  const playerDockerRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerDockerRef');
+  const playerDockerRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "playerDockerRef",
+  );
 
   /** 播放器容器 */
-  const playerContainerRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerContainerRef');
+  const playerContainerRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "playerContainerRef",
+  );
 
   /** 视频区域 */
-  const playerVideoAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerVideoAreaRef');
+  const playerVideoAreaRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "playerVideoAreaRef",
+  );
 
   /** 视频占位容器 */
-  const playerVideoPerchRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerVideoPerchRef');
+  const playerVideoPerchRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "playerVideoPerchRef",
+  );
 
   /** 视频包装容器 */
-  const playerVideoWrapRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerVideoWrapRef');
+  const playerVideoWrapRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "playerVideoWrapRef",
+  );
 
   /** 发送区域 */
-  const playerSendingAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerSendingAreaRef');
+  const playerSendingAreaRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "playerSendingAreaRef",
+  );
 
   // ============================================
   // 状态管理器（通过 Context 获取，无需 props 传递）
@@ -477,39 +478,37 @@ export const PlayerDocker = defineComponent<
    */
   const applyDisplayMode = (mode: DisplayMode): void => {
     stateMgr?.set(PlayerStateKeyEnum.DISPLAY_MODE, mode);
-    stateMgr?.set(PlayerStateKeyEnum.IS_MIN_PLAYER, mode === 'mini');
-    stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, mode === 'web');
-    stateMgr?.set(PlayerStateKeyEnum.IS_WIDE_SCREEN, mode === 'wide');
-    playerContainerRef.value?.setAttribute('data-screen', mode);
+    stateMgr?.set(PlayerStateKeyEnum.IS_MIN_PLAYER, mode === "mini");
+    stateMgr?.set(PlayerStateKeyEnum.IS_WEB_FULLSCREEN, mode === "web");
+    stateMgr?.set(PlayerStateKeyEnum.IS_WIDE_SCREEN, mode === "wide");
+    playerContainerRef.value?.setAttribute("data-screen", mode);
     moveSendBar(mode);
     // 同步提示工具的屏幕模式（既有实现的 tooltips.screen 赋值；
     // 全屏 'full' 由 onFullscreenChange 单独维护）
-    tooltipsApi.setScreen?.(mode === 'web' ? 'web' : 'normal');
-    lifecycle.emit?.('displayModeChange', mode);
+    tooltipsApi.setScreen?.(mode === "web" ? "web" : "normal");
+    lifecycle.emit?.("displayModeChange", mode);
   };
 
   /**
    * 按显示模式移动弹幕发送栏（与既有实现的 sendBar.moveDom 一致）：
-   * - wide / web / full：移动到 `.player-control-bottom-center`（底部控制栏中央）
-   * - normal / mini：移回 `.player-sending-area`
-   * 仅搬移已有的 `.player-sending-bar` 节点，不改变任何类名与内部结构
+   * - wide / web / full：移动到 `.nova-player-control-bottom-center`（底部控制栏中央）
+   * - normal / mini：移回 `.nova-player-sending-area`
+   * 仅搬移已有的 `.nova-player-sending-bar` 节点，不改变任何类名与内部结构
    * @param mode - 目标显示模式（full 为浏览器全屏，不属于 DisplayMode，仅内部使用）
    */
   let sendingBarHome: HTMLElement | null = null;
   let sendingBarNext: Node | null = null;
 
-  const moveSendBar = (
-    mode: DisplayMode | 'full',
-  ): void => {
+  const moveSendBar = (mode: DisplayMode | "full"): void => {
     const bar = playerContainerRef.value?.querySelector<HTMLElement>(
-      '.player-sending-bar',
+      ".nova-player-sending-bar",
     );
     if (!bar) return;
     const center = playerContainerRef.value?.querySelector<HTMLElement>(
-      '.player-control-bottom-center',
+      ".nova-player-control-bottom-center",
     );
-    if (mode === 'wide' || mode === 'web' || mode === 'full') {
-      if (mode === 'full' && center && center.children.length > 0) return;
+    if (mode === "wide" || mode === "web" || mode === "full") {
+      if (mode === "full" && center && center.children.length > 0) return;
       if (!sendingBarHome && bar.parentElement) {
         sendingBarHome = bar.parentElement;
         sendingBarNext = bar.nextSibling;
@@ -523,7 +522,9 @@ export const PlayerDocker = defineComponent<
       if (home && bar.parentElement !== home) {
         bar.remove();
         const anchor =
-          sendingBarNext && sendingBarNext.parentNode === home ? sendingBarNext : null;
+          sendingBarNext && sendingBarNext.parentNode === home
+            ? sendingBarNext
+            : null;
         home.insertBefore(bar, anchor);
       }
     }
@@ -656,7 +657,6 @@ export const PlayerDocker = defineComponent<
     controlsApi.updateCurrent?.(currentTime);
     // 将播放进度转发给顶部进度条（更新已播放条与滑块）
     progressBarApi.updateProgress?.(currentTime);
-    rowDmApi.createDanmaku?.(currentTime);
     // 迷你播放器模式时同步其播放进度条
     miniApi.changeTempo?.(currentTime);
     lifecycle.emit?.("timeUpdate", { currentTime });
@@ -853,7 +853,10 @@ export const PlayerDocker = defineComponent<
   /** ratechange：播放速率变化 */
   const handleRateChange = (): void => {
     if (!videoRef.value) return;
-    stateMgr?.set(PlayerStateKeyEnum.PLAYBACK_RATE, videoRef.value.playbackRate);
+    stateMgr?.set(
+      PlayerStateKeyEnum.PLAYBACK_RATE,
+      videoRef.value.playbackRate,
+    );
     lifecycle.emit?.("rateChange", { rate: videoRef.value.playbackRate });
   };
 
@@ -923,9 +926,7 @@ export const PlayerDocker = defineComponent<
 
   /** 弹幕组件 API，由 RowDm 组件挂载后填充 */
   const rowDmApi: {
-    /** 根据当前时间创建弹幕 */
-    createDanmaku?: (currentTime: number) => void;
-    /** 切换弹幕播放/暂停状态 */
+    /** 切换弹幕播放/暂停状态（根容器 danmaku-x-paused 类） */
     playPause?: (state: "playing" | "paused") => void;
     /** 显示弹幕提示信息 */
     showDmTip?: (event: MouseEvent, element: HTMLElement) => void;
@@ -1068,12 +1069,12 @@ export const PlayerDocker = defineComponent<
   // 面板懒挂载（既有实现的懒创建模式）
   // ============================================
   // 既有实现 controls/index.ts 打开面板时：
-  //   if (!this.querySelector('.player-video-area .player-color-panel'))
+  //   if (!this.querySelector('.nova-player-video-area .nova-player-color-panel'))
   //     new Colorpanel(this.playerVideoArea!);
   // 面板第一次用到才创建，之后复用已有实例。
   // 这里用框架的动态挂载 API（@/core 的 mount / destroy，core/mount.ts 导出）
   // 实现同样的按需创建：ensurePanel(name) 首次调用时把面板挂进
-  // .player-video-area，之后复用已创建的实例。
+  // .nova-player-video-area，之后复用已创建的实例。
 
   /** 懒挂载面板的 VNode 缓存（首次使用创建，之后复用；销毁时统一 destroy） */
   const lazyPanelVNodes: {
@@ -1151,7 +1152,7 @@ export const PlayerDocker = defineComponent<
   };
 
   // ============================================
-  // 视频色彩滤镜（右键「视频色彩调整」面板 → .player-video 的 style.filter）
+  // 视频色彩滤镜（右键「视频色彩调整」面板 → .nova-player-video 的 style.filter）
   // ============================================
 
   /** 当前饱和度（0-200，100 为默认） */
@@ -1164,7 +1165,7 @@ export const PlayerDocker = defineComponent<
   let filterContrast = 100;
 
   /**
-   * 将当前色彩参数写入 .player-video 元素的 CSS filter
+   * 将当前色彩参数写入 .nova-player-video 元素的 CSS filter
    * 默认值（100）的项不参与拼接，全部默认时清空 filter
    */
   const applyVideoFilter = (): void => {
@@ -1173,95 +1174,21 @@ export const PlayerDocker = defineComponent<
     /** 滤镜函数片段 */
     const parts: string[] = [];
     if (filterSaturate !== 100) parts.push(`saturate(${filterSaturate}%)`);
-    if (filterBrightness !== 100) parts.push(`brightness(${filterBrightness}%)`);
+    if (filterBrightness !== 100)
+      parts.push(`brightness(${filterBrightness}%)`);
     if (filterContrast !== 100) parts.push(`contrast(${filterContrast}%)`);
-    video.style.filter = parts.join(' ');
+    video.style.filter = parts.join(" ");
   };
 
   // ============================================
-  // 弹幕层 / 清晰度切换的局部运行变量
+  // 清晰度切换的局部运行变量
   // ============================================
-
-  /** 弹幕外层容器元素（由 RowDm 挂载后回传，用于命令式控制可见性 / 透明度 / 速度） */
-  let danmakuWrapEl: HTMLElement | null = null;
 
   /** 最近一次清晰度切换请求的目标展示名（用于切换中 / 成功文案） */
-  let requestedQualityLabel = '';
+  let requestedQualityLabel = "";
 
   /** 最近一次清晰度切换请求的目标档位 id */
-  let requestedQualityTo = '';
-
-  /**
-   * 应用弹幕可见性到弹幕层 DOM
-   * @param visible - 是否可见
-   */
-  const applyDanmakuVisible = (visible: boolean): void => {
-    if (danmakuWrapEl) {
-      danmakuWrapEl.style.display = visible ? '' : 'none';
-    }
-  };
-
-  /**
-   * 应用弹幕透明度到弹幕层 DOM
-   * @param opacity - 0-1 之间的透明度
-   */
-  const applyDanmakuOpacity = (opacity: number): void => {
-    if (danmakuWrapEl) {
-      danmakuWrapEl.style.opacity = String(opacity);
-    }
-  };
-
-  /**
-   * 应用弹幕速度到弹幕层 DOM
-   *
-   * 说明：RowDm 在创建每条弹幕时按档位计算动画时长（`--duration`），
-   * 当前 scss / RowDm 未消费全局速度变量，故这里写入层上的 CSS 自定义属性，
-   * 供后续（或外部样式）消费；已存在的弹幕不会重算时长。
-   * @param speed - 速度倍率
-   */
-  const applyDanmakuSpeed = (speed: number): void => {
-    if (danmakuWrapEl) {
-      danmakuWrapEl.style.setProperty('--danmaku-speed', String(speed));
-    }
-  };
-
-  /**
-   * 应用弹幕显示区域到弹幕层 DOM
-   * @param area - 显示区域百分比（0-100）
-   */
-  const applyDanmakuArea = (area: number): void => {
-    if (danmakuWrapEl) {
-      danmakuWrapEl.style.height = `${area}%`;
-    }
-  };
-
-  /**
-   * 应用弹幕字号档位到弹幕层 DOM
-   *
-   * 说明：写入层上的 CSS 自定义属性 `--danmaku-font-size`（0-100 档位），
-   * 供弹幕元素样式消费；已有弹幕不回溯重算。
-   * @param fontSize - 字号档位（0-100）
-   */
-  const applyDanmakuFontSize = (fontSize: number): void => {
-    if (danmakuWrapEl) {
-      danmakuWrapEl.style.setProperty('--danmaku-font-size', String(fontSize));
-    }
-  };
-
-  /** 将当前 state 中的弹幕配置一次性同步到弹幕层（弹幕层刚挂载时调用） */
-  const syncDanmakuToLayer = (): void => {
-    applyDanmakuVisible(
-      stateMgr?.get(PlayerStateKeyEnum.DANMAKU_VISIBLE) ?? true,
-    );
-    applyDanmakuOpacity(
-      stateMgr?.get(PlayerStateKeyEnum.DANMAKU_OPACITY) ?? 1,
-    );
-    applyDanmakuSpeed(stateMgr?.get(PlayerStateKeyEnum.DANMAKU_SPEED) ?? 1);
-    applyDanmakuArea(stateMgr?.get(PlayerStateKeyEnum.DANMAKU_AREA) ?? 50);
-    applyDanmakuFontSize(
-      stateMgr?.get(PlayerStateKeyEnum.DANMAKU_FONT_SIZE) ?? 50,
-    );
-  };
+  let requestedQualityTo = "";
 
   // ============================================
   // 清晰度切换 UI 反馈（B 站风格短文案）
@@ -1275,31 +1202,31 @@ export const PlayerDocker = defineComponent<
    * @param phase - 切换生命周期状态
    */
   const driveQualitySwitchUI = (
-    phase: 'idle' | 'switching' | 'switched' | 'failed',
+    phase: "idle" | "switching" | "switched" | "failed",
   ): void => {
-    if (phase === 'switching') {
+    if (phase === "switching") {
       loadingApi.show?.();
       loadingApi.setText?.(
         requestedQualityLabel
           ? `正在切换至 ${requestedQualityLabel}`
-          : '正在切换清晰度',
+          : "正在切换清晰度",
       );
       return;
     }
-    if (phase === 'switched') {
+    if (phase === "switched") {
       loadingApi.hide?.();
       toastApi.showAutoToast?.(
-        `已切换至 ${requestedQualityLabel || requestedQualityTo || '目标清晰度'}`,
+        `已切换至 ${requestedQualityLabel || requestedQualityTo || "目标清晰度"}`,
       );
-      requestedQualityLabel = '';
-      requestedQualityTo = '';
+      requestedQualityLabel = "";
+      requestedQualityTo = "";
       return;
     }
-    if (phase === 'failed') {
+    if (phase === "failed") {
       loadingApi.hide?.();
-      toastApi.showAutoToast?.('清晰度切换失败');
-      requestedQualityLabel = '';
-      requestedQualityTo = '';
+      toastApi.showAutoToast?.("清晰度切换失败");
+      requestedQualityLabel = "";
+      requestedQualityTo = "";
     }
   };
 
@@ -1320,7 +1247,7 @@ export const PlayerDocker = defineComponent<
         loadingApi.setText?.(
           requestedQualityLabel
             ? `正在切换至 ${requestedQualityLabel}`
-            : '正在切换清晰度',
+            : "正在切换清晰度",
         );
       },
     );
@@ -1328,7 +1255,8 @@ export const PlayerDocker = defineComponent<
       PlayerEventEnum.QUALITY_CHANGE_RENDERED,
       (payload) => {
         requestedQualityTo = payload.to;
-        if (payload.quality?.label) requestedQualityLabel = payload.quality.label;
+        if (payload.quality?.label)
+          requestedQualityLabel = payload.quality.label;
       },
     );
     const offFailed = bus.on(
@@ -1340,7 +1268,7 @@ export const PlayerDocker = defineComponent<
     // 持久化进度恢复提示：VideoPlayer 在 loadedmetadata 后恢复上次观看位置时
     // 广播 restoreProgress，这里显示自动消失的 Toast（文案与既有实现一致）
     const offRestore = bus.on(PlayerEventEnum.RESTORE_PROGRESS, () => {
-      toastApi.showAutoToast?.('已为你恢复到上次观看位置');
+      toastApi.showAutoToast?.("已为你恢复到上次观看位置");
     });
     cleanupFns.push(offRequested, offRendered, offFailed, offRestore);
   };
@@ -1436,55 +1364,8 @@ export const PlayerDocker = defineComponent<
       lifecycle,
     );
 
-    // 弹幕可见性 → 弹幕层 display
-    useState(
-      stateMgr,
-      PlayerStateKeyEnum.DANMAKU_VISIBLE,
-      (visible) => {
-        applyDanmakuVisible(visible);
-      },
-      lifecycle,
-    );
-
-    // 弹幕透明度 → 弹幕层 opacity
-    useState(
-      stateMgr,
-      PlayerStateKeyEnum.DANMAKU_OPACITY,
-      (opacity) => {
-        applyDanmakuOpacity(opacity);
-      },
-      lifecycle,
-    );
-
-    // 弹幕速度 → 弹幕层 CSS 变量
-    useState(
-      stateMgr,
-      PlayerStateKeyEnum.DANMAKU_SPEED,
-      (speed) => {
-        applyDanmakuSpeed(speed);
-      },
-      lifecycle,
-    );
-
-    // 弹幕显示区域 → 弹幕层高度
-    useState(
-      stateMgr,
-      PlayerStateKeyEnum.DANMAKU_AREA,
-      (area) => {
-        applyDanmakuArea(area);
-      },
-      lifecycle,
-    );
-
-    // 弹幕字号档位 → 弹幕层 CSS 变量
-    useState(
-      stateMgr,
-      PlayerStateKeyEnum.DANMAKU_FONT_SIZE,
-      (fontSize) => {
-        applyDanmakuFontSize(fontSize);
-      },
-      lifecycle,
-    );
+    // 弹幕设置（显隐/透明度/速度/区域/字号）不再在此层命令式写 DOM：
+    // DanmakuPlugin 订阅对应 DANMAKU_* 状态键，由引擎内部完成参数应用
   }
 
   // ============================================
@@ -1496,23 +1377,26 @@ export const PlayerDocker = defineComponent<
     if (!configStore) return;
 
     // progress.segments 变化 → 重建进度条分段（顶部进度条与底部影子进度条同一份数据）
-    const offSegments = configStore.subscribePath('progress.segments', (value) => {
-      const next = (value as ProgressSegment[] | undefined) ?? [];
-      progressBarApi.rebuildSegments?.(next);
-      controlsApi.setProgressSegments?.(next);
-    });
+    const offSegments = configStore.subscribePath(
+      "progress.segments",
+      (value) => {
+        const next = (value as ProgressSegment[] | undefined) ?? [];
+        progressBarApi.rebuildSegments?.(next);
+        controlsApi.setProgressSegments?.(next);
+      },
+    );
 
     // interaction.keyboard 变化 → 启停键盘监听
     const offKeyboard = configStore.subscribePath(
-      'interaction.keyboard',
+      "interaction.keyboard",
       (value) => {
         setKeyboardEnabled(value !== false);
       },
     );
 
     // ui.title 变化 → 同步顶部栏标题文本（§3.2 ui.title 应用矩阵）
-    const offTitle = configStore.subscribePath('ui.title', (value) => {
-      topApi.setTitle?.(String(value ?? ''));
+    const offTitle = configStore.subscribePath("ui.title", (value) => {
+      topApi.setTitle?.(String(value ?? ""));
     });
 
     cleanupFns.push(offSegments, offKeyboard, offTitle);
@@ -1647,7 +1531,8 @@ export const PlayerDocker = defineComponent<
    * 跳转到指定时间（秒）
    *
    * 同步三处：video 元素的 currentTime、运行时状态 CURRENT_TIME，
-   * 以及依赖进度更新的 UI（时间文本 / 进度条 / 弹幕重建）。
+   * 以及依赖进度更新的 UI（时间文本 / 进度条）。
+   * 弹幕引擎自行监听 video seeking 事件完成 seek 重建，无需在此驱动。
    */
   const seekTo = (time: number): void => {
     const video = videoRef.value;
@@ -1659,7 +1544,6 @@ export const PlayerDocker = defineComponent<
     stateMgr?.set(PlayerStateKeyEnum.CURRENT_TIME, target);
     controlsApi.updateCurrent?.(target);
     progressBarApi.updateProgress?.(target);
-    rowDmApi.createDanmaku?.(target);
   };
 
   /** 应用播放速率（同步 video、状态与事件总线） */
@@ -1723,7 +1607,9 @@ export const PlayerDocker = defineComponent<
    * - control / top：悬停在控制栏 / 顶栏上触发，仅显示、不自动隐藏，
    *   避免用户停留在菜单上时控制栏被定时器隐藏
    */
-  const showControls = (position: "video" | "control" | "top" = "video"): void => {
+  const showControls = (
+    position: "video" | "control" | "top" = "video",
+  ): void => {
     if (!playerContainerRef.value) return;
     playerContainerRef.value.setAttribute("data-ctrl-hidden", "false");
     playerContainerRef.value.classList.remove("state-no-cursor");
@@ -1783,7 +1669,9 @@ export const PlayerDocker = defineComponent<
     seekBy: (seconds: number): void => {
       const video = videoRef.value;
       if (!video) return;
-      const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+      const duration = Number.isFinite(video.duration)
+        ? video.duration
+        : Infinity;
       video.currentTime = Math.min(
         Math.max(0, video.currentTime + seconds),
         duration,
@@ -1912,7 +1800,9 @@ export const PlayerDocker = defineComponent<
    */
   const onContextMenu = (event: MouseEvent): void => {
     // 播放器自带右键菜单已打开时，再次右键放行：不拦截、不关菜单 → 弹出浏览器原生菜单
-    const openedMenu = playerContainerRef.value?.querySelector('.player-contextmenu.player-active');
+    const openedMenu = playerContainerRef.value?.querySelector(
+      ".nova-player-contextmenu.nova-player-active",
+    );
     if (openedMenu) {
       return;
     }
@@ -1951,7 +1841,7 @@ export const PlayerDocker = defineComponent<
   /** 当前迷你窗口下偏移（像素，可拖拽改变） */
   let miniOffsetBottom = MINI_OFFSET;
 
-  /** 迷你窗口拖拽元素（.player-mini-warp），由 Mini 组件挂载后赋值 */
+  /** 迷你窗口拖拽元素（.nova-player-mini-warp），由 Mini 组件挂载后赋值 */
   let miniWarpEl: HTMLElement | null = null;
 
   /** 拖拽期间绑定在 document 上的 mousemove 处理器（销毁时清理用） */
@@ -2040,7 +1930,7 @@ export const PlayerDocker = defineComponent<
       // 避免鼠标从输入框附近移开时控制栏被收起打断输入
       const displayMode = stateMgr?.get(PlayerStateKeyEnum.DISPLAY_MODE);
       const isFull = stateMgr?.get(PlayerStateKeyEnum.IS_FULLSCREEN) ?? false;
-      if ((displayMode === 'web' || isFull) && isSendFocus) {
+      if ((displayMode === "web" || isFull) && isSendFocus) {
         return;
       }
       hideControls();
@@ -2074,7 +1964,7 @@ export const PlayerDocker = defineComponent<
     // --- mousemove on 控制栏 / 顶栏 → 仅显示、不自动隐藏 ---
     // 避免用户悬停菜单时被 3 秒定时器收起（与既有实现 showControls("control"/"top") 一致）
     const controlWrap = container.querySelector<HTMLElement>(
-      ".player-control-wrap",
+      ".nova-player-control-wrap",
     );
     if (controlWrap) {
       const onMouseMoveControl = (): void => {
@@ -2085,7 +1975,9 @@ export const PlayerDocker = defineComponent<
         controlWrap.removeEventListener("mousemove", onMouseMoveControl),
       );
     }
-    const topWrap = container.querySelector<HTMLElement>(".player-top-wrap");
+    const topWrap = container.querySelector<HTMLElement>(
+      ".nova-player-top-wrap",
+    );
     if (topWrap) {
       const onMouseMoveTop = (): void => {
         showControls("top");
@@ -2260,7 +2152,10 @@ export const PlayerDocker = defineComponent<
       videoRef.value.removeEventListener("ended", handleEnded);
       videoRef.value.removeEventListener("waiting", handleWaiting);
       videoRef.value.removeEventListener("canplay", handleCanPlay);
-      videoRef.value.removeEventListener("canplaythrough", handleCanPlayThrough);
+      videoRef.value.removeEventListener(
+        "canplaythrough",
+        handleCanPlayThrough,
+      );
     }
 
     // 清理所有 DOM 事件监听
@@ -2321,71 +2216,69 @@ export const PlayerDocker = defineComponent<
   return h(
     "div",
     {
-      class: "player-docker player-docker-major",
+      class: "nova-player-docker nova-player-docker-major",
       "data-injector": "nano",
-      ref: 'playerDockerRef',
+      ref: "playerDockerRef",
     },
     h(
       "div",
       {
         class:
-          "player-container state-paused state-no-cursor state-disable-box-shadow",
+          "nova-player-container state-paused state-no-cursor state-disable-box-shadow",
         "data-angle": "d3d11",
         "data-screen": "normal",
         // 初始隐藏控制栏（与既有实现模板一致），由鼠标移动 / 播放交互驱动显示
         "data-ctrl-hidden": "true",
         "aria-label": props.playerName || "嗨哩播放器",
-        ref: 'playerContainerRef',
+        ref: "playerContainerRef",
       },
       h(
         "div",
-        { class: "player-primary-area" },
+        { class: "nova-player-primary-area" },
         // 视频区域
         h(
           "div",
           {
-            class: "player-video-area",
-            ref: 'playerVideoAreaRef',
+            class: "nova-player-video-area",
+            ref: "playerVideoAreaRef",
           },
           // 视频占位容器
           h(
             "div",
             {
-              class: "player-video-perch",
-              ref: 'playerVideoPerchRef',
+              class: "nova-player-video-perch",
+              ref: "playerVideoPerchRef",
             },
             // 视频包装容器
             h(
               "div",
               {
-                class: "player-video-wrap",
-                ref: 'playerVideoWrapRef',
+                class: "nova-player-video-wrap",
+                ref: "playerVideoWrapRef",
               },
               h("video", {
-                class: "player-video",
+                class: "nova-player-video",
                 crossorigin: "anonymous",
                 preload: "auto",
                 playsinline: "",
-                ref: 'videoRef',
+                ref: "videoRef",
               }),
             ),
           ),
           // 视频海报
           h("div", {
-            class: "player-video-poster",
+            class: "nova-player-video-poster",
             hidden: true,
           }),
           // 弹幕容器
           h(RowDm, {
             isOpen: true,
             onDanmakuLayerMounted: (data: DanmakuLayerAPI) => {
-              rowDmApi.createDanmaku = data.createDanmaku;
+              // playPause：根容器 danmaku-x-paused 类（原版暂停机制）；
+              // 弹幕渲染与设置应用由 DanmakuPlugin 接管，此层只保留播放暂停联动
               rowDmApi.playPause = data.playPause;
               rowDmApi.showDmTip = data.showDmTip;
               rowDmApi.hideDmTip = data.hideDmTip;
-              // 持有弹幕外层容器，供可见性 / 透明度 / 速度的命令式控制
-              danmakuWrapEl = data.playerRowDmWrap ?? null;
-              syncDanmakuToLayer();
               lifecycle.emit?.("danmakuLayerMounted", data);
               // 弹幕层挂载完成，通知插件系统（不使用 DANMAKU_TOGGLE，那是切换弹幕可见性的事件）
             },
@@ -2548,8 +2441,8 @@ export const PlayerDocker = defineComponent<
             duration: readDuration(),
             volume: readVolume(),
             backrate: readBackrate(),
-            getPreviewFrames: props.getProgressPreviewFrames,
-            getEnergyProgress: props.getEnergyProgress,
+            previewProvider: props.previewProvider,
+            energyProvider: props.energyProvider,
             // ===== 控件条交互接线（设计文档阶段 J）=====
             // 控制栏挂载完成：持有其操作 API（时间/音量/缓冲等显示更新的入口）
             onControlsMounted: (api: ControlsAPI) => {
@@ -2610,13 +2503,19 @@ export const PlayerDocker = defineComponent<
               fade?: boolean;
             }) => {
               // 立即反馈到字幕层（无需等待播放器状态回流）
-              if (patch.fontSize !== undefined) subtitleApi.setFontSize?.(patch.fontSize);
-              if (patch.color !== undefined && patch.strokeColor === undefined) {
+              if (patch.fontSize !== undefined)
+                subtitleApi.setFontSize?.(patch.fontSize);
+              if (
+                patch.color !== undefined &&
+                patch.strokeColor === undefined
+              ) {
                 subtitleApi.setColor?.(patch.color);
               }
               // 注意：字幕层 API 只接受位置一个参数（offset 由插件侧处理）
               if (patch.position !== undefined) {
-                subtitleApi.setPosition?.(patch.position === "top" ? "top" : "bottom");
+                subtitleApi.setPosition?.(
+                  patch.position === "top" ? "top" : "bottom",
+                );
               }
               lifecycle.emit?.("subtitleStyleChange", patch);
             },
@@ -2653,16 +2552,17 @@ export const PlayerDocker = defineComponent<
           }),
         ),
         // 发送区域（弹幕输入栏，既有实现+ sendbar 挂载方式：
-        // .player-sending-area > .player-sending-bar）
+        // .nova-player-sending-area > .nova-player-sending-bar）
         h(
           "div",
           {
-            class: "player-sending-area",
-            ref: 'playerSendingAreaRef',
+            class: "nova-player-sending-area",
+            ref: "playerSendingAreaRef",
           },
           h(SendBar, {
             // 弹幕开关初始状态来自运行时状态（与设置面板共享同一状态源）
-            danmakuSwitch: stateMgr?.get(PlayerStateKeyEnum.DANMAKU_VISIBLE) ?? true,
+            danmakuSwitch:
+              stateMgr?.get(PlayerStateKeyEnum.DANMAKU_VISIBLE) ?? true,
             // 输入框聚焦 / 失焦：维护 isSendFocus，供 mouseleave 豁免判断
             onInputFocus: () => {
               isSendFocus = true;
@@ -2672,13 +2572,14 @@ export const PlayerDocker = defineComponent<
             onInputBlur: () => {
               isSendFocus = false;
             },
-            // 弹幕开关：写运行时状态（驱动弹幕层显隐订阅）+ 向上广播
+            // 弹幕开关：写运行时状态（唯一数据源，插件订阅后自动应用）
+            // 注意：不再向上发 danmakuToggle lifecycle 事件——
+            // VideoPlayer 的该事件处理器是 toggle 语义，会把刚写入的值再翻转一次
             onDanmakuSwitch: (checked: boolean) => {
               stateMgr?.set(PlayerStateKeyEnum.DANMAKU_VISIBLE, checked);
               props.events?.emit(PlayerEventEnum.DANMAKU_TOGGLE, {
                 visible: checked,
               });
-              lifecycle.emit?.("danmakuToggle");
             },
             // 发送弹幕：向上转发文本，同时广播「提交请求」事件（DANMAKU_SEND）
             // 注意：DANMAKU_SENT 的语义是「发送成功」，由 DanmakuPlugin 在服务器确认后发出；
@@ -2697,7 +2598,7 @@ export const PlayerDocker = defineComponent<
           }),
         ),
       ),
-      // 按钮悬停提示工具（既有实现挂载于 .player-container：
+      // 按钮悬停提示工具（既有实现挂载于 .nova-player-container：
       // new Tooltips(this.playerContainer!)；Controls / SendBar / Top 的
       // tooltip 事件经 handleShowTooltip / handleHideTooltip 接通至此）
       h(Tooltips, {
@@ -2705,7 +2606,7 @@ export const PlayerDocker = defineComponent<
           openTip: (btnElement: HTMLElement | null, name: string) => void;
           closeTip: (name: string) => void;
           updateTip: (name: string, text: string) => void;
-          setScreen: (screen: 'normal' | 'full' | 'web') => void;
+          setScreen: (screen: "normal" | "full" | "web") => void;
           hideAll: () => void;
         }) => {
           Object.assign(tooltipsApi, api);
@@ -2720,19 +2621,19 @@ export const PlayerDocker = defineComponent<
           contextApi.showMenu = api.showMenu;
           contextApi.hideMenu = api.hideMenu;
         },
-        onOpenPanel: (panel: 'color' | 'keyboard' | 'info') => {
+        onOpenPanel: (panel: "color" | "keyboard" | "info") => {
           // 面板按需懒挂载：首次打开才创建（既有实现的懒创建模式），之后复用
           ensurePanel(panel);
           // 「视频色彩调整」菜单项 → 打开色彩调整面板
-          if (panel === 'color') {
+          if (panel === "color") {
             colorPanelApi.open?.();
           }
           // 「快捷键说明」菜单项 → 打开快捷键面板
-          if (panel === 'keyboard') {
+          if (panel === "keyboard") {
             hotkeyPanelApi.open?.();
           }
           // 「视频统计信息」菜单项 → 打开统计信息面板
-          if (panel === 'info') {
+          if (panel === "info") {
             videoInfoApi.open?.();
           }
         },

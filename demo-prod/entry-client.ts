@@ -14,10 +14,10 @@ import { hydrate } from "../core/index.ts";
 import { createApp } from "./main";
 
 // ★ 从构建产物导入播放器（monorepo 链接到 packages/player/dist）
-import { VideoPlayer } from "@hili-player/player";
+import { VideoPlayer } from "@lumina/nova";
 // 插件从构建产物导入（monorepo 链接到 packages/plugins/dist）
-import { createHlsPlugin } from "@hili-player/plugins/hls";
-import { createDashPlugin } from "@hili-player/plugins/dash";
+import { createHlsPlugin } from "@lumina/plugins/hls";
+import { createDashPlugin } from "@lumina/plugins/dash";
 
 // ============================================
 // 步骤 1：执行水合
@@ -203,7 +203,7 @@ renderDebugItems("dbg-ssr", [
       ok: true,
     },
     { k: "构建产物", v: "index.es.js", ok: true },
-    { k: "编译插件", v: "hili-compile", ok: true },
+    { k: "编译插件", v: "lumina-compile", ok: true },
   ]);
 })();
 

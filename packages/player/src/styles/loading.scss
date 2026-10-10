@@ -1,5 +1,5 @@
-.player-container {
-  .player-loading-panel {
+.nova-player-container {
+  .nova-player-loading-panel {
     background-color: #000;
     display: none;
     height: 100%;
@@ -9,7 +9,7 @@
     width: 100%;
     z-index: 57;
 
-    .player-loading-panel-text {
+    .nova-player-loading-panel-text {
       bottom: 56px;
       color: hsla(0, 0%, 100%, 0.6);
       font-size: 12px;
@@ -20,7 +20,7 @@
     }
   }
 
-  .player-loading-panel-blur {
+  .nova-player-loading-panel-blur {
     -webkit-box-align: center;
     -ms-flex-align: center;
     -webkit-box-pack: center;
@@ -35,10 +35,10 @@
     position: relative;
     width: 100%;
 
-    .player-loading-panel-blur-detail {
+    .nova-player-loading-panel-blur-detail {
       -webkit-animation: animation-loading 0.94s steps(1) infinite;
       animation: animation-loading 0.94s steps(1) infinite;
-      background: url(@/hili-player/assets/images/ploading.png) no-repeat;
+      background: url(@/nova/assets/images/ploading.png) no-repeat;
       height: 184px;
       -webkit-transform: scale(0.5);
       transform: scale(0.5);
@@ -46,7 +46,7 @@
     }
   }
 
-  .player-loading-panel.state-loading {
+  .nova-player-loading-panel.state-loading {
     display: block;
   }
 }

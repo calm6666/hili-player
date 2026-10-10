@@ -1,9 +1,18 @@
-import { h, defineComponent, useTemplateRef } from "@/core";
-import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
-import { resolveProgressPreviewSlice } from "@/hili-player/utils/media/progressPreview";
-import { normalizeSegmentSpan } from "@/hili-player/utils/media/progressSegment";
-import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
-import type { ProgressSegment } from "@/types";
+import {
+  h,
+  defineComponent,
+  useTemplateRef,
+  signal,
+  For,
+} from "@/core";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
+import { normalizeSegmentSpan } from "@/nova/utils/media/progressSegment";
+import type {
+  ProgressPreviewFrame,
+  ProgressPreviewProvider,
+  ProgressSegment,
+  VNode,
+} from "@/types";
 import { isBrowser } from "@/utils";
 import { formatTime } from "@/utils/formatTime";
 import { createLogger } from "@/utils";
@@ -65,10 +74,12 @@ export interface ProgressBarProps {
   duration: number;
   progressSegments?: Array<ProgressSegment>;
   /**
-   * 预览数据提供者（懒取值，供无 diff 框架下后到的数据使用）
-   * 兼容两种形态：逐帧 data URL 数组（preview.bin）或雪碧图参数（sprite）
+   * 预览图提供者（progress.previewProvider 配置注入）
+   *
+   * 悬停时按「悬停时间 + 总时长」询问外部预览帧，支持同步或异步（Promise）返回；
+   * 数据获取逻辑（雪碧图裁切 / 逐帧 URL / 服务端接口）完全由外部实现。
    */
-  getPreviewSource?: () => ProgressPreviewSource | string[] | null;
+  previewProvider?: ProgressPreviewProvider;
 }
 
 /**
@@ -146,21 +157,88 @@ export function computeSegmentBox(
   return strategies[strategy](segment, duration);
 }
 
+/**
+ * 单条整轴占位项
+ *
+ * 分段数量 <= 1 时 For 渲染一个无 hover / 无 padding 的整轴进度条
+ * （与旧实现 createSegmentVNodes 的单条分支行为一致）。
+ */
+const SINGLE_BAR = Symbol("nova-progress-single-bar");
+
+/** For 列表项类型：真实分段或单条整轴占位 */
+type SegmentItem = ProgressSegment | typeof SINGLE_BAR;
+
+/**
+ * 运行时类型谓词：For 控制流的回调入参为 unknown（For 的 props 为
+ * Record<string, unknown>，类型信息在回调边界丢失），
+ * 用谓词收窄替代 as 断言
+ */
+const isProgressSegment = (item: unknown): item is ProgressSegment =>
+  typeof item === "object" &&
+  item !== null &&
+  "startTime" in item &&
+  typeof item.startTime === "number" &&
+  "endTime" in item &&
+  typeof item.endTime === "number";
+
 export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
   (props, lifecycle) => {
     const { progressSegments: initialSegments } = props;
 
-    /** 视频总时长（秒），初值取自 props，元数据加载后通过 setDuration 更新 */
-    let duration = props.duration;
+    // ============================================
+    // 响应式 Signal（渲染层唯一数据源）
+    // ============================================
 
-    /** 当前播放时间（秒），用于把缓冲条限定在播放头所在的分段 */
-    let currentTime = 0;
+    /**
+     * 视频总时长信号（秒）
+     *
+     * 初值取自 props，元数据加载后经 setDuration API 写入。
+     * 所有几何计算（分段 left/width、分钟刻度位置与数量）都依赖本信号，
+     * 时长到手瞬间由响应式系统自动补齐，不再依赖事件时序。
+     */
+    const durationSignal = signal<number>(props.duration);
 
-    /** 当前分段数据（挂载时为 props 快照，后续可经 rebuildSegments 整体替换） */
-    let segments: ProgressSegment[] = initialSegments ?? [];
+    /**
+     * 分段列表信号（初值为 props 快照，运行时经 rebuildSegments 整体替换）
+     * For 控制流按 key diff 自动同步 DOM，替代手动 mount/destroy 簿记
+     */
+    const segmentsSignal = signal<ProgressSegment[]>(initialSegments ?? []);
+
+    /** 悬停位置对应的时间（秒），驱动预览弹窗的时间文本（响应式 _reactiveText） */
+    const hoverTimeSignal = signal<number>(0);
+
+    /** 预览弹窗显隐信号：驱动 .nova-player-progress-wrap 的 state-active 类 */
+    const popupActiveSignal = signal<boolean>(false);
+
+    /** 预览缩略图 src 信号：驱动 <img src> */
+    const previewSrcSignal = signal<string | undefined>(undefined);
+
+    /** 预览缩略图 width 样式信号 */
+    const previewWidthSignal = signal<string>("");
+    /** 预览缩略图 height 样式信号 */
+    const previewHeightSignal = signal<string>("");
+    /** 预览缩略图 objectFit 样式信号 */
+    const previewObjectFitSignal = signal<string>("");
+    /** 预览缩略图 objectPosition 样式信号 */
+    const previewObjectPositionSignal = signal<string>("");
+
+    /** 预览弹窗分段名称信号：驱动 hotspot 文本 */
+    const hotspotTextSignal = signal<string>("");
+
+    /** 当前悬停的分段下标信号：驱动各分段 hover 类 */
+    const hoveredSegIdxSignal = signal<number>(-1);
+
+    /**
+     * 分段重建代号
+     *
+     * 每次 rebuildSegments 自增并编入 For 的 key：key 恒变即全量重渲染，
+     * 与旧实现「销毁全部旧 VNode 再逐个 mount」的行为完全一致，
+     * 同时保证函数 ref 重新收集 DOM 引用（refs 数组已同步重置）。
+     */
+    let segmentGeneration = 0;
 
     // ============================================
-    // DOM 引用
+    // DOM 引用（模板 ref + For render 的函数 ref）
     // ============================================
 
     /** 进度条区域容器元素引用 */
@@ -169,66 +247,33 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       "progressAreaRef",
     );
 
-    /** 进度条内层包裹元素引用 */
-    const scheduleWrapRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "scheduleWrapRef",
-    );
-
-    /** 分钟刻度层元素引用 */
-    const scaleplateRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "scaleplateRef",
-    );
-
-    /** 进度条外层包裹元素引用（悬停态 state-active 类挂载点，与既有实现一致） */
-    const progressWrapRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "progressWrapRef",
-    );
-
-    /** 预览弹窗元素引用 */
+    /** 预览弹窗元素引用（逐帧命令式定位 left） */
     const popupRef = useTemplateRef<HTMLDivElement>(lifecycle, "popupRef");
 
-    /** 预览时间文本元素引用 */
-    const previewTimeRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "previewTimeRef",
-    );
-
-    /** 预览图元素引用（分段预览帧） */
-    const previewImageRef = useTemplateRef<HTMLImageElement>(
-      lifecycle,
-      "previewImageRef",
-    );
-
-    /** 分段名称文本元素引用（预览弹窗左下角） */
-    const hotspotRef = useTemplateRef<HTMLDivElement>(lifecycle, "hotspotRef");
-
-    /** 移动指示器元素引用 */
+    /** 移动指示器元素引用（逐帧命令式定位 translateX） */
     const moveIndicatorRef = useTemplateRef<HTMLDivElement>(
       lifecycle,
       "moveIndicatorRef",
     );
 
-    /** 光标元素引用 */
+    /** 光标元素引用（逐帧命令式定位 left） */
     const cursorRef = useTemplateRef<HTMLDivElement>(lifecycle, "cursorRef");
 
-    /** 拖拽滑块元素引用 */
+    /** 拖拽滑块元素引用（逐帧命令式定位 translateX） */
     const thumbRef = useTemplateRef<HTMLDivElement>(lifecycle, "thumbRef");
 
     // ============================================
-    // 状态
+    // 状态（仅命令式路径使用，无声明式消费者）
     // ============================================
+
+    /** 当前播放时间（秒），用于把缓冲条限定在播放头所在的分段 */
+    let currentTime = 0;
 
     /** 是否正在拖拽 */
     let isDragging = false;
 
     /** 悬停显示预览弹窗的延迟定时器 ID（与既有实现 mouseEnter 的 300ms 延迟一致） */
     let hoverTimer: ReturnType<typeof setTimeout> | null = null;
-
-    /** 悬停位置对应的时间（秒），供延迟显示弹窗时更新时间文本 */
-    let hoverTime = 0;
 
     /** 拖拽时的鼠标移动处理函数引用 */
     let dragMouseMove: ((e: MouseEvent) => void) | null = null;
@@ -238,6 +283,34 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
 
     /** 是否已提示过非法分段，避免每次 timeupdate 重复打印 */
     let hasWarnedInvalidSegment = false;
+
+    /** 预览帧请求序号（异步 provider 竞态保护：仅应用最新一次悬停请求的结果） */
+    let previewRequestId = 0;
+
+    // ============================================
+    // DOM 引用缓存（For render 的函数 ref 收集，零 querySelectorAll）
+    // ============================================
+
+    /**
+     * 各分段缓冲条 DOM 引用缓存
+     * 由 For render 内的函数 ref 按下标写入，updateBufferFills 直接读缓存写 scaleX
+     */
+    let segmentBufferRefs: Array<HTMLDivElement | null> = [];
+
+    /**
+     * 各分段已播放条 DOM 引用缓存
+     * 由 For render 内的函数 ref 按下标写入，updateSegmentFills 直接读缓存写 scaleX
+     */
+    let segmentCurrentRefs: Array<HTMLDivElement | null> = [];
+
+    /**
+     * 各段上次已播放填充比例（钳制后的 0-1），用于 updateSegmentFills 去重
+     * 比例未变时跳过 transform 写入，避免无意义的样式抖动。
+     */
+    let lastFillRatios: number[] = [];
+
+    /** 各段上次缓冲填充比例（钳制后的 0-1），用于 updateBufferFills 去重 */
+    let lastBufferRatios: number[] = [];
 
     // ============================================
     // 辅助函数
@@ -249,7 +322,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * @returns 对应的时间（秒）
      */
     const getTimeFromX = (clientX: number): number => {
-      if (!progressAreaRef.value || duration <= 0) return 0;
+      if (!progressAreaRef.value || durationSignal.value <= 0) return 0;
       /** 进度条区域的边界矩形 */
       const rect = progressAreaRef.value.getBoundingClientRect();
       /** 鼠标位置在进度条上的比例 (0-1) */
@@ -257,24 +330,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
         0,
         Math.min(1, (clientX - rect.left) / rect.width),
       );
-      return ratio * duration;
-    };
-
-    /**
-     * 获取进度条容器内的分段基础元素列表（.player-progress-schedule）
-     *
-     * 说明：分段基础元素、缓冲条、已播放条均由 setupProgressElements / rebuildSegments
-     * 通过 document.createElement 在运行时创建，模板 ref 无法绑定，
-     * 只能以容器 scheduleWrapRef 为根用 querySelectorAll 检索；返回顺序与分段顺序一致。
-     * @returns 分段基础元素数组（单分段 / 无分段时为长度 1）
-     */
-    const getScheduleElements = (): HTMLDivElement[] => {
-      if (!scheduleWrapRef.value) return [];
-      return Array.from(
-        scheduleWrapRef.value.querySelectorAll<HTMLDivElement>(
-          ".player-progress-schedule",
-        ),
-      );
+      return ratio * durationSignal.value;
     };
 
     /**
@@ -286,8 +342,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     const resolveSegments = (): Array<
       Pick<ProgressSegment, "startTime" | "endTime">
     > => {
-      if (segments.length > 1) return normalizeSegmentSpan(segments, duration);
-      return [{ startTime: 0, endTime: duration }];
+      const list = segmentsSignal.value;
+      const dur = durationSignal.value;
+      if (list.length > 1) return normalizeSegmentSpan(list, dur);
+      return [{ startTime: 0, endTime: dur }];
     };
 
     /**
@@ -306,51 +364,69 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      *
      * 多分段时每个分段只表示自身 [startTime, endTime] 区间内的进度，
      * 因此同一时刻各分段填充比例不同；单分段 / 无分段时整条视作一个分段。
+     *
+     * 直接读 segmentCurrentRefs/segmentBufferRefs 缓存写入 transform: scaleX，
+     * 零 querySelectorAll；与 lastFillRatios[i]/lastBufferRatios[i] 对比，
+     * 比例未变 continue，避免无意义样式抖动。
      * @param value - 当前时间或缓冲时间（秒）
      * @param childClass - 需要设置 scaleX 的子元素类名（缓冲条 / 已播放条）
      */
     const updateSegmentFills = (value: number, childClass: string): void => {
       if (!Number.isFinite(value)) return;
       const rangeList = resolveSegments();
-      getScheduleElements().forEach((schedule, index) => {
-        const range = rangeList[index];
-        if (!range) return;
+      /** 缓存数组与去重数组按 childClass 二选一（已播放条 / 缓冲条） */
+      const refs =
+        childClass === "nova-player-progress-schedule-buffer"
+          ? segmentBufferRefs
+          : segmentCurrentRefs;
+      const lastRatios =
+        childClass === "nova-player-progress-schedule-buffer"
+          ? lastBufferRatios
+          : lastFillRatios;
+      for (let i = 0; i < refs.length; i += 1) {
+        const el = refs[i];
+        const range = rangeList[i];
+        if (!el || !range) continue;
         // 脏分段（endTime <= startTime）跳过，避免除零产生 NaN/Infinity
         if (range.endTime <= range.startTime) {
           warnInvalidSegment();
-          return;
+          continue;
         }
-        /** 该分段自身的填充比例（0-1） */
+        /** 该分段自身的填充比例（0-1，钳制） */
         const ratio = computeSegmentRatio(
           value,
           range.startTime,
           range.endTime,
         );
-        schedule
-          .querySelectorAll<HTMLDivElement>(`.${childClass}`)
-          .forEach((el) => {
-            // SCSS 以 transform: scaleX 驱动进度条（transform-origin: 0 0）
-            el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
-          });
-      });
+        const clamped = Math.min(Math.max(ratio, 0), 1);
+        // 比例未变跳过，避免无意义的 transform 写入
+        if (lastRatios[i] === clamped) continue;
+        lastRatios[i] = clamped;
+        // SCSS 以 transform: scaleX 驱动进度条（transform-origin: 0 0）
+        el.style.transform = `scaleX(${clamped})`;
+      }
     };
 
     /**
      * 按分段逐个更新缓冲条填充比例
      * 只有播放头所在的分段按真实缓冲时间填充，播放头之前的分段整段为 1、
      * 之后的分段为 0，避免「每段都画一条满格缓冲条」。
+     *
+     * 直接读 segmentBufferRefs 缓存写入，零 querySelectorAll；
+     * 与 lastBufferRatios[i] 对比去重。
      * @param buffer - 缓冲时间（秒）
      */
     const updateBufferFills = (buffer: number): void => {
       if (!Number.isFinite(buffer)) return;
       const rangeList = resolveSegments();
       const playhead = Number.isFinite(currentTime) ? currentTime : 0;
-      getScheduleElements().forEach((schedule, index) => {
-        const range = rangeList[index];
-        if (!range) return;
+      for (let i = 0; i < segmentBufferRefs.length; i += 1) {
+        const el = segmentBufferRefs[i];
+        const range = rangeList[i];
+        if (!el || !range) continue;
         if (range.endTime <= range.startTime) {
           warnInvalidSegment();
-          return;
+          continue;
         }
         const ratio = computeSegmentBufferRatio(
           buffer,
@@ -358,25 +434,22 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           range.endTime,
           playhead,
         );
-        schedule
-          .querySelectorAll<HTMLDivElement>(
-            ".player-progress-schedule-buffer",
-          )
-          .forEach((el) => {
-            el.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
-          });
-      });
+        const clamped = Math.min(Math.max(ratio, 0), 1);
+        if (lastBufferRatios[i] === clamped) continue;
+        lastBufferRatios[i] = clamped;
+        el.style.transform = `scaleX(${clamped})`;
+      }
     };
 
     /**
      * 更新缓冲条 UI
-     * 缓冲条元素（.player-progress-schedule-buffer）由 setupProgressElements 动态创建，
-     * 无法通过 useTemplateRef 绑定，故按容器检索子元素后逐段求比例；
+     * 缓冲条 DOM 引用由 For render 的函数 ref 收集到 segmentBufferRefs，
+     * updateBufferFills 直接读缓存写入，零 querySelectorAll；
      * 只有播放头所在的分段按真实缓冲时间填充，之前的分段整段为 1、之后的分段为 0。
      * @param buffer - 缓冲时间（秒）
      */
     const updateBufferUI = (buffer: number): void => {
-      if (duration <= 0) return;
+      if (durationSignal.value <= 0) return;
       updateBufferFills(buffer);
     };
 
@@ -387,21 +460,21 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      */
     const updateProgressUI = (time: number): void => {
       // 边界处理：总时长非正时直接返回，避免除零得到 NaN/Infinity
-      if (duration <= 0) return;
+      if (durationSignal.value <= 0) return;
 
       // 记录播放头，供缓冲条按「播放头所在分段」计算比例
       if (Number.isFinite(time)) currentTime = time;
 
       // 更新各分段已播放进度条：每段按自身区间独立计算比例
-      // 已播放条元素（.player-progress-schedule-current）同样动态创建，无法用 ref 绑定
-      updateSegmentFills(time, "player-progress-schedule-current");
+      updateSegmentFills(time, "nova-player-progress-schedule-current");
 
       // 滑块唯一：按当前时间在整条时间轴上的比例定位（与既有实现 updateThumbPosition 一致）
-      // .player-progress-thumb 是 flex 子项、非 position:absolute，故用 translateX 而非 left
+      // .nova-player-progress-thumb 是 flex 子项、非 position:absolute，故用 translateX 而非 left
       if (thumbRef.value && progressAreaRef.value) {
         /** 滑块的水平偏移量（像素），按整条比例换算并减去滑块自身宽度的一半 */
         const position =
-          (time / duration) * progressAreaRef.value.clientWidth - 10;
+          (time / durationSignal.value) *
+            progressAreaRef.value.clientWidth - 10;
         thumbRef.value.style.transform = `translateX(${position}px)`;
       }
     };
@@ -421,13 +494,9 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
         Math.max(0, clientX - rect.left + 1),
         rect.width,
       );
-      /** 鼠标位置对应的时间（秒） */
-      hoverTime = (indicatorLeft / rect.width) * duration;
-
-      // 更新预览时间文本
-      if (previewTimeRef.value) {
-        previewTimeRef.value.innerText = formatTime(hoverTime);
-      }
+      /** 鼠标位置对应的时间（秒）：写入信号驱动预览时间文本自动更新 */
+      const hoverTime = (indicatorLeft / rect.width) * durationSignal.value;
+      hoverTimeSignal.value = hoverTime;
 
       // 更新移动指示器位置
       if (moveIndicatorRef.value) {
@@ -453,41 +522,62 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     };
 
     /**
-     * 更新预览图（兼容雪碧图与逐帧两种数据源）
+     * 把预览帧应用到响应式信号（驱动 <img> 的 src 与裁切样式）
+     *
+     * 雪碧图模式帧携带 width/height/objectFit/objectPosition 可选样式字段，
+     * 逐帧模式只有 url（样式信号统一清空）。
+     * @param frame - 预览帧；null 表示该时间点无预览
+     */
+    const applyPreviewFrame = (frame: ProgressPreviewFrame | null): void => {
+      if (!frame || !frame.url) {
+        previewSrcSignal.value = undefined;
+        previewWidthSignal.value = "";
+        previewHeightSignal.value = "";
+        previewObjectFitSignal.value = "";
+        previewObjectPositionSignal.value = "";
+        return;
+      }
+
+      if (previewSrcSignal.value !== frame.url) {
+        previewSrcSignal.value = frame.url;
+      }
+      previewWidthSignal.value = frame.width ?? "";
+      previewHeightSignal.value = frame.height ?? "";
+      previewObjectFitSignal.value = frame.objectFit ?? "";
+      previewObjectPositionSignal.value = frame.objectPosition ?? "";
+    };
+
+    /**
+     * 更新预览图：经 previewProvider 询问外部预览帧（同步或异步均兼容）
+     *
+     * 异步 provider 的响应经请求序号校验：悬停期间会连续触发多次请求，
+     * 仅应用最新一次的结果，避免慢响应回来后「闪回」旧帧。
      * @param time - 悬停时间（秒）
      */
     const updatePreviewFrame = (time: number): void => {
-      const image = previewImageRef.value;
-      if (!image) return;
-
-      const slice = resolveProgressPreviewSlice(
-        props.getPreviewSource?.() ?? null,
-        time,
-        duration,
-      );
-
-      if (!slice) {
-        image.removeAttribute("src");
-        image.removeAttribute("style");
+      const provider = props.previewProvider;
+      if (!provider || durationSignal.value <= 0) {
+        applyPreviewFrame(null);
         return;
       }
 
-      if (image.getAttribute("src") !== slice.url) {
-        image.setAttribute("src", slice.url);
-      }
-
-      if (slice.sprite) {
-        image.style.width = slice.sprite.width;
-        image.style.height = slice.sprite.height;
-        image.style.objectFit = slice.sprite.objectFit;
-        image.style.objectPosition = slice.sprite.objectPosition;
+      previewRequestId += 1;
+      const requestId = previewRequestId;
+      const result = provider(time, durationSignal.value);
+      if (result instanceof Promise) {
+        void result
+          .then((frame) => {
+            // 过期响应丢弃：悬停位置已变，只认最新一次请求
+            if (requestId !== previewRequestId) return;
+            applyPreviewFrame(frame);
+          })
+          .catch(() => {
+            if (requestId !== previewRequestId) return;
+            applyPreviewFrame(null);
+          });
         return;
       }
-
-      image.style.width = "";
-      image.style.height = "";
-      image.style.objectFit = "";
-      image.style.objectPosition = "";
+      applyPreviewFrame(result);
     };
 
     /**
@@ -495,33 +585,30 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * @param time - 悬停时间（秒）
      */
     const updateHotspotLabel = (time: number): void => {
-      const hotspot = hotspotRef.value;
-      if (!hotspot) return;
-      const timeline = normalizeSegmentSpan(segments, duration);
+      const timeline = normalizeSegmentSpan(
+        segmentsSignal.value,
+        durationSignal.value,
+      );
       const hit = timeline.find(
         (segment) => time >= segment.startTime && time < segment.endTime,
       );
       const text = timeline.length > 1 && hit ? hit.label : "";
-      if (hotspot.textContent !== text) {
-        hotspot.textContent = text;
+      if (hotspotTextSignal.value !== text) {
+        hotspotTextSignal.value = text;
       }
     };
 
     /**
-     * 鼠标进入进度条区域：300ms 延迟后为 .player-progress-wrap 添加 state-active 类
-     * （弹窗与指示器的显隐由该类配合 CSS 控制，与既有实现 mouseEnter 行为一致）
+     * 鼠标进入进度条区域：300ms 延迟后通过 popupActiveSignal 驱动 state-active 类
+     * （弹窗与指示器的显隐由该类配合 CSS 控制，时间文本由 hoverTimeSignal 响应式更新）
      */
     const handleMouseEnter = (): void => {
       if (hoverTimer !== null) {
         clearTimeout(hoverTimer);
       }
       hoverTimer = setTimeout(() => {
-        if (progressWrapRef.value) {
-          progressWrapRef.value.classList.add("state-active");
-        }
-        if (previewTimeRef.value) {
-          previewTimeRef.value.innerText = formatTime(hoverTime);
-        }
+        // 响应式：写入信号，编译期自动包装的 __reactiveAttrs 会切换 state-active 类
+        popupActiveSignal.value = true;
         hoverTimer = null;
       }, 300);
     };
@@ -602,280 +689,186 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     };
 
     /**
-     * 鼠标离开进度条区域时移除 state-active 类（收起预览弹窗与指示器）
+     * 鼠标离开进度条区域时通过 popupActiveSignal 移除 state-active 类（收起预览弹窗与指示器）
      */
     const handleMouseLeave = (): void => {
       if (hoverTimer !== null) {
         clearTimeout(hoverTimer);
         hoverTimer = null;
       }
-      if (!isDragging && progressWrapRef.value) {
-        progressWrapRef.value.classList.remove("state-active");
-      }
-    };
-
-    /**
-     * 创建缓冲进度条元素
-     * @returns 缓冲进度条元素
-     */
-    const createBufferElement = (): HTMLDivElement => {
-      const buffer = document.createElement("div");
-      buffer.classList.add("player-progress-schedule-buffer");
-      buffer.style.transform = "scaleX(0)";
-      return buffer;
-    };
-    /**
-     * 创建当前进度条元素
-     * @returns 当前进度条元素
-     */
-    const createCurrentElement = (): HTMLDivElement => {
-      const current = document.createElement("div");
-      current.classList.add("player-progress-schedule-current");
-      current.style.transform = "scaleX(0)";
-      return current;
-    };
-
-    /**
-     * 创建基础进度条元素
-     * @param hasSegments 是否有分段
-     * @returns 基础进度条元素
-     */
-    const createBaseElement = (hasSegments: boolean): HTMLDivElement => {
-      const element = document.createElement("div");
-      element.classList.add(
-        "player-progress-schedule",
-        ...(hasSegments ? ["player-progress-schedule-segment"] : []),
-      );
-      return element;
-    };
-
-    /**
-     * 为视点分配进度条元素
-     * @param bufferElement 缓冲进度条元素
-     * @param currentElement 当前进度条元素
-     * @param index 视点索引
-     * @param isNew 是否为新创建的元素
-     * @param viewPoint 视点对象
-     */
-    const assignElementsToViewPoint = (
-      bufferElement: HTMLDivElement,
-      currentElement: HTMLDivElement,
-      index: number = 0,
-      isNew: boolean = false,
-      viewPoint?: ProgressSegment,
-    ): void => {
-      if (isNew && viewPoint !== undefined) {
-        viewPoint.bufferElement = bufferElement;
-        viewPoint.currentElement = currentElement;
-        return;
-      }
-      if (segments.length > 1) {
-        segments[index].bufferElement = bufferElement;
-        segments[index].currentElement = currentElement;
-      } else if (segments.length === 1) {
-        segments[0].bufferElement = bufferElement;
-        segments[0].currentElement = currentElement;
-      }
-    };
-
-    /**
-     * 创建进度条元素
-     * @param hasSegments 是否有分段
-     * @param index 视点索引
-     * @param isNew 是否为新创建的元素
-     * @param viewPoint 视点对象
-     * @returns 进度条元素
-     */
-    const createProgressElement = (
-      hasSegments: boolean,
-      index?: number,
-      isNew: boolean = false,
-      progressSegment?: ProgressSegment,
-    ): HTMLDivElement => {
-      const progress = createBaseElement(hasSegments);
-      const bufferElement = createBufferElement();
-      const currentElement = createCurrentElement();
-
-      assignElementsToViewPoint(
-        bufferElement,
-        currentElement,
-        index,
-        isNew,
-        progressSegment,
-      );
-
-      [bufferElement, currentElement].forEach((child) => {
-        progress.appendChild(child);
-      });
-
-      return progress;
-    };
-
-    /**
-     * 应用进度条样式（几何计算与底部影子进度条共用 computeSegmentBox）
-     * @param element 进度条元素
-     * @param progressSegment 视点对象
-     * @param index 视点索引
-     * @param total 视点总数
-     * @param duration 视频总时长
-     */
-    const applyProgressStyle = (
-      element: HTMLDivElement,
-      progressSegment: ProgressSegment,
-      index: number,
-      total: number,
-      duration: number,
-    ): void => {
-      // 总时长未知（挂载时 props.duration 仍为 0）时不写几何：否则会写进
-      // NaN% / Infinity%，被浏览器丢弃后所有分段都退回 left:0;right:0 → 全部重叠。
-      if (!(duration > 0)) return;
-
-      const { left, width, marginRight } = computeSegmentBox(
-        progressSegment,
-        index,
-        total,
-        duration,
-      );
-
-      element.style.left = left;
-      element.style.width = width;
-      if (marginRight) {
-        element.style.marginRight = marginRight;
-      } else {
-        element.style.removeProperty("margin-right");
-      }
-    };
-
-    /**
-     * 按当前 segments 与 duration 重算所有分段的 left/width
-     *
-     * 元数据加载完成（setDuration）或分段数据变化后必须调用一次，
-     * 否则挂载期算出的几何会一直是「时长未知」的那一份。
-     */
-    const applySegmentGeometry = (): void => {
-      if (!(duration > 0)) return;
-      const list = getScheduleElements();
-      // 分段跨度与媒体总时长不一致时先归一到总时长（保证 Σwidth = 100%）
-      const normalized = normalizeSegmentSpan(segments, duration);
-      list.forEach((schedule, index) => {
-        const segment =
-          normalized.length > 1 ? normalized[index] : normalized[0];
-        if (!segment) return;
-        applyProgressStyle(
-          schedule,
-          segment,
-          index,
-          Math.max(list.length, 1),
-          duration,
-        );
-      });
-    };
-
-    /**
-     * 处理进度点鼠标移动事件
-     * @param element 进度点元素
-     * @param event 鼠标事件
-     */
-    const progressPointMove = (
-      element: HTMLDivElement,
-      event: MouseEvent,
-    ): void => {
-      event.preventDefault();
-      element.classList.add("hover");
-    };
-    /**
-     * 处理进度点鼠标离开事件
-     * @param element 进度点元素
-     * @param event 鼠标事件
-     */
-    const progressPointLeave = (
-      element: HTMLDivElement,
-      event: MouseEvent,
-    ): void => {
-      event.preventDefault();
-      element.classList.remove("hover");
-    };
-
-    /**
-     * 创建并追加进度条元素
-     * @param hasMultipleSegments 是否有多个分段
-     * @param viewPoint 视点对象
-     * @param index 视点索引
-     */
-    const createAndAppend = (
-      hasMultipleSegments: boolean,
-      progressSegment?: ProgressSegment,
-      index?: number,
-    ): void => {
-      const progress = createProgressElement(hasMultipleSegments, index!);
-      if (
-        progressSegment &&
-        typeof index === "number" &&
-        index !== undefined &&
-        segments.length > 0
-      ) {
-        applyProgressStyle(
-          progress,
-          progressSegment,
-          index,
-          segments.length,
-          duration,
-        );
-        progress.addEventListener("mouseenter", (event: MouseEvent) => {
-          progressPointMove(progress, event);
-        });
-        progress.addEventListener("mouseleave", (event: MouseEvent) => {
-          progressPointLeave(progress, event);
-        });
-      }
-      if (segments.length > 1 && index !== undefined) {
-        segments[index].element = progress;
-      } else if (segments.length === 1) {
-        segments[0].element = progress;
-      }
-      scheduleWrapRef.value?.appendChild(progress);
-    };
-
-    /**
-     * 重建分段 DOM
-     *
-     * 分段数量 / 区间发生运行时变化（如配置动态更新）时调用：
-     * 清空容器内旧的分段元素，并按最新的分段数据重新创建各分段的 buffer / current 元素。
-     * @param nextSegments 最新的分段数据；不传则沿用当前数据重建
-     */
-    const rebuildSegments = (nextSegments?: ProgressSegment[]): void => {
-      if (nextSegments) {
-        segments = nextSegments;
-      }
-      if (!scheduleWrapRef.value) return;
-      // 清空旧 DOM，并清理分段对象上已失效的元素引用
-      scheduleWrapRef.value.innerHTML = "";
-      segments.forEach((segment) => {
-        segment.element = undefined;
-        segment.bufferElement = undefined;
-        segment.currentElement = undefined;
-      });
-      setupProgressElements();
-      // 重建后按当前时长重新落一次几何（重建发生在挂载期时 duration 可能仍为 0）
-      applySegmentGeometry();
-    };
-
-    /**
-     * 设置进度条元素
-     */
-    const setupProgressElements = (): void => {
-      const hasMultipleSegments = segments.length > 1;
-      if (hasMultipleSegments) {
-        segments.forEach((progressSegment, index) => {
-          createAndAppend(hasMultipleSegments, progressSegment, index);
-        });
-      } else {
-        createAndAppend(hasMultipleSegments);
+      if (!isDragging) {
+        // 响应式：写入信号，编译期自动包装的 __reactiveAttrs 会移除 state-active 类
+        popupActiveSignal.value = false;
       }
     };
 
     // ============================================
-    // API 方法
+    // 响应式渲染辅助（For 的数据源与 render）
+    // ============================================
+
+    /**
+     * 分段几何的响应式样式 getter
+     *
+     * 编译器把 style: segmentBoxStyle(index) 包装为 __reactiveAttrs getter，
+     * 函数体内部读取 segmentsSignal / durationSignal 建立依赖：
+     * 时长到手（setDuration）或分段重建（rebuildSegments）时，
+     * 每个分段容器的 left/width/marginRight 由响应式系统增量更新，
+     * 不再需要 applySegmentGeometry 命令式补写。
+     *
+     * 语义与旧实现 applySegmentGeometry 完全一致：
+     * - 多分段：按 first / last / default 策略逐段计算
+     * - 单分段：整条视作 [0, duration]，first 策略（右侧留缺口 + 间隔）
+     * - 无分段：返回空对象（CSS 默认全宽）
+     * - 时长未知（duration <= 0）：返回空对象，避免写进 NaN% / Infinity%
+     * @param index - 分段下标
+     */
+    const segmentBoxStyle = (index: number): Record<string, string> => {
+      const list = segmentsSignal.value;
+      const dur = durationSignal.value;
+      if (!(dur > 0)) return {};
+      if (list.length > 1) {
+        // 分段跨度与媒体总时长不一致时先归一（保证 Σwidth = 100%）
+        const normalized = normalizeSegmentSpan(list, dur);
+        const seg = normalized[index];
+        if (!seg) return {};
+        const box = computeSegmentBox(seg, index, list.length, dur);
+        return box.marginRight
+          ? { left: box.left, width: box.width, marginRight: box.marginRight }
+          : { left: box.left, width: box.width };
+      }
+      if (list.length === 1) {
+        const normalized = normalizeSegmentSpan(list, dur);
+        const seg = normalized[0];
+        if (!seg) return {};
+        const box = computeSegmentBox(seg, 0, 1, dur);
+        return { left: box.left, width: box.width, marginRight: "0.3%" };
+      }
+      return {};
+    };
+
+    /**
+     * 渲染单个分段（For 的 render 回调，仅在新 key 创建项时调用）
+     *
+     * 多分段：segment 类 + padding 悬停区 + buffer/current 两条填充条；
+     * 单条整轴（SINGLE_BAR）：无 hover / 无 padding，几何随 CSS 默认或单段策略。
+     * buffer/current 的 DOM 引用经函数 ref 按下标收集到缓存数组，
+     * 供 updateSegmentFills / updateBufferFills 逐帧命令式写 scaleX。
+     * @param item - 分段数据或单条整轴占位
+     * @param index - 列表下标（For 按当前列表顺序传入）
+     * @returns 分段 VNode
+     */
+    const renderSegmentItem = (item: unknown, index: number): VNode => {
+      if (isProgressSegment(item)) {
+        return h(
+          "div",
+          {
+            // 响应式 class：hover 由 hoveredSegIdxSignal 驱动（编译期包装为 __reactiveAttrs）
+            class: [
+              "nova-player-progress-schedule nova-player-progress-schedule-segment",
+              { hover: hoveredSegIdxSignal.value === index },
+            ],
+            // 响应式 style：几何随 segmentsSignal / durationSignal 自动更新
+            style: segmentBoxStyle(index),
+          },
+          h("div", {
+            class: "nova-player-progress-schedule-padding",
+            // 分段悬停态：声明式 Enter/Leave 写信号驱动 hover 类
+            //（替代旧实现动态挂载一次性 mouseout 的命令式写法）
+            onMouseEnter: (): void => {
+              hoveredSegIdxSignal.value = index;
+            },
+            onMouseLeave: (): void => {
+              hoveredSegIdxSignal.value = -1;
+            },
+          }),
+          h("div", {
+            class: "nova-player-progress-schedule-buffer",
+            style: { transform: "scaleX(0)" },
+            // 函数 ref：materialize 时按当前列表下标收集 DOM 引用
+            ref: (el: Element): void => {
+              if (el instanceof HTMLDivElement) {
+                segmentBufferRefs[index] = el;
+              }
+            },
+          }),
+          h("div", {
+            class: "nova-player-progress-schedule-current",
+            style: { transform: "scaleX(0)" },
+            ref: (el: Element): void => {
+              if (el instanceof HTMLDivElement) {
+                segmentCurrentRefs[index] = el;
+              }
+            },
+          }),
+        );
+      }
+      if (item === SINGLE_BAR) {
+        return h(
+          "div",
+          {
+            class: "nova-player-progress-schedule",
+            // 响应式 style：单分段时 first 策略几何、无分段时 CSS 默认全宽
+            style: segmentBoxStyle(index),
+          },
+          h("div", {
+            class: "nova-player-progress-schedule-buffer",
+            style: { transform: "scaleX(0)" },
+            ref: (el: Element): void => {
+              if (el instanceof HTMLDivElement) {
+                segmentBufferRefs[index] = el;
+              }
+            },
+          }),
+          h("div", {
+            class: "nova-player-progress-schedule-current",
+            style: { transform: "scaleX(0)" },
+            ref: (el: Element): void => {
+              if (el instanceof HTMLDivElement) {
+                segmentCurrentRefs[index] = el;
+              }
+            },
+          }),
+        );
+      }
+      // 非法项兜底：渲染空节点保证 For key 语义完整
+      return h("div", {});
+    };
+
+    /**
+     * 分钟刻度序列 getter（刻度层 For 的 each 数据源）
+     *
+     * 读取 durationSignal 建立依赖：时长到手自动补建刻度、
+     * 时长变化自动增删刻度并精准重排，彻底消除旧实现
+     * 「仅在 setDuration 事件里手动 buildScaleplate」的时序缺陷。
+     * @returns 分钟刻度数组 [1, 2, ..., floor(duration / 60)]
+     */
+    const scaleplateMinutes = (): number[] => {
+      const dur = durationSignal.value;
+      if (!(dur > 0)) return [];
+      const totalMinutes = Math.floor(dur / 60);
+      const minutes: number[] = [];
+      for (let minute = 1; minute <= totalMinutes; minute += 1) {
+        minutes.push(minute);
+      }
+      return minutes;
+    };
+
+    /**
+     * 单根分钟刻度位置的响应式样式 getter
+     *
+     * 编译器把 style: minuteTickStyle(minute) 包装为 __reactiveAttrs getter，
+     * 读取 durationSignal 建立依赖：时长变化时已渲染刻度的 left 位置
+     * 由响应式系统增量更新（替代旧实现全量销毁重建）。
+     * @param minute - 分钟数
+     */
+    const minuteTickStyle = (minute: number): Record<string, string> => {
+      const dur = durationSignal.value;
+      if (!(dur > 0)) return {};
+      return { left: `${((minute * 60) / dur) * 100}%` };
+    };
+
+    // ============================================
+    // API 方法（对外签名与旧实现完全一致）
     // ============================================
 
     /**
@@ -894,34 +887,32 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
 
     /**
      * 更新视频总时长
-     * 组件挂载时 props.duration 可能仍为 0，元数据加载后由上层通过该 API 回传
+     * 组件挂载时 props.duration 可能仍为 0，元数据加载后由上层通过该 API 回传。
+     * 写入信号即可：分段几何与分钟刻度全部由响应式系统自动同步。
      */
     const setDuration = (value: number): void => {
-      duration = value;
-      // 时长到手后立刻重算分段几何（挂载期算过的那一份是「时长未知」的）
-      applySegmentGeometry();
-      buildScaleplate();
+      durationSignal.value = value;
     };
 
     /**
-     * 生成分钟刻度（1 分钟一根，整 5 分钟加高）
+     * 重建进度条分段
+     *
+     * 写入 segmentsSignal 即完成重建：For 按 key diff 自动更新 DOM。
+     * key 携带 generation 前缀使每次重建全量重渲染——与旧实现
+     * 「destroy 全部旧 VNode 再逐个 mount」的行为完全一致，
+     * 同时让函数 ref 重新收集 DOM 引用（缓存数组已同步重置）。
+     * @param nextSegments 最新分段数据；不传则沿用当前数据强制重建
      */
-    const buildScaleplate = (): void => {
-      const plate = scaleplateRef.value;
-      if (!plate) return;
-      plate.textContent = "";
-      if (!(duration > 0)) return;
-      const totalMinutes = Math.floor(duration / 60);
-      for (let minute = 1; minute <= totalMinutes; minute += 1) {
-        const tick = document.createElement("div");
-        tick.classList.add(
-          minute % 5 === 0
-            ? "player-progress-scaleplate-2m"
-            : "player-progress-scaleplate-1m",
-        );
-        tick.style.left = `${((minute * 60) / duration) * 100}%`;
-        plate.appendChild(tick);
-      }
+    const rebuildSegments = (nextSegments?: ProgressSegment[]): void => {
+      segmentGeneration += 1;
+      segmentsSignal.value = nextSegments ?? [...segmentsSignal.value];
+      // 重置 DOM 引用缓存与去重数组：For 全量重渲染时由函数 ref 重新收集
+      segmentBufferRefs = [];
+      segmentCurrentRefs = [];
+      lastFillRatios = [];
+      lastBufferRatios = [];
+      // 悬停态归零（旧实现销毁元素后 hover 类自然消失，此处等价）
+      hoveredSegIdxSignal.value = -1;
     };
 
     // ============================================
@@ -929,11 +920,12 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     // ============================================
 
     /**
-     * 组件挂载后，初始化进度条状态并向上层暴露更新方法
+     * 组件挂载后向上层暴露更新方法
+     *
+     * 分段与分钟刻度由 For 在挂载期按初始信号值同步渲染
+     *（effect 首跑同步，DOM 引用随函数 ref 就位），无需手动重建。
      */
     lifecycle.onMounted = (): void => {
-      // 按当前分段数据初始化（后续分段变化可再次调用 rebuildSegments）
-      rebuildSegments();
       lifecycle.emit?.("progressBarMounted", {
         updateProgress,
         updateBuffer,
@@ -946,6 +938,8 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
      * 组件销毁前，移除 document 级别的事件监听并重置拖拽状态
      *
      * 幂等：既是统一卸载入口（最深子组件 → 根），也是契约钩子。
+     * For 控制流的子 VNode 与响应式 effect 由框架 destroy 流程统一清理，
+     * 这里只清空组件持有的 DOM 引用缓存，避免悬挂引用。
      */
     const teardown = (): void => {
       isDragging = false;
@@ -961,6 +955,10 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
         document.removeEventListener("mouseup", dragMouseUp);
         dragMouseUp = null;
       }
+      segmentBufferRefs = [];
+      segmentCurrentRefs = [];
+      lastFillRatios = [];
+      lastBufferRatios = [];
     };
 
     useComponentUnmount(lifecycle, teardown);
@@ -972,7 +970,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
     return h(
       "div",
       {
-        class: "player-progress-area",
+        class: "nova-player-progress-area",
         ref: "progressAreaRef",
         onMouseEnter: handleMouseEnter,
         onMouseMove: handleMouseMove,
@@ -981,27 +979,65 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
       },
       h(
         "div",
-        { class: "player-progress-wrap", ref: "progressWrapRef" },
+        {
+          // 响应式 class：state-active 由 popupActiveSignal 驱动（编译期包装为 __reactiveAttrs）
+          class: [
+            "nova-player-progress-wrap",
+            { "state-active": popupActiveSignal.value },
+          ],
+        },
         h(
           "div",
-          { class: "player-progress", style: { height: "4px" } },
-          // 当前播放进度条
-          h("div", {
-            class: "player-progress-schedule-wrap",
-            ref: "scheduleWrapRef",
-          }),
-          // 分钟刻度层（预览浮层下方的分段点）
-          h("div", {
-            class: "player-progress-scaleplate",
-            ref: "scaleplateRef",
-          }),
+          { class: "nova-player-progress" },
+          // 当前播放进度条（For：segmentsSignal 驱动 key-based 精准更新，
+          // 替代旧实现手动 mount/destroy + querySelectorAll 收集引用）
+          h(
+            "div",
+            { class: "nova-player-progress-schedule-wrap" },
+            h(For, {
+              // 多分段渲染真实分段列表；0/1 段渲染单条整轴（保留旧单条行为）
+              each: (): SegmentItem[] => {
+                const list = segmentsSignal.value;
+                return list.length > 1 ? list : [SINGLE_BAR];
+              },
+              // generation 前缀保证 rebuildSegments 触发全量重渲染（与旧重建语义一致）
+              key: (item: unknown, index: number): string =>
+                isProgressSegment(item)
+                  ? `g${segmentGeneration}:${index}:${item.startTime}:${item.endTime}`
+                  : `single:g${segmentGeneration}:${index}`,
+              render: renderSegmentItem,
+            }),
+          ),
+          // 分钟刻度层（For：durationSignal 驱动，时长到手自动补建，
+          // 时长变化自动增删并响应式重排位置，替代旧 buildScaleplate）
+          h(
+            "div",
+            { class: "nova-player-progress-scaleplate" },
+            h(For, {
+              each: scaleplateMinutes,
+              key: (item: unknown, index: number): string =>
+                typeof item === "number" ? `m${item}` : `x${index}`,
+              render: (item: unknown): VNode =>
+                typeof item === "number"
+                  ? h("div", {
+                      // 整 5 分钟的刻度加高（CSS -2m 类），普通分钟为短线（-1m）
+                      class:
+                        item % 5 === 0
+                          ? "nova-player-progress-scaleplate-2m"
+                          : "nova-player-progress-scaleplate-1m",
+                      // 响应式 style：随 durationSignal 精准更新刻度位置
+                      style: minuteTickStyle(item),
+                    })
+                  : h("div", {}),
+            }),
+          ),
           // 进度点容器
-          h("div", { class: "player-progress-point-wrap" }),
+          h("div", { class: "nova-player-progress-point-wrap" }),
           // 拖拽滑块
           h(
             "div",
             {
-              class: "player-progress-thumb",
+              class: "nova-player-progress-thumb",
               ref: "thumbRef",
               style: { left: "0%" },
             },
@@ -1009,7 +1045,7 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
               "div",
               {
                 class:
-                  "player-progress-thumb-icon player-progress-thumb-icon-dynamic player-progress-thumb-active",
+                  "nova-player-progress-thumb-icon nova-player-progress-thumb-icon-dynamic nova-player-progress-thumb-active",
               },
               h("span", { class: "common-svg-icon" }),
             ),
@@ -1018,44 +1054,59 @@ export const ProgressBar = defineComponent<ProgressBarProps, ProgressBarEvents>(
           h(
             "div",
             {
-              class: "player-progress-move-indicator",
+              class: "nova-player-progress-move-indicator",
               ref: "moveIndicatorRef",
             },
-            h("div", { class: "player-progress-move-indicator-down" }),
-            h("div", { class: "player-progress-move-indicator-up" }),
+            h("div", { class: "nova-player-progress-move-indicator-down" }),
+            h("div", { class: "nova-player-progress-move-indicator-up" }),
           ),
-          // 预览弹窗（显隐由 .player-progress-wrap 的 state-active 类配合 CSS 控制）
+          // 预览弹窗（显隐由 .nova-player-progress-wrap 的 state-active 类配合 CSS 控制）
           h(
             "div",
             {
-              class: "player-progress-popup",
+              class: "nova-player-progress-popup",
               ref: "popupRef",
             },
             h(
               "div",
-              { class: "player-progress-preview" },
+              { class: "nova-player-progress-preview" },
               h("img", {
-                class: "player-progress-preview-image",
-                ref: "previewImageRef",
+                class: "nova-player-progress-preview-image",
+                // 响应式 src + style：信号驱动（编译期包装为 __reactiveAttrs）
+                src: previewSrcSignal.value,
+                style: {
+                  width: previewWidthSignal.value,
+                  height: previewHeightSignal.value,
+                  objectFit: previewObjectFitSignal.value,
+                  objectPosition: previewObjectPositionSignal.value,
+                },
               }),
-              h("div", {
-                class: "player-progress-preview-time",
-                ref: "previewTimeRef",
-              }),
+              h(
+                "div",
+                { class: "nova-player-progress-preview-time" },
+                // 响应式文本：hoverTimeSignal 变化时自动更新时间文案
+                //（替代旧实现 previewTimeRef.innerText 命令式写入）
+                () => formatTime(hoverTimeSignal.value),
+              ),
             ),
-            h("div", { class: "player-progress-hotspot", ref: "hotspotRef" }),
+            h(
+              "div",
+              { class: "nova-player-progress-hotspot" },
+              // 响应式文本：编译器自动检测 hotspotTextSignal.value 并包装为 _reactiveText
+              hotspotTextSignal.value,
+            ),
           ),
           // 拉拽指示器
           h(
             "div",
             {
-              class: "player-progress-pull-indicator",
+              class: "nova-player-progress-pull-indicator",
               style: { transform: "translateX(0px)" },
             },
             h("span", { class: "common-svg-icon" }),
           ),
           // 光标
-          h("div", { class: "player-progress-cursor", ref: "cursorRef" }),
+          h("div", { class: "nova-player-progress-cursor", ref: "cursorRef" }),
         ),
       ),
     );

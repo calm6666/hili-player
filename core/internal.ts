@@ -1,20 +1,26 @@
 /**
  * 编译期生成的专用内部函数
  *
- * 这些函数由 vite-plugin-hili-compile 在编译期将 h() 调用替换后引用。
+ * 这些函数由 vite-plugin-lumina-compile 在编译期将 h() 调用替换后引用。
  * 每个函数只做一件事，跳过所有运行时类型判断。
  *
  * 未编译的代码（开发模式）仍走 h() 通用路径。
  * 编译后的代码（生产模式）使用这些专用函数。
  */
 
-import type { VNode, VNodeAttrs, Component, Ref } from "@/types";
-import type { Signal } from "@preact/signals-core";
+import type { VNode, VNodeAttrs, Component, Ref, TmplData } from "@/types";
+import type { Signal } from "./signalsCore";
 import type { HChild } from "./h";
-import { h, flattenChildren } from "./h";
+import { h, flattenChildren, reactiveTextVNode } from "./h";
 import { getCurrentVNode, setPendingProviders } from "./context";
 import { reportError, ErrorSource } from "./warning";
 import { isRefObject, isSignalRef } from "./templateRef";
+import { maybeReactiveProps } from "./reactiveProps";
+import { isFlowComponent } from "./flow";
+
+// ★ 响应式 prop getter 工厂：编译插件对组件动态 props 的包装入口
+// （rewriteCompAttrs 生成 _rp(() => expr)，经 @/core/internal 导入）
+export { _rp, isReactivePropGetter } from "./reactiveProps";
 
 /**
  * 元素属性中的 Context Provider 条目
@@ -163,8 +169,8 @@ export function _createComp(
   ...children: HChild[]
 ): VNode {
   const type = (
-    component as unknown as { __hili_type?: "fn" | "class" }
-  ).__hili_type;
+    component as unknown as { __lumina_type?: "fn" | "class" }
+  ).__lumina_type;
 
   // 扁平化子节点
   const flatChildren = flattenChildren(children);
@@ -195,6 +201,12 @@ export function _createComp(
   }
   props.children = flatChildren;
 
+  // ★ 响应式 props：检测 Signal / _rp thunk 后包装为惰性代理
+  //（控制流组件豁免：each/when/component 需要 Signal/getter 本体，见 reactiveProps.ts）
+  const compProps = isFlowComponent(component)
+    ? props
+    : maybeReactiveProps(props);
+
   // 函数组件
   if (type === "fn") {
     setPendingProviders(providers);
@@ -204,12 +216,12 @@ export function _createComp(
 
     let vnode: VNode;
     try {
-      vnode = fn(props);
+      vnode = fn(compProps);
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
       reportError(
         ErrorSource.RENDER,
-        `函数组件渲染失败: ${component.name || "Anonymous"}`,
+        `Function component render failed: ${component.name || "Anonymous"}`,
         error,
       );
       throw e;
@@ -230,7 +242,7 @@ export function _createComp(
     const cls = component as unknown as new (
       props: Record<string, unknown>,
     ) => { render: () => VNode; _ref?: Ref<unknown> };
-    const instance = new cls(props);
+    const instance = new cls(compProps);
 
     let vnode: VNode;
     try {
@@ -239,7 +251,7 @@ export function _createComp(
       const error = e instanceof Error ? e : new Error(String(e));
       reportError(
         ErrorSource.RENDER,
-        `类组件渲染失败: ${component.name || "Anonymous"}`,
+        `Class component render failed: ${component.name || "Anonymous"}`,
         error,
       );
       throw e;
@@ -285,5 +297,104 @@ export function _cloneHoisted<T extends VNode>(vnode: T): T {
   if (vnode.__providers !== undefined) {
     clone.__providers = vnode.__providers;
   }
+  if (vnode.__reactive !== undefined) {
+    clone.__reactive = vnode.__reactive;
+  }
   return clone as T;
+}
+
+/**
+ * 静态子树模板工厂（编译期 DOM 化阶段 1）
+ *
+ * 编译期转换：
+ *   h('div', { class: 'a' }, 'text')  →  const _hoisted_N = _tmpl('<div class="a">text</div>', 1)
+ *   使用点：_hoisted_N() → 带 __tmpl 标记的 VNode
+ *
+ * 三条路径共用同一份数据（__tmpl.html）：
+ * - 客户端 mount：materialize 识别 __tmpl → 调用 clone() 从惰性 <template> 克隆真实 DOM，
+ *   跳过整棵 VNode 解释（createElement/applyAttrs/递归 materialize 全部省略）
+ * - SSR：renderToString 识别 __tmpl → 直接返回 html 字符串，跳过 VNode 序列化
+ * - 水合：hydrateNode 识别 __tmpl → 不克隆，直接采用 SSR 已输出的 DOM 段
+ *   （clone 内的 <template> 创建是惰性的，水合模式永不触发 → 零成本）
+ *
+ * roots 为顶层节点数：
+ * - roots === 1：克隆单个元素（cloneNode(true)），vnode.el 指向该元素
+ * - roots > 1：fragment 多根，克隆整个 template.content（DocumentFragment），
+ *   顶层节点存入 vnode.__tmplRoots，destroy 时逐个移除
+ *
+ * 与 Solid 的 template() + Svelte 的 create_element 等价：
+ * 模板解析一次，每个使用点仅付一次 cloneNode(true) 成本（远低于逐节点解释）
+ *
+ * @param html - 静态子树的 HTML 字符串（编译期生成，语义与 SSR serializeAttrs 严格一致）
+ * @param roots - 顶层节点数（单根为 1，fragment 多根为子元素数）
+ * @returns 工厂函数，每次调用返回一个独立的 __tmpl VNode（多使用点互不共享 DOM）
+ */
+export function _tmpl(html: string, roots: number): () => VNode {
+  // 惰性创建的 <template> 元素（首次 clone 时才解析 HTML，SSR/水合路径永不创建）
+  let tpl: HTMLTemplateElement | undefined;
+
+  const clone = (): Node => {
+    if (tpl === undefined) {
+      tpl = document.createElement("template");
+      tpl.innerHTML = html;
+    }
+    if (roots === 1) {
+      const first = tpl.content.firstElementChild;
+      if (first !== null) {
+        return first.cloneNode(true);
+      }
+      // 防御：单根模板解析异常时退化为整段克隆（正常由编译端保证不会走到）
+      return tpl.content.cloneNode(true);
+    }
+    // 多根：克隆整个 content 为 DocumentFragment（appendChild 时子节点自动展开插入）
+    return tpl.content.cloneNode(true);
+  };
+
+  return (): VNode => {
+    const data: TmplData = { html, roots, clone };
+    const vnode: VNode = {
+      tag: "__tmpl__",
+      attrs: {},
+      children: [],
+      __tmpl: data,
+    };
+    return vnode;
+  };
+}
+
+/**
+ * 创建响应式文本节点
+ *
+ * 编译期转换：h('div', {}, signal.value) 中的动态表达式 → _reactiveText(() => String(signal.value))
+ * mount 时创建 Text 节点并注册 effect，signal 变化时自动更新 textContent（细粒度响应式）
+ *
+ * effect 的 dispose 函数自动推入 vnode._cleanups，destroy 时自动清理
+ *
+ * 结构复用 h.ts 的 reactiveTextVNode（单一来源）：
+ * 未编译路径中 h() 收到的零参箭头函数子节点由 flattenInto 以同一工厂规范化
+ *
+ * @param getter - 返回当前文本值的函数（在 effect 中调用，自动追踪依赖的 signal）
+ * @returns 带有 __reactive 标记的 VNode，materialize 时识别并创建响应式 Text 节点
+ */
+export function _reactiveText(getter: () => string): VNode {
+  return reactiveTextVNode(getter);
+}
+
+/**
+ * 创建响应式模板（混合静态文本与动态表达式）
+ *
+ * 编译期转换：`Hello ${name.value}!` → _reactiveTemplate('Hello ', () => name.value, '!')
+ * 内部委托给 _reactiveText，通过闭包组合 parts，effect 运行时拼接最终文本
+ *
+ * @param parts - 模板片段数组（字符串为静态部分，函数为动态部分）
+ * @returns 带有 __reactive 标记的 VNode
+ */
+export function _reactiveTemplate(...parts: (string | (() => string))[]): VNode {
+  return _reactiveText(() => {
+    let result = "";
+    for (const part of parts) {
+      result += typeof part === "function" ? part() : part;
+    }
+    return result;
+  });
 }

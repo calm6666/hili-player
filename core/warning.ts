@@ -34,6 +34,8 @@ export enum WarnSource {
   STATE = 'state',
   /** 事件总线相关警告 */
   EVENT_BUS = 'event-bus',
+  /** i18n 相关警告 */
+  I18N = 'i18n',
 }
 
 /**
@@ -95,17 +97,17 @@ export type GlobalWarningHandler = (warning: FrameworkWarning) => void;
 /**
  * 是否为开发环境
  * 通过检查全局变量判断
- * 优先检查自定义标记 __HILI_DEV__，其次检查 Node.js 的 process.env
+ * 优先检查自定义标记 __LUMINA_DEV__，其次检查 Node.js 的 process.env
  * 浏览器环境通常由构建工具注入 NODE_ENV
  *
  * 安全策略：未注入时默认返回 false（生产安全优先）
  * 避免生产环境因未注入标记而输出不必要的警告
  */
-declare const __HILI_DEV__: boolean | undefined;
+declare const __LUMINA_DEV__: boolean | undefined;
 
 export function isDev(): boolean {
-  if (typeof __HILI_DEV__ !== 'undefined') {
-    return __HILI_DEV__;
+  if (typeof __LUMINA_DEV__ !== 'undefined') {
+    return __LUMINA_DEV__;
   }
   /** 检查 process.env.NODE_ENV（Node.js 环境） */
   if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
@@ -185,7 +187,7 @@ export function warn(source: WarnSource, message: string, data?: Record<string, 
   });
 
   if (isDev()) {
-    console.warn(`[HiliFramework/${source}] ${message}`, data ?? '');
+    console.warn(`[Lumina/${source}] ${message}`, data ?? '');
   }
 }
 
@@ -225,7 +227,7 @@ export function reportError(
   });
 
   if (isDev()) {
-    console.error(`[HiliFramework/${source}] ${message}`, error ?? '', data ?? '');
+    console.error(`[Lumina/${source}] ${message}`, error ?? '', data ?? '');
   }
 }
 

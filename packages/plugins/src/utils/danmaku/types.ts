@@ -1,144 +1,57 @@
 /**
- * 高性能弹幕系统 - 类型定义
- * High Performance Danmaku System - Type Definitions
+ * 高性能弹幕系统 - 引擎内部类型定义
+ * High Performance Danmaku System - Engine Type Definitions
  *
- * 通用类型从 @/types/danmaku 导入并重新导出，运行时扩展类型保留在本地
+ * 公共契约（枚举 / DanmakuItem / Provider / 遮罩等）唯一权威来源是根 types/danmaku.ts，
+ * 此处仅作重导出（引擎各模块继续从 './types' 导入，路径不变）；
+ * 本文件只保留引擎私有类型：轨道 / 渲染项扩展版 / 引擎事件 / 轨道配置 / 管理器状态。
  */
 
 /// <reference lib="dom" />
 
-// ============================================
-// 从 @/types/danmaku 导入通用类型（用于本地定义 + 重新导出）
-// ============================================
-import {
-  DanmakuType,
-  DanmakuSpeed,
-  DanmakuFontSize,
-  DanmakuArea,
-  RenderMode,
-  ScreenMode,
-} from '@/types/danmaku';
 import type {
   DanmakuItem,
-  DanmakuFilter,
-  DanmakuSegment,
-} from '@/types/danmaku';
+  PerformanceStats,
+  ScreenMode,
+} from "@/types/danmaku";
+
+// ============================================
+// 公共契约：从根 types/danmaku.ts 重导出
+// ============================================
 
 export {
   DanmakuType,
   DanmakuSpeed,
   DanmakuFontSize,
   DanmakuArea,
+  DanmakuPosition,
   RenderMode,
   ScreenMode,
-};
+} from "@/types/danmaku";
 
 export type {
   DanmakuItem,
   DanmakuFilter,
+  DanmakuOptions,
   DanmakuSegment,
-};
+  DanmakuMaskConfig,
+  MaskLoader,
+  MaskLoaderResult,
+  PerformanceStats,
+  DanmakuListProvider,
+  DanmakuSendProvider,
+} from "@/types/danmaku";
 
 // ============================================
-// 本地扩展类型（与 @/types/danmaku 不兼容，保留本地定义）
+// 引擎私有类型
 // ============================================
 
-/** 弹幕位置 */
-export enum DanmakuPosition {
-  /** 滚动 */
-  SCROLL = 'scroll',
-  /** 顶部 */
-  TOP = 'top',
-  /** 底部 */
-  BOTTOM = 'bottom',
-}
-
-/** 防挡遮罩配置 — 扩展版本，包含 maskLoader 等运行时字段 */
-export interface DanmakuMaskConfig {
-  /** 是否启用防挡 */
-  enabled?: boolean;
-  /** 遮罩图片URL（镂空PNG） */
-  maskImage?: string;
-  /** 遮罩图片元素 */
-  maskImageElement?: HTMLImageElement;
-  /** 视频在容器中的位置（用于对齐遮罩） */
-  videoRect?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  /** 遮罩获取函数（用户自定义实现，可以是后端请求） */
-  maskLoader?: MaskLoader;
-  /** 遮罩更新间隔（毫秒），默认1000ms */
-  updateInterval?: number;
-  /** 获取当前视频时间的回调函数 */
-  getCurrentTime?: () => number;
-}
-
-/** 遮罩获取函数类型
- * 返回 null 表示该时间没有遮罩，不设置遮罩
- * 遮罩图片应该与视频比例一致，使用 CSS object-fit: contain 自适应居中
+/**
+ * 渲染中的弹幕项（引擎内部版，平铺 DanmakuItem 并携带渲染几何状态）
+ *
+ * 注意：与公共层面向回调的悬停快照（types/danmaku.ts DanmakuRenderItem）同名不同构，
+ * 该版本只在引擎内部流转，不对插件外暴露。
  */
-export type MaskLoader = (currentTime: number) => Promise<MaskLoaderResult | null>;
-
-/** 遮罩获取结果 */
-export interface MaskLoaderResult {
-  /** 遮罩图片URL（镂空PNG） */
-  maskImage: string;
-  /** 可选：遮罩图片元素（如果已预加载） */
-  maskImageElement?: HTMLImageElement;
-  /** 遮罩图片的原始宽度（用于比例计算） */
-  originalWidth?: number;
-  /** 遮罩图片的原始高度（用于比例计算） */
-  originalHeight?: number;
-}
-
-/** 弹幕配置选项 — 扩展版本，包含运行时引擎配置 */
-export interface DanmakuOptions {
-  /** 容器元素 */
-  container: HTMLElement;
-  /** 视频元素 */
-  video: HTMLVideoElement;
-  /** 渲染模式 */
-  renderMode?: RenderMode;
-  /** 弹幕透明度 (0-1) */
-  opacity?: number;
-  /** 弹幕速度档位 */
-  speed?: DanmakuSpeed;
-  /** 弹幕区域档位 */
-  area?: DanmakuArea;
-  /** 字体大小 */
-  fontSize?: number;
-  /** 字体大小档位 */
-  fontSizeScale?: DanmakuFontSize;
-  /** 是否自动随屏幕大小缩放弹幕 (默认true) */
-  autoScale?: boolean;
-  /** 是否显示弹幕 */
-  visible?: boolean;
-  /** 弹幕密度 (0-1) */
-  density?: number;
-  /** 是否防遮挡 */
-  preventOverlap?: boolean;
-  /** 轨道高度 */
-  trackHeight?: number;
-  /** 分段时长 (秒) */
-  segmentDuration?: number;
-  /** 预加载分段数 */
-  preloadSegments?: number;
-  /** 最大同时渲染弹幕数 */
-  maxRenderCount?: number;
-  /** 是否开启硬件加速 */
-  hardwareAcceleration?: boolean;
-  /** 是否显示高级弹幕 */
-  showAdvanced?: boolean;
-  /** 是否合并相同弹幕 */
-  mergeSame?: boolean;
-  /** 弹幕过滤器 */
-  filter?: DanmakuFilter;
-}
-
-/** 渲染中的弹幕项 — 扩展版本，包含运行时渲染状态 */
 export interface DanmakuRenderItem extends DanmakuItem {
   /** 渲染ID */
   renderId: string;
@@ -168,7 +81,7 @@ export interface DanmakuRenderItem extends DanmakuItem {
   animationEndHandler?: () => void;
 }
 
-/** 弹幕轨道 */
+/** 弹幕轨道（引擎内部轨道占用状态） */
 export interface DanmakuTrack {
   /** 轨道ID */
   id: number;
@@ -204,21 +117,7 @@ export interface DanmakuState {
   activeSegments: Set<number>;
 }
 
-/** 性能统计 — 扩展版本，所有字段均为必填 */
-export interface PerformanceStats {
-  /** FPS */
-  fps: number;
-  /** 渲染弹幕数 */
-  renderCount: number;
-  /** 对象池使用率 */
-  poolUsage: number;
-  /** 内存使用 (MB) */
-  memoryUsage: number;
-  /** 平均渲染时间 (ms) */
-  avgRenderTime: number;
-}
-
-/** 弹幕事件 */
+/** 弹幕事件（引擎构造事件回调） */
 export interface DanmakuEvents {
   /** 弹幕点击 */
   onClick?: (item: DanmakuItem) => void;

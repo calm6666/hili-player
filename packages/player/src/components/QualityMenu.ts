@@ -2,45 +2,33 @@
  * ============================================
  * 清晰度选择面板组件 (QualityMenu)
  * ============================================
- * 结构对齐 bilibili 播放器清晰度面板（类名前缀由 bpx- 改写为本播放器风格 player-）：
- *
- *   div.player-ctrl-btn.player-ctrl-quality                     role=button aria-label=清晰度
- *     div.player-ctrl-quality-result
- *       div.player-ctrl-quality-result-wrap
- *         div.player-ctrl-quality-result-name                   当前清晰度名
- *         span.player-ctrl-quality-result-auto-badge            自动徽标（仅自动档激活时显示）
- *     div.player-ctrl-quality-menu-wrap
- *       ul.player-ctrl-quality-menu
- *         li.player-ctrl-quality-menu-item[data-value]          清晰度项
- *           span.player-ctrl-quality-text                       清晰度名
- *           span.player-ctrl-quality-badge.player-ctrl-quality-badge-codec  编码徽标 AVC/HEVC/AV1
- *           span.player-ctrl-quality-badge.player-ctrl-quality-badge-vip    会员徽标（有标记才渲染）
- *     div.player-ctrl-quality-bubble                            气泡（默认 display:none）
- *
- * 框架无虚拟 DOM diff：清晰度列表变化不会自动重渲染，必须订阅运行时状态
- * （player.availableQualities）并在回调里手动重建 <li>；选中态手动互斥。
- *
- * 显隐沿用项目统一机制：Controls.ts 给根按钮加 `state-show` 类，
- * 样式侧 `.player-ctrl-quality.state-show .player-ctrl-quality-menu { display: block }` 展开。
- *
- * 样式见 styles/qualitymenu.scss（该文件被 index.scss @use 在顶部，
- * 内部用 :not(#…) 提权以压过 index.scss 里那份重复的旧规则，详见该文件头部注释）。
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext, materialize } from '@/core';
-import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
-import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
-import type { AnimationFrameID } from '@/utils/rafTimeout';
-import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
+import {
+  h,
+  defineComponent,
+  useState,
+  useReactiveState,
+  useContext,
+  signal,
+  computed,
+  For,
+} from "@/core";
+import type { ReadonlySignal } from "@/core";
+import type { VNode } from "@/types";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
+import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
+import type { AnimationFrameID } from "@/utils/rafTimeout";
+import { PlayerStateKeyEnum, StateContext } from "@/store/runtimeState";
 
 /** 自动档 id（与 types/streamPlugin 的 AUTO_QUALITY_ID 取值一致；此处本地定义，避免跨模块耦合） */
-const AUTO_QUALITY_ID = 'auto';
+const AUTO_QUALITY_ID = "auto";
 /** 自动档文案 */
-const AUTO_LABEL = '自动';
+const AUTO_LABEL = "自动";
 /** 清晰度切换中的占位文案 */
-const SWITCHING_LABEL = '切换中';
+const SWITCHING_LABEL = "切换中";
 /** 会员类徽标默认文案 */
-const VIP_LABEL = '大会员';
+const VIP_LABEL = "大会员";
 
 /**
  * 清晰度面板消费的最小档位模型
@@ -75,6 +63,19 @@ export interface QualityMenuItem {
 }
 
 /**
+ * 运行时类型谓词：For 控制流的回调入参为 unknown（For 的 props 为
+ * Record<string, unknown>，类型信息在回调边界丢失），
+ * 用谓词收窄替代 as 断言
+ */
+const isQualityMenuItem = (item: unknown): item is QualityMenuItem =>
+  typeof item === "object" &&
+  item !== null &&
+  "id" in item &&
+  typeof item.id === "string" &&
+  "label" in item &&
+  typeof item.label === "string";
+
+/**
  * 清晰度选项接口
  * @deprecated 运行时模型已统一为 QualityLevel / QualityMenuItem；此处仅保留导出以兼容旧引用
  */
@@ -100,6 +101,12 @@ export interface QualityMenuProps {
    * 缺省（父层未传）时按数据与运行时能力推断：列表自带自动项，或 player.qualityMode === 'adaptive'
    */
   autoEnabled?: boolean;
+  /**
+   * 配置显隐（ui.controls.quality）
+   * 父层可传 Signal 形态（props 惰性代理读取穿透建立依赖），
+   * 缺省可见；display 由本组件根节点响应式 style 单一来源管理
+   */
+  visible?: boolean | ReadonlySignal<boolean>;
 }
 
 export type QualityMenuEvents = {
@@ -108,301 +115,343 @@ export type QualityMenuEvents = {
 };
 
 /**
- * 条目与其 DOM 的绑定关系
- * 用对象引用代替下标对齐：列表重建、自动项插拔时都不会错位
- */
-interface QualityEntry {
-  /** 数据条目 */
-  item: QualityMenuItem;
-  /** 整行 li */
-  li: HTMLLIElement;
-  /** 清晰度名 span */
-  text: HTMLSpanElement;
-  /** 编码徽标 span（无 codec 数据时不存在） */
-  codec?: HTMLSpanElement;
-}
-
-/**
  * QualityMenu 组件 - 使用 defineComponent 创建独立组件
+ *
+ * 响应式迁移：
+ *   - 清晰度列表渲染从 createItem + replaceChildren 改为 For 组件（key-based 精准更新）
+ *   - 选中态 / 自动档激活态从手动 forEach + classList.toggle 改为响应式 class
+ *   - 顶部清晰度名 / 自动徽标显隐从 textContent + style.display 改为 _reactiveText + 响应式 style
+ *   - 运行时状态订阅从 useState 命令式包装改为 useReactiveState + computed
+ *   - 面板 hover 显隐由 shownSignal 响应式驱动根节点 state-show 类，
+ *     hover 定时器（rafTimeout）仅负责延迟时序并写信号
+ *   - 配置显隐由 visible prop 传入（支持 Signal 形态，props 惰性代理读取穿透建立依赖），
+ *     display 为本组件根节点响应式 style 单一来源，
+ *     消除旧的 RightControls querySelector 直写 display（两边写 display 打架）
+ *   - 按钮尺寸收起（列表 ≤ 1 项时不占位）由 collapsedSignal 响应式驱动
+ *     根节点 visibility/width/marginRight（空串经 setProperty 清除内联）
+ *   - 首次淡入从一次性 JS 动画（opacity/transition 手写）改为 CSS animation：
+ *     state-fade-in 类随非收起态常驻，类移除后重新添加即自动重播（见 qualitymenu.scss）
  */
-export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>((props, lifecycle) => {
-  const state = useContext(StateContext);
+export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
+  (props, lifecycle) => {
+    const state = useContext(StateContext);
 
-  // ============================================
-  // DOM 引用
-  // ============================================
+    /** 展开 / 收起定时器 */
+    let showTimer: AnimationFrameID | null = null;
 
-  /** 面板根节点（清晰度按钮） */
-  const btnRef = useTemplateRef<HTMLDivElement>(lifecycle, 'qualityBtnRef');
+    /** 收起定时器 */
+    let hideTimer: AnimationFrameID | null = null;
 
-  /** 顶部当前清晰度名 */
-  const resultNameRef = useTemplateRef<HTMLDivElement>(lifecycle, 'qualityResultNameRef');
+    /**
+     * 响应式信号：面板展开态
+     * 驱动根节点 state-show 类（编译器包装为 __reactiveAttrs，
+     * 变化时经 normalizeClass 精准更新类名），
+     * 替代旧的 btnRef.classList.toggle 命令式写法
+     */
+    const shownSignal = signal<boolean>(false);
 
-  /** 顶部自动徽标 */
-  const autoBadgeRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'qualityAutoBadgeRef');
+    /**
+     * 落地面板展开态：写信号即可，DOM 类名由响应式系统自动同步
+     * @param show - 是否展开
+     */
+    const setShown = (show: boolean): void => {
+      shownSignal.value = show;
+    };
 
-  /** 清晰度列表容器（ul） */
-  const listRef = useTemplateRef<HTMLUListElement>(lifecycle, 'qualityListRef');
+    /** 取消两个方向的排队任务 */
+    const clearTimers = (): void => {
+      cancelRaf(showTimer!);
+      cancelRaf(hideTimer!);
+      showTimer = null;
+      hideTimer = null;
+    };
 
-  /** 展开 / 收起定时器 */
-  let showTimer: AnimationFrameID | null = null;
+    // ============================================
+    // 内部状态（响应式信号驱动视图）
+    // ============================================
 
-  /** 收起定时器 */
-  let hideTimer: AnimationFrameID | null = null;
+    /**
+     * 当前选中档位 id 信号
+     * 注意：不从 'auto' 起步 —— 自动项只有运行时明确处于自动档时才激活（默认不激活）
+     * signal 变化时自动驱动 li 响应式 class + 顶部清晰度名 _reactiveText
+     */
+    const selectedIdSignal = signal<string>(
+      typeof props.currentQuality === "string" ? props.currentQuality : "",
+    );
 
-  /**
-   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
-   * @param show - 是否展开
-   */
-  const setShown = (show: boolean): void => {
-    btnRef.value?.classList.toggle('state-show', show);
-  };
+    /**
+     * 用户是否手动点过具体档位信号
+     * 自适应（HLS/DASH）下运行时写进 player.qualityCurrent 的是 ABR 实际选中的具体档位 id，
+     * 仅凭 selectedId 无法区分「自动」与「手动指定」，故用本标记区分：
+     * 未手动选过 → 仍算自动档（顶部显示具体档位名 +「自动」徽标）；手动选过 → 按具体档位显示（无徽标）
+     */
+    const manualPickSignal = signal<boolean>(false);
 
-  /** 取消两个方向的排队任务 */
-  const clearTimers = (): void => {
-    cancelRaf(showTimer!);
-    cancelRaf(hideTimer!);
-    showTimer = null;
-    hideTimer = null;
-  };
+    /** 具体档位（不含自动项），保持数据原始顺序 */
+    const concreteListSignal = signal<QualityMenuItem[]>([]);
 
-  // ============================================
-  // 内部状态（框架无响应式，渲染时手动维护）
-  // ============================================
+    /** 自动项 id 信号；'' 表示当前不具备自动能力，列表里不出现自动项 */
+    const autoIdSignal = signal<string>("");
 
-  /**
-   * 当前选中档位 id
-   * 注意：不从 'auto' 起步 —— 自动项只有运行时明确处于自动档时才激活（默认不激活）
-   */
-  let selectedId = typeof props.currentQuality === 'string' ? props.currentQuality : '';
+    /** 面板全部条目信号（具体档位 + 末尾自动项），驱动 For 组件 key-based 精准更新 */
+    const menuItemsSignal = signal<QualityMenuItem[]>([]);
 
-  /**
-   * 用户是否手动点过具体档位
-   * 自适应（HLS/DASH）下运行时写进 player.qualityCurrent 的是 ABR 实际选中的具体档位 id，
-   * 仅凭 selectedId 无法区分「自动」与「手动指定」，故用本标记区分：
-   * 未手动选过 → 仍算自动档（顶部显示具体档位名 +「自动」徽标）；手动选过 → 按具体档位显示（无徽标）
-   */
-  let manualPick = false;
+    /** 是否正在切换清晰度信号（切换期间顶部显示「切换中」） */
+    const switchingSignal = signal<boolean>(false);
 
-  /** 具体档位（不含自动项），保持数据原始顺序 */
-  let concreteList: QualityMenuItem[] = [];
+    /**
+     * 响应式信号：按钮尺寸收起态（列表 ≤ 1 项时整体不占位）
+     * 驱动根节点 visibility/width/marginRight（__reactiveAttrs 响应式 style），
+     * 替代旧的 btnRef.style 命令式写法；收起时 state-fade-in 类一并移除，
+     * 恢复可见时类重新添加自动重播 CSS 淡入
+     */
+    const collapsedSignal = signal<boolean>(false);
 
-  /** 自动项 id；'' 表示当前不具备自动能力，列表里不出现自动项 */
-  let autoId = '';
+    /**
+     * 配置显隐派生信号：父层经 visible prop 传入（支持 Signal 形态，
+     * props 惰性代理读取穿透 Signal.value 自动建立依赖），
+     * display 由本组件根节点响应式 style 单一来源管理
+     */
+    const configVisibleSignal = computed(() => props.visible !== false);
 
-  /** 面板全部条目（具体档位 + 末尾自动项），与 DOM 的 li 一一对应 */
-  let menuItems: QualityMenuItem[] = [];
+    // ============================================
+    // 运行时状态信号（驱动 isAutoActive / resolveAutoConcreteLabel 响应式）
+    // ============================================
 
-  /** 条目 DOM 绑定表（与 menuItems 同步重建） */
-  let entryEls: QualityEntry[] = [];
+    /** 运行时清晰度能力信号（none | static | adaptive），读取 .value 自动建立依赖 */
+    const qualityModeSignal: ReadonlySignal<unknown> = state
+      ? useReactiveState(state, PlayerStateKeyEnum.QUALITY_MODE, lifecycle)
+      : signal<unknown>(undefined);
 
-  /** 是否正在切换清晰度（切换期间顶部显示「切换中」） */
-  let switching = false;
+    /** 实际画质高度信号（loadedmetadata 写入），读取 .value 自动建立依赖 */
+    const videoHeightSignal: ReadonlySignal<unknown> = state
+      ? useReactiveState(state, PlayerStateKeyEnum.VIDEO_HEIGHT, lifecycle)
+      : signal<unknown>(undefined);
 
-  /** 是否已完成首次淡入 */
-  let shownOnce = false;
+    // ============================================
+    // 渲染辅助：数据判定
+    // ============================================
 
-  // ============================================
-  // 渲染辅助：数据判定
-  // ============================================
+    /**
+     * 是否为自动档条目
+     * @param item - 清晰度档位
+     */
+    const isAutoEntry = (item: QualityMenuItem): boolean =>
+      item.isAuto === true || item.id === AUTO_QUALITY_ID;
 
-  /**
-   * 是否为自动档条目
-   * @param item - 清晰度档位
-   */
-  const isAutoEntry = (item: QualityMenuItem): boolean =>
-    item.isAuto === true || item.id === AUTO_QUALITY_ID;
+    /**
+     * 档位展示名：label 优先，缺省用高度兜底，再缺省用 id
+     * @param item - 清晰度档位
+     */
+    const labelOf = (item: QualityMenuItem): string =>
+      item.label || ((item.height ?? 0) > 0 ? `${item.height}P` : item.id);
 
-  /**
-   * 档位展示名：label 优先，缺省用高度兜底，再缺省用 id
-   * @param item - 清晰度档位
-   */
-  const labelOf = (item: QualityMenuItem): string =>
-    item.label || ((item.height ?? 0) > 0 ? `${item.height}P` : item.id);
-
-  /**
-   * 取画质最高的一项（高度优先，同高度比码率）
-   * @param list - 待比较的档位列表
-   */
-  const pickHighest = (list: QualityMenuItem[]): QualityMenuItem | undefined => {
-    let best: QualityMenuItem | undefined;
-    for (const item of list) {
-      if (
-        !best ||
-        (item.height ?? 0) > (best.height ?? 0) ||
-        ((item.height ?? 0) === (best.height ?? 0) && (item.bitrate ?? 0) > (best.bitrate ?? 0))
-      ) {
-        best = item;
+    /**
+     * 取画质最高的一项（高度优先，同高度比码率）
+     * @param list - 待比较的档位列表
+     */
+    const pickHighest = (
+      list: QualityMenuItem[],
+    ): QualityMenuItem | undefined => {
+      let best: QualityMenuItem | undefined;
+      for (const item of list) {
+        if (
+          !best ||
+          (item.height ?? 0) > (best.height ?? 0) ||
+          ((item.height ?? 0) === (best.height ?? 0) &&
+            (item.bitrate ?? 0) > (best.bitrate ?? 0))
+        ) {
+          best = item;
+        }
       }
-    }
-    return best;
-  };
+      return best;
+    };
 
-  /**
-   * 自动档能力判据（任一成立即在列表末尾渲染自动项）
-   * 1. props.autoEnabled 显式打开（父层已确认具备 ABR）
-   * 2. 数据里自带自动档条目（item.isAuto 或 id === 'auto'）
-   * 3. 运行时清晰度能力为 adaptive（HLS / DASH）
-   * @param list - 运行时清晰度列表
-   */
-  const detectAutoCapable = (list: QualityMenuItem[]): boolean =>
-    props.autoEnabled === true ||
-    list.some(isAutoEntry) ||
-    state?.get(PlayerStateKeyEnum.QUALITY_MODE) === 'adaptive';
+    /**
+     * 自动档能力判据（任一成立即在列表末尾渲染自动项）
+     * 1. props.autoEnabled 显式打开（父层已确认具备 ABR）
+     * 2. 数据里自带自动档条目（item.isAuto 或 id === 'auto'）
+     * 3. 运行时清晰度能力为 adaptive（HLS / DASH）
+     * @param list - 运行时清晰度列表
+     */
+    const detectAutoCapable = (list: QualityMenuItem[]): boolean =>
+      props.autoEnabled === true ||
+      list.some(isAutoEntry) ||
+      state?.get(PlayerStateKeyEnum.QUALITY_MODE) === "adaptive";
 
-  /**
-   * 自动档激活时解析「当前具体清晰度名」
-   * 1. 数据自带的自动档条目自身携带的档位信息（新契约：自动档带当前 ABR 实际选中的宽高）
-   * 2. 运行时 video.height（loadedmetadata 写入）与具体档位高度精确 / 就近匹配
-   * 3. 兜底：具体档位里画质最高的一项
-   * @returns 具体清晰度名；完全无法判定时返回 ''
-   */
-  const resolveAutoConcreteLabel = (): string => {
-    const autoEntry = menuItems.find((item) => item.id === autoId);
-    if (autoEntry) {
-      const own = autoEntry.label && autoEntry.label !== AUTO_LABEL ? autoEntry.label : '';
-      if (own) return own;
-      if ((autoEntry.height ?? 0) > 0) return `${autoEntry.height}P`;
-    }
-
-    const videoHeight = state?.get(PlayerStateKeyEnum.VIDEO_HEIGHT) ?? 0;
-    if (videoHeight > 0) {
-      const sized = concreteList.filter((item) => (item.height ?? 0) > 0);
-      const exact = sized.find((item) => item.height === videoHeight);
-      if (exact) return labelOf(exact);
-      const notAbove = sized.filter((item) => (item.height ?? 0) <= videoHeight);
-      const nearest = pickHighest(notAbove);
-      if (nearest) return labelOf(nearest);
-    }
-
-    const highest = pickHighest(concreteList);
-    return highest ? labelOf(highest) : '';
-  };
-
-  /**
-   * 自动项是否激活
-   * 判据：具备自动能力（autoId !== ''）且
-   *   1) 运行时明确指向自动档（selectedId === autoId），或
-   *   2) 处于自适应模式且用户没有手动选过具体档位
-   *      （自适应下 player.qualityCurrent 存的是 ABR 选中的具体档位 id，
-   *       此时当前档位仍应显示为「自动」+ 具体档位名）
-   */
-  const isAutoActive = (): boolean => {
-    if (autoId === '') return false;
-    if (selectedId === autoId) return true;
-    return !manualPick && state?.get(PlayerStateKeyEnum.QUALITY_MODE) === 'adaptive';
-  };
-
-  /**
-   * 当前激活条目
-   * 精确命中优先；选中值为空或 'auto' 但列表没有自动项时（原生 MP4 多变体：
-   * VideoPlayer 的 'auto' 即 sources[0]，而档位 id 就是 sources 下标），
-   * 退到数据里的第一档，保证顶部文案与高亮始终有落点
-   */
-  const resolveActiveItem = (): QualityMenuItem | undefined => {
-    const exact = menuItems.find((item) => item.id === selectedId);
-    if (exact) return exact;
-    if (selectedId === '' || selectedId === AUTO_QUALITY_ID) return concreteList[0];
-    return undefined;
-  };
-
-  // ============================================
-  // 渲染辅助：DOM 刷新
-  // ============================================
-
-  /**
-   * 刷新顶部显示：当前清晰度名 + 自动徽标显隐
-   * - 切换中：文案替换为「切换中」（沿用既有逻辑），此时不显示自动徽标
-   * - 自动档激活：显示当前具体清晰度名 + 「自动」徽标
-   * - 普通档位：只显示所选清晰度名，无徽标
-   */
-  const applyResultName = (): void => {
-    const autoActive = isAutoActive();
-    const nameEl = resultNameRef.value;
-    if (nameEl) {
-      if (switching) {
-        nameEl.textContent = SWITCHING_LABEL;
-      } else if (autoActive) {
-        nameEl.textContent = resolveAutoConcreteLabel() || AUTO_LABEL;
-      } else {
-        const active = resolveActiveItem();
-        nameEl.textContent = active ? labelOf(active) : AUTO_LABEL;
+    /**
+     * 自动档激活时解析「当前具体清晰度名」
+     * 1. 数据自带的自动档条目自身携带的档位信息（新契约：自动档带当前 ABR 实际选中的宽高）
+     * 2. 运行时 video.height（loadedmetadata 写入）与具体档位高度精确 / 就近匹配
+     * 3. 兜底：具体档位里画质最高的一项
+     * @returns 具体清晰度名；完全无法判定时返回 ''
+     *
+     * 注：读取 menuItemsSignal / autoIdSignal / videoHeightSignal / concreteListSignal，
+     * 在 computed 上下文中自动追踪信号变化（autoConcreteLabelSignal 派生）
+     */
+    const resolveAutoConcreteLabel = (): string => {
+      const autoId = autoIdSignal.value;
+      const autoEntry = menuItemsSignal.value.find(
+        (item) => item.id === autoId,
+      );
+      if (autoEntry) {
+        const own =
+          autoEntry.label && autoEntry.label !== AUTO_LABEL
+            ? autoEntry.label
+            : "";
+        if (own) return own;
+        if ((autoEntry.height ?? 0) > 0) return `${autoEntry.height}P`;
       }
-    }
-    if (autoBadgeRef.value) {
-      // 需求：自动徽标「仅自动模式激活时显示」；其余情况用内联 none 彻底隐藏
-      autoBadgeRef.value.style.display = autoActive && !switching ? '' : 'none';
-    }
-  };
 
-  /**
-   * 刷新选中态（player-state-active 手动互斥）
-   * 同时刷新自动项文案：未激活「自动」/ 激活「自动(当前具体清晰度名)」
-   */
-  const updateActive = (): void => {
-    const autoActive = isAutoActive();
-    const active = autoActive ? undefined : resolveActiveItem();
-    const autoConcrete = autoActive ? resolveAutoConcreteLabel() : '';
-
-    for (const entry of entryEls) {
-      const isActive = autoActive ? entry.item.id === autoId : entry.item === active;
-      entry.li.classList.toggle('player-state-active', isActive);
-      // 当前档位的编码徽标强调（描边 + 主色），见 qualitymenu.scss
-      entry.codec?.classList.toggle('player-state-active', isActive);
-      if (entry.item.id === autoId) {
-        entry.text.textContent = autoConcrete ? `${AUTO_LABEL}(${autoConcrete})` : AUTO_LABEL;
+      const rawVideoHeight = videoHeightSignal.value;
+      const videoHeight = typeof rawVideoHeight === "number" ? rawVideoHeight : 0;
+      if (videoHeight > 0) {
+        const concrete = concreteListSignal.value;
+        const sized = concrete.filter((item) => (item.height ?? 0) > 0);
+        const exact = sized.find((item) => item.height === videoHeight);
+        if (exact) return labelOf(exact);
+        const notAbove = sized.filter(
+          (item) => (item.height ?? 0) <= videoHeight,
+        );
+        const nearest = pickHighest(notAbove);
+        if (nearest) return labelOf(nearest);
       }
-    }
-  };
 
-  /**
-   * 创建单个清晰度菜单项
-   * @param item - 清晰度档位
-   * @returns 条目与元素的绑定关系
-   */
-  const createItem = (item: QualityMenuItem): QualityEntry => {
-    let textEl: HTMLSpanElement | null = null;
-    let codecEl: HTMLSpanElement | null = null;
+      const highest = pickHighest(concreteListSignal.value);
+      return highest ? labelOf(highest) : "";
+    };
 
-    const li = materialize(
-      h(
-        'li',
+    /**
+     * 自动项是否激活
+     * 判据：具备自动能力（autoId !== ''）且
+     *   1) 运行时明确指向自动档（selectedId === autoId），或
+     *   2) 处于自适应模式且用户没有手动选过具体档位
+     *      （自适应下 player.qualityCurrent 存的是 ABR 选中的具体档位 id，
+     *       此时当前档位仍应显示为「自动」+ 具体档位名）
+     *
+     * 注：读取 autoIdSignal / selectedIdSignal / manualPickSignal / qualityModeSignal，
+     * 在 computed 上下文中自动追踪信号变化（autoActiveSignal 派生）
+     */
+    const isAutoActive = (): boolean => {
+      const autoId = autoIdSignal.value;
+      if (autoId === "") return false;
+      const selectedId = selectedIdSignal.value;
+      if (selectedId === autoId) return true;
+      return !manualPickSignal.value && qualityModeSignal.value === "adaptive";
+    };
+
+    /**
+     * 当前激活条目
+     * 精确命中优先；选中值为空或 'auto' 但列表没有自动项时（原生 MP4 多变体：
+     * VideoPlayer 的 'auto' 即 sources[0]，而档位 id 就是 sources 下标），
+     * 退到数据里的第一档，保证顶部文案与高亮始终有落点
+     */
+    const resolveActiveItem = (): QualityMenuItem | undefined => {
+      const selectedId = selectedIdSignal.value;
+      const exact = menuItemsSignal.value.find(
+        (item) => item.id === selectedId,
+      );
+      if (exact) return exact;
+      if (selectedId === "" || selectedId === AUTO_QUALITY_ID)
+        return concreteListSignal.value[0];
+      return undefined;
+    };
+
+    // ============================================
+    // 派生信号（computed）：驱动 VNode 响应式 class / _reactiveText / style
+    // ============================================
+
+    /** 自动档是否激活（派生）—— 驱动 li active class + 顶部文案 + 自动徽标显隐 */
+    const autoActiveSignal = computed(() => isAutoActive());
+
+    /** 自动档当前具体清晰度名（派生）—— 驱动自动项文案 + 顶部文案 */
+    const autoConcreteLabelSignal = computed(() => resolveAutoConcreteLabel());
+
+    /** 非自动档激活时当前激活条目 id（派生）—— 驱动 li active class */
+    const activeItemIdSignal = computed(() => {
+      if (autoActiveSignal.value) return "";
+      const active = resolveActiveItem();
+      return active?.id ?? "";
+    });
+
+    /** 顶部清晰度名（派生）—— 驱动 _reactiveText */
+    const resultNameSignal = computed(() => {
+      if (switchingSignal.value) return SWITCHING_LABEL;
+      if (autoActiveSignal.value)
+        return autoConcreteLabelSignal.value || AUTO_LABEL;
+      const active = resolveActiveItem();
+      return active ? labelOf(active) : AUTO_LABEL;
+    });
+
+    /** 自动徽标是否可见（派生）—— 驱动响应式 style.display */
+    const autoBadgeVisibleSignal = computed(
+      () => autoActiveSignal.value && !switchingSignal.value,
+    );
+
+    // ============================================
+    // 渲染辅助：DOM 刷新（保留命令式：仅按钮显隐 + 首次淡入）
+    // ============================================
+
+    /**
+     * 渲染单个清晰度菜单项（For 组件的 render 回调）
+     * 每个 key 只调用一次，选中态由响应式 class（autoActiveSignal / activeItemIdSignal 自动驱动）自动同步
+     * 自动项文案由 _reactiveText（autoConcreteLabelSignal 自动驱动）自动同步
+     * 替代旧的 createItem + ref 收集 + updateActive forEach + classList.toggle 命令式操作
+     * @param item - 清晰度档位
+     * @returns 菜单项 VNode
+     */
+    const renderItem = (item: QualityMenuItem): VNode => {
+      const isAuto = isAutoEntry(item);
+      return h(
+        "li",
         {
-          class: 'player-ctrl-quality-menu-item',
-          'data-value': item.id,
+          // 响应式 class：autoActiveSignal.value / activeItemIdSignal.value / autoIdSignal.value 自动驱动
+          // 替代旧的 entry.li.classList.toggle('nova-player-state-active', isActive)
+          class: [
+            "nova-player-ctrl-quality-menu-item",
+            {
+              "nova-player-state-active": autoActiveSignal.value
+                ? item.id === autoIdSignal.value
+                : item.id === activeItemIdSignal.value,
+            },
+          ],
+          "data-value": item.id,
           onClick: () => {
             // 乐观切换选中态，切换结果由 player.qualityCurrent 订阅最终校正
-            selectedId = item.id;
+            selectedIdSignal.value = item.id;
             // 点「自动」→ 回到自动态；点具体档位 → 记为手动指定（自适应下不再显示自动徽标）
-            manualPick = item.id !== autoId;
-            updateActive();
-            applyResultName();
+            manualPickSignal.value = item.id !== autoIdSignal.value;
             // 具体档位发档位 id，自动项发 'auto'（VideoPlayer.setQuality 自身会对同档位去重）
-            lifecycle.emit?.('qualityChange', item.id);
+            lifecycle.emit?.("qualityChange", item.id);
           },
         },
         h(
-          'span',
-          {
-            class: 'player-ctrl-quality-text',
-            ref: (el: Element) => {
-              textEl = el as HTMLSpanElement;
-            },
-          },
-          item.id === autoId ? AUTO_LABEL : labelOf(item),
+          "span",
+          { class: "nova-player-ctrl-quality-text" },
+          // 自动项文案随 autoConcreteLabelSignal 变化（编译器自动包装为 _reactiveText）
+          // 非自动项文案为静态 labelOf(item)，整个三元表达式为动态，编译器统一包装
+          isAuto
+            ? autoConcreteLabelSignal.value
+              ? `${AUTO_LABEL}(${autoConcreteLabelSignal.value})`
+              : AUTO_LABEL
+            : labelOf(item),
         ),
         // 编码格式徽标：仅在数据带 codec 时渲染（无数据不渲染，不造假）
+        // 徽标 active class 同 li，由响应式 class 自动同步
         ...(item.codec
           ? [
               h(
-                'span',
+                "span",
                 {
-                  class:
-                    'player-ctrl-quality-badge player-ctrl-quality-badge-codec',
+                  class: [
+                    "nova-player-ctrl-quality-badge nova-player-ctrl-quality-badge-codec",
+                    {
+                      "nova-player-state-active": autoActiveSignal.value
+                        ? item.id === autoIdSignal.value
+                        : item.id === activeItemIdSignal.value,
+                    },
+                  ],
                   ...(item.codecString ? { title: item.codecString } : {}),
-                  ref: (el: Element) => {
-                    codecEl = el as HTMLSpanElement;
-                  },
                 },
                 item.codec,
               ),
@@ -412,243 +461,274 @@ export const QualityMenu = defineComponent<QualityMenuProps, QualityMenuEvents>(
         ...(item.vip === true
           ? [
               h(
-                'span',
+                "span",
                 {
-                  class: 'player-ctrl-quality-badge player-ctrl-quality-badge-vip',
+                  class:
+                    "nova-player-ctrl-quality-badge nova-player-ctrl-quality-badge-vip",
                 },
                 item.badge || VIP_LABEL,
               ),
             ]
           : []),
-      ),
-    ) as HTMLLIElement;
+      );
+    };
 
-    return { item, li, text: textEl as unknown as HTMLSpanElement, codec: codecEl ?? undefined };
-  };
+    /**
+     * 按列表重建面板数据，并同步按钮显隐 / 首次淡入
+     * 列表 DOM 由 For 组件 key-based 精准更新（menuItemsSignal 驱动）
+     * 选中态 / 顶部文案 / 徽标显隐由响应式 class / _reactiveText / style 自动同步
+     * @param list - 运行时清晰度列表
+     */
+    const renderQualities = (list?: QualityMenuItem[]): void => {
+      const source = list ?? [];
 
-  /**
-   * 按列表重建面板，并同步顶部文案与按钮显隐
-   * @param list - 运行时清晰度列表
-   */
-  const renderQualities = (list?: QualityMenuItem[]): void => {
-    const source = list ?? [];
+      // 拆分具体档位 / 数据自带的自动项（自动项统一排到列表末尾，与参考 DOM 一致）
+      const dataAuto = source.find(isAutoEntry);
+      const concrete = source.filter((item) => item !== dataAuto);
 
-    // 拆分具体档位 / 数据自带的自动项（自动项统一排到列表末尾，与参考 DOM 一致）
-    const dataAuto = source.find(isAutoEntry);
-    concreteList = source.filter((item) => item !== dataAuto);
+      // 需求：列表从高清到低清（自动项由下方构造逻辑固定排在最后）
+      const sortedConcrete = [...concrete].sort(
+        (a, b) =>
+          (b.height ?? 0) - (a.height ?? 0) ||
+          (b.bitrate ?? 0) - (a.bitrate ?? 0),
+      );
 
-    // 需求：列表从高清到低清（自动项由下方构造逻辑固定排在最后）
-    concreteList = [...concreteList].sort(
-      (a, b) => (b.height ?? 0) - (a.height ?? 0) || (b.bitrate ?? 0) - (a.bitrate ?? 0),
-    );
+      const autoCapable = detectAutoCapable(source);
+      const nextAutoId = dataAuto
+        ? dataAuto.id
+        : autoCapable
+          ? AUTO_QUALITY_ID
+          : "";
+      const nextMenuItems = dataAuto
+        ? [...sortedConcrete, dataAuto]
+        : autoCapable
+          ? [
+              ...sortedConcrete,
+              { id: AUTO_QUALITY_ID, label: AUTO_LABEL, isAuto: true },
+            ]
+          : [...sortedConcrete];
 
-    const autoCapable = detectAutoCapable(source);
-    autoId = dataAuto ? dataAuto.id : autoCapable ? AUTO_QUALITY_ID : '';
-    menuItems = dataAuto
-      ? [...concreteList, dataAuto]
-      : autoCapable
-        ? [...concreteList, { id: AUTO_QUALITY_ID, label: AUTO_LABEL, isAuto: true }]
-        : [...concreteList];
-
-    // 默认选中：仅在完全不知道当前档位（selectedId 为空）时退到数据里的第一档，
-    // 自动项因此保持不激活。
-    // 注意：这里不能覆盖 selectedId === 'auto' —— 首次渲染时 player.qualityMode 可能还是上一轮的
-    // 'none'（写入顺序是 AVAILABLE_QUALITIES → QUALITY_MODE），此刻自动项尚未生成，
-    // 若把 'auto' 改写成具体档位，随后 QUALITY_MODE 变成 'adaptive' 时自动项就再也激活不了。
-    if (!selectedId) {
-      selectedId = concreteList[0]?.id ?? '';
-    }
-
-    // 命令式重建 li（HLS/DASH 清单异步就绪、ABR 换档都会重新推送列表）
-    const ul = listRef.value;
-    entryEls = [];
-    if (ul) {
-      for (const item of menuItems) {
-        entryEls.push(createItem(item));
+      // 默认选中：仅在完全不知道当前档位（selectedId 为空）时退到数据里的第一档，
+      // 自动项因此保持不激活。
+      // 注意：这里不能覆盖 selectedId === 'auto' —— 首次渲染时 player.qualityMode 可能还是上一轮的
+      // 'none'（写入顺序是 AVAILABLE_QUALITIES → QUALITY_MODE），此刻自动项尚未生成，
+      // 若把 'auto' 改写成具体档位，随后 QUALITY_MODE 变成 'adaptive' 时自动项就再也激活不了。
+      if (!selectedIdSignal.value) {
+        selectedIdSignal.value = sortedConcrete[0]?.id ?? "";
       }
-      ul.replaceChildren(...entryEls.map((entry) => entry.li));
+
+      // 新列表代表换了视频/流，手动指定档位的标记一并复位，回到自动态
+      manualPickSignal.value = false;
+      concreteListSignal.value = sortedConcrete;
+      autoIdSignal.value = nextAutoId;
+      menuItemsSignal.value = nextMenuItems;
+      // 列表 DOM 由 For 精准更新，选中态 / 文案 / 徽标由响应式信号自动同步，无需手动刷新
+
+      // 按钮尺寸收起：只有 1 项时整体不占位（写信号即可，
+      // visibility/width/marginRight 由根节点响应式 style 自动同步，
+      // 空串经 setProperty 清除内联；从收起恢复时 state-fade-in 类重新添加自动重播淡入）
+      collapsedSignal.value = nextMenuItems.length <= 1;
+    };
+
+    // ============================================
+    // 状态监听（订阅运行时清晰度数据与切换生命周期）
+    // ============================================
+
+    // 列表变化 → renderQualities 重建 menuItemsSignal（For 精准更新 DOM）
+    // 选中态 / 文案 / 徽标由响应式信号自动同步，无需手动 updateActive/applyResultName
+    if (state) {
+      /** 列表变化 → 命令式重建（新列表代表换了视频/流，手动指定档位的标记一并复位，回到自动态） */
+      useState(
+        state,
+        PlayerStateKeyEnum.AVAILABLE_QUALITIES,
+        (list) => {
+          renderQualities(list);
+        },
+        lifecycle,
+      );
+
+      /** 清晰度能力变化（none | static | adaptive）→ 自动项是否出现随之变化 */
+      useState(
+        state,
+        PlayerStateKeyEnum.QUALITY_MODE,
+        () => {
+          // 状态里还没有列表时保持现状，避免把 props.qualities 的初始数据清空
+          const list = state.get(PlayerStateKeyEnum.AVAILABLE_QUALITIES);
+          renderQualities(list ?? concreteListSignal.value);
+        },
+        lifecycle,
+      );
+
+      /** 当前生效档位变化 → 写入 selectedIdSignal（响应式 class / 顶部文案自动同步） */
+      useState(
+        state,
+        PlayerStateKeyEnum.QUALITY_CURRENT,
+        (id) => {
+          if (typeof id === "string" && id) {
+            selectedIdSignal.value = id;
+          }
+        },
+        lifecycle,
+      );
+
+      /** 切换生命周期：切换中把顶部文案改为「切换中」→ 写入 switchingSignal（resultNameSignal computed 自动响应） */
+      useState(
+        state,
+        PlayerStateKeyEnum.QUALITY_SWITCH_STATE,
+        (phase) => {
+          switchingSignal.value = phase === "switching";
+        },
+        lifecycle,
+      );
+
+      /** 实际画质高度（loadedmetadata 写入）→ autoConcreteLabelSignal 是 computed 自动响应，无需手动操作 */
+      useState(
+        state,
+        PlayerStateKeyEnum.VIDEO_HEIGHT,
+        () => {
+          // autoConcreteLabelSignal 是 computed，自动追踪 videoHeightSignal 变化
+          // 无需手动 updateActive/applyResultName
+        },
+        lifecycle,
+      );
     }
 
-    updateActive();
-    applyResultName();
+    // ============================================
+    // 事件处理函数
+    // ============================================
 
-    // 按钮显隐：只有 1 项时整体不显示
-    // 只写 visibility / width / margin-right，**不写 display**：
-    // RightControls.ts 会按设置项往根节点写内联 style.display，两边写 display 会互相打架
-    const btn = btnRef.value;
-    if (!btn) return;
-    const visible = menuItems.length > 1;
-    btn.style.visibility = visible ? '' : 'hidden';
-    btn.style.width = visible ? '' : '0';
-    btn.style.marginRight = visible ? '' : '0';
-
-    if (!visible) {
-      shownOnce = false;
-      return;
-    }
-    if (!shownOnce) {
-      // 首次显示做一次淡入（临时加过渡，结束后移除，不引入新 CSS 类）
-      shownOnce = true;
-      btn.style.opacity = '0';
-      btn.style.transition = 'opacity 0.2s ease';
-      requestAnimationFrame(() => {
-        btn.style.opacity = '1';
-      });
-      setTimeout(() => {
-        btn.style.transition = '';
-        btn.style.opacity = '';
-      }, 220);
-    }
-  };
-
-  // ============================================
-  // 状态监听（订阅运行时清晰度数据与切换生命周期）
-  // ============================================
-
-  // 框架无响应式：列表变化不会自动更新 DOM，必须在 updater 中手动重建菜单
-  // useState 仅在变化时回调，组件销毁时自动取消订阅（与 LeftControls 一致）
-  if (state) {
-    /** 列表变化 → 命令式重建（新列表代表换了视频/流，手动指定档位的标记一并复位，回到自动态） */
-    useState(
-      state,
-      PlayerStateKeyEnum.AVAILABLE_QUALITIES,
-      (list) => {
-        manualPick = false;
-        renderQualities(list);
-      },
-      lifecycle,
-    );
-
-    /** 清晰度能力变化（none | static | adaptive）→ 自动项是否出现随之变化 */
-    useState(
-      state,
-      PlayerStateKeyEnum.QUALITY_MODE,
-      () => {
-        // 状态里还没有列表时保持现状，避免把 props.qualities 的初始数据清空
-        const list = state.get(PlayerStateKeyEnum.AVAILABLE_QUALITIES);
-        renderQualities(list ?? concreteList);
-      },
-      lifecycle,
-    );
-
-    /** 当前生效档位变化 → 同步选中态与顶部文案 */
-    useState(
-      state,
-      PlayerStateKeyEnum.QUALITY_CURRENT,
-      (id) => {
-        if (typeof id === 'string' && id) {
-          selectedId = id;
-        }
-        updateActive();
-        applyResultName();
-      },
-      lifecycle,
-    );
-
-    /** 切换生命周期：切换中把顶部文案改为「切换中」，结束（成功/失败）恢复 */
-    useState(
-      state,
-      PlayerStateKeyEnum.QUALITY_SWITCH_STATE,
-      (phase) => {
-        switching = phase === 'switching';
-        applyResultName();
-      },
-      lifecycle,
-    );
-
-    /** 实际画质高度（loadedmetadata 写入）→ 自动档的「当前具体清晰度名」可能随之变化 */
-    useState(
-      state,
-      PlayerStateKeyEnum.VIDEO_HEIGHT,
-      () => {
-        updateActive();
-        applyResultName();
-      },
-      lifecycle,
-    );
-  }
-
-  // ============================================
-  // 事件处理函数
-  // ============================================
-
-  /**
-   * 鼠标进入清晰度按钮：延迟展开面板（面板显隐由本组件自己负责）
-   */
-  const handleMouseEnter = (): void => {
-    cancelRaf(hideTimer!);
-    hideTimer = null;
-    if (showTimer !== null) return;
-    showTimer = rafTimeout(() => {
-      showTimer = null;
-      setShown(true);
-    }, 120);
-  };
-
-  /**
-   * 鼠标离开清晰度按钮：延迟收起面板
-   */
-  const handleMouseLeave = (): void => {
-    cancelRaf(showTimer!);
-    showTimer = null;
-    if (hideTimer !== null) return;
-    hideTimer = rafTimeout(() => {
+    /**
+     * 鼠标进入清晰度按钮：延迟展开面板（面板显隐由本组件自己负责）
+     */
+    const handleMouseEnter = (): void => {
+      cancelRaf(hideTimer!);
       hideTimer = null;
-      setShown(false);
-    }, 220);
-  };
+      if (showTimer !== null) return;
+      showTimer = rafTimeout(() => {
+        showTimer = null;
+        setShown(true);
+      }, 120);
+    };
 
-  // ============================================
-  // 生命周期钩子
-  // ============================================
+    /**
+     * 鼠标离开清晰度按钮：延迟收起面板
+     */
+    const handleMouseLeave = (): void => {
+      cancelRaf(showTimer!);
+      showTimer = null;
+      if (hideTimer !== null) return;
+      hideTimer = rafTimeout(() => {
+        hideTimer = null;
+        setShown(false);
+      }, 220);
+    };
 
-  /**
-   * 组件挂载后：先取一次运行时当前档位与列表渲染（原生 MP4 同步就绪），再通知外部已就绪
-   */
-  lifecycle.onMounted = (): void => {
-    const runtimeId = state?.get(PlayerStateKeyEnum.QUALITY_CURRENT);
-    const initialId =
-      typeof props.currentQuality === 'string' && props.currentQuality
-        ? props.currentQuality
-        : typeof runtimeId === 'string'
-          ? runtimeId
-          : '';
-    if (initialId) selectedId = initialId;
+    // ============================================
+    // 生命周期钩子
+    // ============================================
 
-    const initial =
-      state?.get(PlayerStateKeyEnum.AVAILABLE_QUALITIES) ?? props.qualities ?? [];
-    renderQualities(initial);
+    /**
+     * 组件挂载后：先取一次运行时当前档位与列表渲染（原生 MP4 同步就绪），再通知外部已就绪
+     */
+    lifecycle.onMounted = (): void => {
+      const runtimeId = state?.get(PlayerStateKeyEnum.QUALITY_CURRENT);
+      const initialId =
+        typeof props.currentQuality === "string" && props.currentQuality
+          ? props.currentQuality
+          : typeof runtimeId === "string"
+            ? runtimeId
+            : "";
+      if (initialId) selectedIdSignal.value = initialId;
 
-    lifecycle.emit?.('qualityMenuMounted');
-  };
+      const initial =
+        state?.get(PlayerStateKeyEnum.AVAILABLE_QUALITIES) ??
+        props.qualities ??
+        [];
+      renderQualities(initial);
 
-  useComponentUnmount(lifecycle, clearTimers);
+      lifecycle.emit?.("qualityMenuMounted");
+    };
 
-  // ============================================
-  // 主渲染函数
-  // ============================================
+    useComponentUnmount(lifecycle, clearTimers);
 
-  return h('div', {
-    class: 'player-ctrl-btn player-ctrl-quality',
-    role: 'button',
-    'aria-label': '清晰度',
-    tabindex: 0,
-    ref: 'qualityBtnRef',
-    onMouseEnter: handleMouseEnter,
-    onMouseLeave: handleMouseLeave,
-  },
-    // 当前清晰度显示（result-wrap > result-name + 自动徽标）
-    h('div', { class: 'player-ctrl-quality-result' },
-      h('div', { class: 'player-ctrl-quality-result-wrap' },
-        h('div', { class: 'player-ctrl-quality-result-name', ref: 'qualityResultNameRef' }, AUTO_LABEL),
-        h('span', { class: 'player-ctrl-quality-result-auto-badge', ref: 'qualityAutoBadgeRef' }, AUTO_LABEL),
+    // ============================================
+    // 主渲染函数
+    // ============================================
+
+    return h(
+      "div",
+      {
+        // 展开态类名由 shownSignal 响应式驱动（__reactiveAttrs + normalizeClass）；
+        // 非收起态常驻 state-fade-in：类移除后重新添加时 CSS 淡入自动重播（见 qualitymenu.scss）
+        class: [
+          "nova-player-ctrl-btn",
+          "nova-player-ctrl-quality",
+          { "state-show": shownSignal.value },
+          { "state-fade-in": !collapsedSignal.value },
+        ],
+        role: "button",
+        "aria-label": "清晰度",
+        tabindex: 0,
+        // 配置显隐（display 单一来源：父层 ui.controls.quality 经 visible prop 传入）+
+        // 档位收起态（visibility/width/marginRight 收 0 不占位；空串经 setProperty 清除内联）
+        style: {
+          display: configVisibleSignal.value ? "" : "none",
+          visibility: collapsedSignal.value ? "hidden" : "",
+          width: collapsedSignal.value ? "0" : "",
+          marginRight: collapsedSignal.value ? "0" : "",
+        },
+        onMouseEnter: handleMouseEnter,
+        onMouseLeave: handleMouseLeave,
+      },
+      // 当前清晰度显示（result-wrap > result-name + 自动徽标）
+      // resultNameSignal 是 computed，自动追踪 switchingSignal/autoActiveSignal/autoConcreteLabelSignal
+      // _reactiveText 让 result-name 文本随 resultNameSignal 变化自动更新
+      h(
+        "div",
+        { class: "nova-player-ctrl-quality-result" },
+        h(
+          "div",
+          { class: "nova-player-ctrl-quality-result-wrap" },
+          h(
+            "div",
+            { class: "nova-player-ctrl-quality-result-name" },
+            // 编译器自动检测动态表达式 resultNameSignal.value 并包装为 _reactiveText
+            resultNameSignal.value,
+          ),
+          // autoBadgeVisibleSignal 是 computed，自动追踪 autoActiveSignal/switchingSignal
+          // 响应式 style.display 让自动徽标随 autoBadgeVisibleSignal 变化自动显隐
+          h(
+            "span",
+            {
+              class: "nova-player-ctrl-quality-result-auto-badge",
+              style: { display: autoBadgeVisibleSignal.value ? "" : "none" },
+            },
+            AUTO_LABEL,
+          ),
+        ),
       ),
-    ),
-    // 清晰度下拉菜单（li 由 renderQualities 命令式重建）
-    h('div', { class: 'player-ctrl-quality-menu-wrap' },
-      h('ul', { class: 'player-ctrl-quality-menu', ref: 'qualityListRef' }),
-    ),
-    // 气泡（保留节点，默认 display:none，与参考 DOM 一致）
-    h('div', { class: 'player-ctrl-quality-bubble', style: { display: 'none' } }),
-  );
-});
+      // 清晰度下拉菜单（For 组件 key-based 精准更新，menuItemsSignal 变化时自动同步）
+      h(
+        "div",
+        { class: "nova-player-ctrl-quality-menu-wrap" },
+        h(
+          "ul",
+          { class: "nova-player-ctrl-quality-menu" },
+          h(For, {
+            each: menuItemsSignal,
+            // For 回调入参为 unknown：类型谓词收窄（替代 as 断言）
+            key: (item: unknown): string =>
+              isQualityMenuItem(item) ? item.id : "",
+            render: (item: unknown): VNode =>
+              isQualityMenuItem(item) ? renderItem(item) : h("li", {}),
+          }),
+        ),
+      ),
+      // 气泡（保留节点，默认 display:none，与参考 DOM 一致）
+      h("div", {
+        class: "nova-player-ctrl-quality-bubble",
+        style: { display: "none" },
+      }),
+    );
+  },
+);

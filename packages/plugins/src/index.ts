@@ -1,6 +1,6 @@
 /**
  * ============================================
- * hili-player 插件系统
+ * Lumina 插件系统（Nova 播放器官方插件）
  * ============================================
  *
  * 使用方式（插件列表走 config.plugins.list，也可构造后逐个 player.use()）：
@@ -12,7 +12,7 @@
  *   HlsPlugin,
  *   FlvPlugin,
  *   InteractionPlugin
- * } from '@hili-player/plugins';
+ * } from '@lumina/plugins';
  *
  * const player = new VideoPlayer({
  *   src: 'video.mp4',
@@ -25,7 +25,7 @@
  *         ]
  *       }),
  *       DashPlugin({ autoplay: true }),
- *       InteractionPlugin({ isEdit: false })
+ *       InteractionPlugin({ mode: 'interactive' })
  *     ]
  *   }
  * });
@@ -80,6 +80,18 @@ export type { DanmakuItem } from './danmaku/types';
 export { SubtitlePlugin, createSubtitlePlugin } from './subtitle';
 export type { SubtitlePluginConfig, SubtitlePluginAPI } from './subtitle';
 
+// 导出 AI 字幕扩展能力（后端可配置、后续对接）
+export type { AiSubtitleBackendConfig, AiSubtitleEntry } from './subtitle';
+export { AiSubtitleFetcher, defaultAiSubtitleParser, fillAiTemplate } from './subtitle';
+
 // 导出交互插件 - 使用工厂函数
 export { InteractionPlugin } from './interaction';
-export type { InteractionPluginConfig, InteractionPluginAPI } from './interaction';
+export type {
+  InteractionPluginConfig,
+  InteractionPluginMode,
+  InteractionPluginAPI,
+} from './interaction';
+
+// 导出音效插件 - 使用工厂函数
+export { AudioEffectPlugin, createAudioEffectPlugin } from './audioeffect';
+export type { AudioEffectPluginConfig, AudioEffectPluginAPI } from './audioeffect';

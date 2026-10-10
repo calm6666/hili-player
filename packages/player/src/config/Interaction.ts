@@ -11,7 +11,7 @@ import type {
   InteractionScore,
   InteractionVote,
   VoteOption,
-} from '@/hili-player/types';
+} from '@/nova/types';
 
 /**
  * 点赞关注默认配置

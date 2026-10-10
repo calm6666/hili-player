@@ -33,8 +33,8 @@ import type {
   HlsPlayer as MonitorHlsPlayer,
   FlvPlayer as MonitorFlvPlayer,
 } from './types';
-import { BrowserCapabilityDetector } from '@/hili-player/utils/browserCapabilityDetector';
-import type { BrowserCapabilityResult } from '@/hili-player/utils/browserCapabilityDetector';
+import { BrowserCapabilityDetector } from '@/nova/utils/browserCapabilityDetector';
+import type { BrowserCapabilityResult } from '@/nova/utils/browserCapabilityDetector';
 import type { EventBus } from '@/core/eventBus';
 import { createLogger } from '@/utils';
 const logger = createLogger('MediaIntegration');

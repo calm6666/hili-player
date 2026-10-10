@@ -3,8 +3,7 @@
  * 管理弹幕轨道分配
  */
 
-import { DanmakuType, DanmakuArea } from '@/types/danmaku';
-import type { DanmakuTrack, DanmakuRenderItem, TrackConfig } from './types';
+import { DanmakuType, DanmakuArea, type DanmakuTrack, type DanmakuRenderItem, type TrackConfig } from './types';
 
 /** 轨道管理器配置 */
 interface TrackManagerConfig {
@@ -67,8 +66,9 @@ export class TrackManager {
    * @param width 容器宽度
    * @param height 容器高度
    * @param area 区域档位（默认全屏）
+   * @param inFlightItems 重建时仍渲染中的弹幕（回填占用，防止占用蒸发）
    */
-  initTracks(width: number, height: number, area: DanmakuArea = DanmakuArea.FULL): void {
+  initTracks(width: number, height: number, area: DanmakuArea = DanmakuArea.FULL, inFlightItems?: DanmakuRenderItem[]): void {
     this.state.width = width;
     this.state.height = height;
     this.state.area = area;
@@ -106,6 +106,31 @@ export class TrackManager {
         lastItemEndX: width,
         lastItemEndTime: 0,
       });
+    }
+
+    // 回填在飞弹幕占用：重建会生成全新空轨道集合，若不把仍在渲染的
+    // 弹幕重新登记进轨道，全部占用信息蒸发——后续 getAvailableTrack
+    // 会把新弹幕分配到在飞弹幕正使用的 y 位置，两条弹幕上下重叠
+    // （resize / 字号缩放 / 区域变化都会触发重建，此为「同时间两条
+    // 弹幕轨道重叠」的根因）
+    if (inFlightItems) {
+      for (const item of inFlightItems) {
+        if (!item.isRendering) continue;
+        // 轨道高度可能已变化：按 |track.y - item.y| 就近回填
+        let bestIndex = -1;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (const track of this.state.tracks) {
+          const distance = Math.abs(track.y - item.y);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = track.index;
+          }
+        }
+        if (bestIndex >= 0) {
+          this.state.tracks[bestIndex].items.add(item);
+          item.trackIndex = bestIndex;
+        }
+      }
     }
   }
 
@@ -291,7 +316,16 @@ export class TrackManager {
 
     for (const existingItem of track.items) {
       if (!existingItem.isRendering) continue;
-      if (existingItem.type !== DanmakuType.SCROLL) continue;
+
+      // 固定弹幕（顶部/底部）展示期间整条轨道被占用，滚动弹幕不得进入：
+      // 此前直接 continue 跳过固定弹幕，滚动弹幕会与同轨道展示中的固定
+      // 弹幕上下重叠（同一时间发送滚动 + 固定弹幕即可复现）
+      if (existingItem.type !== DanmakuType.SCROLL) {
+        if (this.hasTrackConflict(track, currentTime)) {
+          return false;
+        }
+        continue;
+      }
 
       const elapsedTime = currentTime - existingItem.createTime;
       const existingProgress = elapsedTime / existingItem.duration;
@@ -321,6 +355,27 @@ export class TrackManager {
   }
 
   /**
+   * 轨道占用冲突判定：任意类型的在飞弹幕剩余展示时间 > 500ms 即视为占用
+   *
+   * 固定弹幕（顶部/底部）与滚动弹幕必须互斥共享轨道——滚动弹幕横穿
+   * 整条轨道，与同轨道的固定弹幕必然上下重叠；此前固定弹幕只检查同
+   * 类型占用、滚动弹幕直接跳过固定弹幕，两种类型可以叠进同一条轨道
+   * @param track 轨道
+   * @param currentTime 当前时间
+   */
+  private hasTrackConflict(track: DanmakuTrack, currentTime: number): boolean {
+    for (const existingItem of track.items) {
+      if (!existingItem.isRendering) continue;
+      const elapsedTime = currentTime - existingItem.createTime;
+      const remainingTime = existingItem.duration - elapsedTime;
+      if (remainingTime > 500) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * 获取固定位置轨道
    * @param type 弹幕类型
    * @param currentTime 当前时间
@@ -335,49 +390,26 @@ export class TrackManager {
       const maxTrackIndex = Math.floor(tracks.length / 3);
       for (let i = 0; i < maxTrackIndex && i < tracks.length; i++) {
         const track = tracks[i];
-        let hasConflict = false;
 
-        for (const existingItem of track.items) {
-          if (existingItem.isRendering && existingItem.type === type) {
-            const elapsedTime = currentTime - existingItem.createTime;
-            const remainingTime = existingItem.duration - elapsedTime;
-            if (remainingTime > 500) {
-              hasConflict = true;
-              break;
-            }
-          }
-        }
-
-        if (!hasConflict) {
+        if (!this.hasTrackConflict(track, currentTime)) {
           return i;
         }
       }
     } else {
-      // 底部弹幕：也从上方开始查找可用轨道，但不使用安全区域内的轨道
-      // 找到不在安全区域内的轨道
-      for (let i = 0; i < tracks.length; i++) {
+      // 底部弹幕：从底部（数组末尾，y 最大）向上查找可用轨道。
+      // 此前错误地从数组头部（屏幕顶部）开始遍历：tracks[0].y 远小于
+      // 安全区边界，第一条轨道永远直接命中，导致「类型选择底部却显示
+      // 到顶部」。轨道起点进入底部安全区（约下方 20%，字幕预留区）的
+      // 跳过不使用；底部排满后继续向上降级，与顶部弹幕冲突判断一致
+      for (let i = tracks.length - 1; i >= 0; i--) {
         const track = tracks[i];
-        
+
         // 跳过安全区域内的轨道（底部20%）
         if (track.y > safeAreaBoundary) {
           continue;
         }
 
-        let hasConflict = false;
-        for (const existingItem of track.items) {
-          if (existingItem.isRendering && existingItem.type === type) {
-            const elapsedTime = currentTime - existingItem.createTime;
-            const remainingTime = existingItem.duration - elapsedTime;
-
-            // 如果还有剩余显示时间，不能放置
-            if (remainingTime > 500) {
-              hasConflict = true;
-              break;
-            }
-          }
-        }
-
-        if (!hasConflict) {
+        if (!this.hasTrackConflict(track, currentTime)) {
           return i;
         }
       }

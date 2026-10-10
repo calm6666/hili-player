@@ -3,40 +3,73 @@
  * 弹幕设置面板组件 (DmSetting)
  * ============================================
  * 结构与 `CicadaPlayerNext/platform/danmusetting.txt` 逐条对应
- * （bpx-player-* → player-*，bui-* → ui-*）。外层
- * `.player-dm-setting-wrap > .player-dm-setting-box.ui.ui-panel.ui-dark` 由 SendBar 提供，
+ * （bpx-nova-player-* → nova-player-*，bui-* → ui-*）。外层
+ * `.nova-player-dm-setting-wrap > .nova-player-dm-setting-box.ui.ui-panel.ui-dark` 由 SendBar 提供，
  * 本组件从 `.ui-area` 起渲染左右两块：
  *   左：按类型过滤 / 弹幕随屏幕缩放·防挡字幕·智能防挡弹幕 / 屏蔽词 /
  *       显示区域·不透明度·弹幕字号·弹幕速度 / 高级设置
  *   右：更多弹幕设置（返回）/ 速度同步 / 弹幕字体 / 粗体 / 描边类型 / 恢复默认设置
+ *
+ * 响应式迁移：
+ *   - 字体下拉结果文案（fontResultRef.textContent）从命令式改为 signal + _reactiveText
+ *   - 字体下拉列表显隐（fontListRef.style.display）从命令式改为 signal + onEffect
+ *   - 按类型过滤多选 / 弹幕密度互斥高亮从点击内 classList 命令式改为 signal 驱动 class
+ *   - 二级页切换由 pageIndexSignal 一站式驱动（页签 active 类 / 外框与面板根尺寸 /
+ *     move 位移全部为派生绑定，过渡由 .ui-panel-wrap / .ui-area 上的 CSS transition 承担）
+ *   - 保留命令式：Slider/Checkbox 组件 API 调用（sliderApis.*）、
+ *     弹幕设置初始值从运行时状态推送给 Slider API
  */
 
-import { h, defineComponent, useContext, useTemplateRef } from "@/core";
+import {
+  h,
+  defineComponent,
+  useContext,
+  useTemplateRef,
+  signal,
+  onEffect,
+  For,
+  t,
+} from "@/core";
 import type { VNode } from "@/types";
-import type { TypedStateManager } from "@/core/state";
-import { Slider } from "@/hili-player/components/Slider";
-import { Checkbox } from "@/hili-player/components/Checkbox";
-import { switchPanelPage } from "@/hili-player/components/PanelPage";
-import { ArrowLeft, ArrowRight } from "@/hili-player/components/icons";
+import { Slider } from "@/nova/components/Slider";
+import { Checkbox } from "@/nova/components/Checkbox";
+import { ArrowLeft, ArrowRight } from "@/nova/components/icons";
 import {
   StateContext,
   PlayerStateKeyEnum,
   type PlayerStateMap,
 } from "@/store/runtimeState";
+import type { TypedStateManager } from "@/core/state";
 
 /** 弹幕速度滑杆值（0-100）到速度倍率的映射：0 → 0.5，50 → 1.0，100 → 1.5 */
 const speedSliderToMultiplier = (value: number): number => 0.5 + value / 100;
 
-/** 弹幕字体下拉项（对应参考 bui-select-list 的 8 个 data-value） */
+/**
+ * 弹幕字体下拉项（对应参考 bui-select-list 的 8 个 data-value）
+ * label 存 i18n key（字体名为专有名词，en-US 语言包保留同样文字），
+ * 渲染时经 t() 取文案，避免模块加载期 t() 在 initI18n 之前执行取错语言
+ */
 const FONT_FAMILIES: Array<{ label: string; value: string }> = [
-  { label: "黑体", value: "SimHei, 'Microsoft JhengHei'" },
-  { label: "宋体", value: "SimSun" },
-  { label: "新宋体", value: "NSimSun" },
-  { label: "仿宋", value: "FangSong" },
-  { label: "微软雅黑", value: "'Microsoft YaHei'" },
-  { label: "微软雅黑 Light", value: "'Microsoft Yahei UI Light'" },
-  { label: "Noto Sans DemiLight", value: "'Noto Sans CJK SC DemiLight'" },
-  { label: "Noto Sans Regular", value: "'Noto Sans CJK SC Regular'" },
+  {
+    label: "player.ui.dmsetting.font.simhei",
+    value: "SimHei, 'Microsoft JhengHei'",
+  },
+  { label: "player.ui.dmsetting.font.simsun", value: "SimSun" },
+  { label: "player.ui.dmsetting.font.newsimsun", value: "NSimSun" },
+  { label: "player.ui.dmsetting.font.fangsong", value: "FangSong" },
+  { label: "player.ui.dmsetting.font.msyh", value: "'Microsoft YaHei'" },
+  {
+    label: "player.ui.dmsetting.font.msyh_light",
+    value: "'Microsoft Yahei UI Light'",
+  },
+  {
+    label: "player.ui.dmsetting.font.noto_demi",
+    value: "'Noto Sans CJK SC DemiLight'",
+  },
+  {
+    label: "player.ui.dmsetting.font.noto_regular",
+    value: "'Noto Sans CJK SC Regular'",
+  },
 ];
 
 export interface DmSettingProps {}
@@ -62,14 +95,35 @@ const AREA_MARKS = [
   { value: 100, name: "100%" },
 ];
 
-/** 弹幕速度滑杆的档位标记 */
-const SPEED_MARKS = [
-  { value: 0, name: "极慢" },
-  { value: 25, name: "较慢" },
-  { value: 50, name: "适中" },
-  { value: 75, name: "较快" },
-  { value: 100, name: "极快" },
+/** 第一页（弹幕设置主面板）尺寸，px */
+const DM_PAGE_MAIN = { width: 320, height: 322 };
+/** 第二页（更多弹幕设置）尺寸，px */
+const DM_PAGE_MORE = { width: 266, height: 250 };
+
+/**
+ * 弹幕速度滑杆的档位标记
+ * 工厂函数：t() 需在组件实例化（initI18n 之后）调用，模块加载期调用会取错语言
+ */
+const getSpeedMarks = (): Array<{ value: number; name: string }> => [
+  { value: 0, name: t("player.ui.dmsetting.speed.slowest") },
+  { value: 25, name: t("player.ui.dmsetting.speed.slower") },
+  { value: 50, name: t("player.ui.dmsetting.speed.medium") },
+  { value: 75, name: t("player.ui.dmsetting.speed.faster") },
+  { value: 100, name: t("player.ui.dmsetting.speed.fastest") },
 ];
+
+/**
+ * 字体选项类型谓词
+ * For 控制流的 render/key 回调入参为 unknown，
+ * 按项目规范用类型谓词替代 as 断言收窄类型
+ */
+const isFontOption = (
+  item: unknown,
+): item is { label: string; value: string } =>
+  typeof item === "object" &&
+  item !== null &&
+  "label" in item &&
+  "value" in item;
 
 /** 按类型过滤的四个图标路径（来自参考 DOM 的 svg path） */
 const FILTER_ICONS: Record<string, string[]> = {
@@ -94,15 +148,20 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
       StateContext,
     );
 
-    const uiAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, "dmUiAreaRef");
-    const fontResultRef = useTemplateRef<HTMLSpanElement>(
-      lifecycle,
-      "dmFontResultRef",
-    );
     const fontListRef = useTemplateRef<HTMLDivElement>(
       lifecycle,
       "dmFontListRef",
     );
+
+    /**
+     * 响应式信号：当前页下标（0 弹幕设置主面板 / 1 更多弹幕设置）
+     * 一站式驱动翻页三联动（替代旧的 switchPanelPage 命令式工具与 pageBox 量测回退）：
+     *   - 页签 ui-panel-item-active 类（响应式 class）
+     *   - 面板根 .ui-area 与外框 .ui-panel-wrap 的宽高跟随当前页（响应式 style，
+     *     对应旧 resizeArea 语义，过渡由 CSS transition 承担）
+     *   - .ui-panel-move 的 translateX 位移（响应式 style）
+     */
+    const pageIndexSignal = signal<number>(0);
 
     const sliderApis: {
       area?: (value: number) => void;
@@ -110,6 +169,37 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
       fontsize?: (value: number) => void;
       speed?: (value: number) => void;
     } = {};
+
+    /**
+     * 响应式信号：字体下拉选中项文案
+     * 替代旧的 fontResultRef.value.textContent = label 命令式操作
+     * 存 i18n key，VNode 内写 t(fontResultSignal.value)，编译器自动包装为 _reactiveText，
+     * 信号或语言变化时自动更新 Text 节点
+     */
+    const fontResultSignal = signal<string>(
+      FONT_FAMILIES[0]?.label ?? "player.ui.dmsetting.font.simhei",
+    );
+
+    /**
+     * 响应式信号：字体下拉选中项 value
+     * 替代旧的 handleFontPick 内 forEach + classList.add/remove('ui-select-item-active') 命令式操作
+     * VNode 内用 class: ['ui-select-item', { 'ui-select-item-active': fontValueSignal.value === font.value }] 自动同步
+     */
+    const fontValueSignal = signal<string>(FONT_FAMILIES[0]?.value ?? "");
+
+    /**
+     * 响应式信号：描边类型选中项（存 i18n key，与选项 label 比较互斥高亮）
+     * 替代旧的 fontborder radio onClick 内 forEach + classList.add/remove('active') 命令式操作
+     * VNode 内用 class: ['radio-button', { active: strokeTypeSignal.value === item.label }] 自动同步
+     */
+    const strokeTypeSignal = signal<string>("player.ui.dmsetting.stroke.heavy");
+
+    /**
+     * 响应式信号：字体下拉列表展开态
+     * 替代旧的 fontListRef.value.style.display = ... 命令式操作
+     * onEffect 内读取 signal.value 自动追踪，信号变化时自动更新 style.display
+     */
+    const fontListOpenSignal = signal<boolean>(false);
 
     const handleAreaChange = (value: number): void => {
       stateMgr?.set(PlayerStateKeyEnum.DANMAKU_AREA, value);
@@ -134,32 +224,34 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
       stateMgr?.set(PlayerStateKeyEnum.DANMAKU_SCALE_WITH_SCREEN, checked);
     };
 
-    const handleFilterTypeClick = (event: MouseEvent): void => {
-      const target = event.currentTarget;
-      if (!(target instanceof HTMLElement)) return;
-      target.classList.toggle("player-block-filter-type-selected");
-    };
+    /**
+     * 响应式信号：按类型过滤的选中类型集合（多选，纯本地视觉状态）
+     * 驱动各过滤项的 selected 类（__reactiveAttrs），
+     * 替代旧的 handleFilterTypeClick 内 classList.toggle 命令式操作
+     */
+    const filterSelectedSignal = signal<Set<string>>(new Set());
 
-    const handleDensityClick = (event: MouseEvent): void => {
-      const target = event.currentTarget;
-      if (!(target instanceof HTMLElement)) return;
-      target.parentElement
-        ?.querySelectorAll(".player-dm-setting-density")
-        .forEach((item) => item.classList.remove("active"));
-      target.classList.add("active");
+    /**
+     * 按类型过滤项点击：写信号切换选中态（DOM 类名自动同步）
+     * @param type - 过滤类型标识
+     */
+    const toggleFilterType = (type: string): void => {
+      const next = new Set(filterSelectedSignal.value);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      filterSelectedSignal.value = next;
     };
 
     /**
-     * 左右面板切换：目标页加 active ＋ move 位移一页宽 ＋ 外框尺寸跟到目标页
-     * （位移与外框过渡由 .ui-panel-move / .ui-panel-wrap / .ui-area 上的 transition 承担）
+     * 左右面板切换：写页码信号即可（页签类名 / 外框与面板根尺寸 / 位移由响应式系统自动同步，
+     * 过渡由 .ui-panel-wrap / .ui-panel-move / .ui-area 上的 CSS transition 承担）
      * @param show - true 显示右侧「更多弹幕设置」
      */
     const toggleRight = (show: boolean): void => {
-      switchPanelPage({
-        root: uiAreaRef.value,
-        index: show ? 1 : 0,
-        resizeArea: true,
-      });
+      pageIndexSignal.value = show ? 1 : 0;
     };
 
     /** 复位到第一页（面板关闭时调用，下次打开即第一页） */
@@ -169,29 +261,32 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
 
     /**
      * 切换弹幕字体下拉的展开态
-     * @param open - 是否展开
+     * 通过更新信号驱动 onEffect 更新 style.display（响应式）
+     * @param open - 是否展开；缺省时切换当前态
      */
     const toggleFontList = (open?: boolean): void => {
-      const list = fontListRef.value;
-      if (!list) return;
-      const next = open ?? list.style.display !== "block";
-      list.style.display = next ? "block" : "none";
+      fontListOpenSignal.value = open ?? !fontListOpenSignal.value;
     };
 
     /**
-     * 选择弹幕字体
-     * @param label - 字体显示名
-     * @param event - 点击事件（取 currentTarget 作为选中项）
+     * 字体下拉列表显隐响应式同步
+     * onEffect 内读取 fontListOpenSignal.value 自动追踪，信号变化时自动更新 style.display
      */
-    const handleFontPick = (label: string, event: MouseEvent): void => {
-      const target = event.currentTarget;
-      if (target instanceof HTMLElement) {
-        target.parentElement
-          ?.querySelectorAll(".ui-select-item")
-          .forEach((item) => item.classList.remove("ui-select-item-active"));
-        target.classList.add("ui-select-item-active");
-        if (fontResultRef.value) fontResultRef.value.textContent = label;
-      }
+    onEffect(lifecycle, () => {
+      const isOpen = fontListOpenSignal.value;
+      const list = fontListRef.value;
+      if (list) list.style.display = isOpen ? "block" : "none";
+    });
+
+    /**
+     * 选择弹幕字体
+     * 响应式：更新 fontValueSignal（驱动列表项互斥高亮 class）+ fontResultSignal（存 i18n key，驱动结果文案 _reactiveText）
+     * 替代旧的 forEach + classList.add/remove('ui-select-item-active') 命令式操作
+     * @param font - 字体选项（label 为 i18n key + value）
+     */
+    const handleFontPick = (font: { label: string; value: string }): void => {
+      fontValueSignal.value = font.value;
+      fontResultSignal.value = font.label;
       toggleFontList(false);
     };
 
@@ -209,23 +304,34 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
     /** 渲染「按类型过滤」的四个图标项 */
     const renderFilterTypes = (): VNode[] => {
       const types = [
-        { type: "typeScroll", label: "滚动" },
-        { type: "typeTopBottom", label: "固定" },
-        { type: "typeColor", label: "彩色" },
-        { type: "typeSpecial", label: "高级" },
+        { type: "typeScroll", label: t("player.ui.dmsetting.filter.scroll") },
+        { type: "typeTopBottom", label: t("player.ui.dmsetting.filter.fix") },
+        { type: "typeColor", label: t("player.ui.dmsetting.filter.color") },
+        {
+          type: "typeSpecial",
+          label: t("player.ui.dmsetting.filter.advanced"),
+        },
       ];
 
       return types.map((item) =>
         h(
           "div",
           {
-            class: `player-block-filter-type player-block-${item.type}`,
+            // 选中态类名由 filterSelectedSignal 响应式驱动（__reactiveAttrs + normalizeClass）
+            class: [
+              "nova-player-block-filter-type",
+              `nova-player-block-${item.type}`,
+              {
+                "nova-player-block-filter-type-selected":
+                  filterSelectedSignal.value.has(item.type),
+              },
+            ],
             "data-type": item.type,
-            onClick: handleFilterTypeClick,
+            onClick: () => toggleFilterType(item.type),
           },
           h(
             "span",
-            { class: "player-block-filter-image" },
+            { class: "nova-player-block-filter-image" },
             h(
               "svg",
               {
@@ -244,13 +350,13 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
           ),
           h(
             "span",
-            { class: "player-block-filter-label" },
+            { class: "nova-player-block-filter-label" },
             h("span", {}, item.label),
             ...(item.type === "typeSpecial"
               ? [
                   h(
                     "span",
-                    { class: "player-block-advanced-more" },
+                    { class: "nova-player-block-advanced-more" },
                     h(
                       "svg",
                       {
@@ -276,6 +382,44 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
       );
     };
 
+    /**
+     * 弹幕密度选项（参考 DOM 中隐藏，初始选中 normal）
+     * 以类型注解替代 as 断言；t() 在 setup 顶层调用安全
+     * （initI18n 在组件 setup 之前执行）
+     */
+    const densityOptions: Array<{
+      density: string;
+      label: string;
+      active?: boolean;
+    }> = [
+      {
+        density: "normal",
+        label: t("player.ui.dmsetting.density.normal"),
+        active: true,
+      },
+      { density: "more", label: t("player.ui.dmsetting.density.more") },
+      { density: "most", label: t("player.ui.dmsetting.density.overlap") },
+    ];
+
+    /**
+     * 响应式信号：弹幕密度选中值（互斥单选，纯本地视觉状态）
+     * 初值取 densityOptions 中标记 active 的项，
+     * 驱动各密度项的 active 类（__reactiveAttrs），
+     * 替代旧的 handleDensityClick 内 querySelectorAll + classList 命令式互斥
+     */
+    const densityValueSignal = signal<string>(
+      densityOptions.find((option) => option.active === true)?.density ??
+        "normal",
+    );
+
+    /**
+     * 弹幕密度项点击：写信号即可（组内互斥由响应式系统自动同步）
+     * @param density - 密度标识
+     */
+    const handleDensityPick = (density: string): void => {
+      densityValueSignal.value = density;
+    };
+
     /** 渲染一个滑杆行（标题 + 内容 + Slider） */
     const renderSliderRow = (
       cls: string,
@@ -295,7 +439,9 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
         h(
           "div",
           { class: `${cls}-content` },
-          h("div", { class: `player-dm-setting-ui-${cls.split("-").pop()}` }),
+          h("div", {
+            class: `nova-player-dm-setting-ui-${cls.split("-").pop()}`,
+          }),
         ),
         h(Slider, {
           value: options.value,
@@ -331,75 +477,98 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
 
     return h(
       "div",
-      { class: "ui-area", ref: "dmUiAreaRef" },
+      {
+        class: "ui-area",
+        // 面板根尺寸跟随当前页（原 resizeArea 语义，响应式 style 派生，
+        // 过渡由 .ui-area 上的 CSS transition 承担）
+        style: {
+          width: `${(pageIndexSignal.value === 0 ? DM_PAGE_MAIN : DM_PAGE_MORE).width}px`,
+          height: `${(pageIndexSignal.value === 0 ? DM_PAGE_MAIN : DM_PAGE_MORE).height}px`,
+        },
+      },
       h(
         "div",
         {
           class: "ui-panel-wrap",
-          style: { width: "320px", height: "322px" },
+          // 外框尺寸跟随当前页（响应式 style 派生，过渡由 CSS transition 承担）
+          style: {
+            width: `${(pageIndexSignal.value === 0 ? DM_PAGE_MAIN : DM_PAGE_MORE).width}px`,
+            height: `${(pageIndexSignal.value === 0 ? DM_PAGE_MAIN : DM_PAGE_MORE).height}px`,
+          },
         },
         h(
           "div",
           {
             class: "ui-panel-move",
-            style: { width: "586px", transform: "translateX(0px)" },
+            // 位移由 pageIndexSignal 派生：第二页时左移一页宽（过渡由 CSS transition 承担）
+            style: {
+              width: `${DM_PAGE_MAIN.width + DM_PAGE_MORE.width}px`,
+              transform: `translateX(${pageIndexSignal.value === 0 ? 0 : -DM_PAGE_MAIN.width}px)`,
+            },
           },
           // ===== 左：弹幕设置主面板 =====
           h(
             "div",
             {
-              class: "ui-panel-item ui-panel-item-active",
-              style: { width: "320px", height: "322px" },
+              // 第一页页签 active 类由 pageIndexSignal 响应式驱动
+              class: [
+                "ui-panel-item",
+                { "ui-panel-item-active": pageIndexSignal.value === 0 },
+              ],
+              style: {
+                width: `${DM_PAGE_MAIN.width}px`,
+                height: `${DM_PAGE_MAIN.height}px`,
+              },
             },
             h(
               "div",
-              { class: "player-dm-setting-left" },
+              { class: "nova-player-dm-setting-left" },
               // 按类型过滤
               h(
                 "div",
-                { class: "player-dm-setting-left-block" },
+                { class: "nova-player-dm-setting-left-block" },
                 h(
                   "div",
-                  { class: "player-dm-setting-left-block-title" },
-                  "按类型过滤",
+                  { class: "nova-player-dm-setting-left-block-title" },
+                  t("player.ui.dmsetting.filter_type"),
                 ),
                 h(
                   "div",
-                  { class: "player-dm-setting-left-block-content" },
+                  { class: "nova-player-dm-setting-left-block-content" },
                   ...renderFilterTypes(),
                 ),
               ),
               // 三个复选框
               h(
                 "div",
-                { class: "player-dm-setting-left-radio" },
+                { class: "nova-player-dm-setting-left-radio" },
                 h(
                   "span",
-                  { class: "player-dm-setting-left-fs" },
+                  { class: "nova-player-dm-setting-left-fs" },
                   h(Checkbox, {
                     checked:
                       stateMgr?.get(
                         PlayerStateKeyEnum.DANMAKU_SCALE_WITH_SCREEN,
                       ) ?? true,
-                    label: "弹幕随屏幕缩放",
+                    label: t("player.ui.dmsetting.scale_with_screen"),
                     onChange: handleScaleChange,
                   }),
                 ),
                 h(
                   "span",
                   {
-                    class: "player-dm-setting-left-ps",
-                    "data-text": "视频底部15%部分为空白保留区",
+                    class: "nova-player-dm-setting-left-ps",
+                    "data-text": t("player.ui.dmsetting.reserve_area"),
                   },
                   h(Checkbox, {
-                    label: "防挡字幕",
+                    label: t("player.ui.dmsetting.prevent_shade"),
                   }),
                 ),
                 h(
                   "span",
-                  { class: "player-dm-setting-left-mask" },
+                  { class: "nova-player-dm-setting-left-mask" },
                   h(Checkbox, {
-                    label: "智能防挡弹幕",
+                    label: t("player.ui.dmsetting.smart_mask"),
                     checked: true,
                   }),
                 ),
@@ -407,84 +576,82 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
               // 防挡字幕保留区示意
               h(
                 "div",
-                { class: "player-dm-setting-left-preventshade" },
+                { class: "nova-player-dm-setting-left-preventshade" },
                 h("span", {
-                  class: "player-dm-setting-left-preventshade-box",
-                  "data-text": "视频底部15%部分为空白保留区",
+                  class: "nova-player-dm-setting-left-preventshade-box",
+                  "data-text": t("player.ui.dmsetting.reserve_area"),
                   "data-position": "top-left",
                 }),
               ),
               h(
                 "div",
                 {
-                  class: "player-dm-setting-left-danmaku-mask",
+                  class: "nova-player-dm-setting-left-danmaku-mask",
                   style: { display: "none" },
                 },
-                h("span", { class: "player-dm-setting-left-danmaku-mask-box" }),
+                h("span", {
+                  class: "nova-player-dm-setting-left-danmaku-mask-box",
+                }),
               ),
               // 屏蔽词
               h(
                 "div",
-                { class: "player-dm-setting-left-block-word" },
+                { class: "nova-player-dm-setting-left-block-word" },
                 h(
                   "div",
                   {
-                    class: "player-dm-setting-left-block-add",
+                    class: "nova-player-dm-setting-left-block-add",
                   },
-                  "弹幕观看屏蔽词",
+                  t("player.ui.dmsetting.block_words"),
                 ),
                 h(
                   "div",
                   {
-                    class: "player-dm-setting-left-block-sync",
+                    class: "nova-player-dm-setting-left-block-sync",
                   },
-                  "同步屏蔽列表",
+                  t("player.ui.dmsetting.sync_block_list"),
                 ),
               ),
               // 显示区域
-              renderSliderRow("player-dm-setting-left-area", "显示区域", {
-                value: 50,
-                step: 5,
-                marks: AREA_MARKS,
-                onChange: handleAreaChange,
-                onMounted: (api) => {
-                  sliderApis.area = api.setValue;
+              renderSliderRow(
+                "nova-player-dm-setting-left-area",
+                t("player.ui.dmsetting.area"),
+                {
+                  value: 50,
+                  step: 5,
+                  marks: AREA_MARKS,
+                  onChange: handleAreaChange,
+                  onMounted: (api) => {
+                    sliderApis.area = api.setValue;
+                  },
                 },
-              }),
+              ),
               // 弹幕密度（参考中隐藏）
               h(
                 "div",
                 {
-                  class: "player-dm-setting-left-dmDensity",
+                  class: "nova-player-dm-setting-left-dmDensity",
                   style: { display: "none" },
                 },
                 h(
                   "div",
-                  { class: "player-dm-setting-left-dmDensity-left-area" },
-                  "弹幕密度",
+                  { class: "nova-player-dm-setting-left-dmDensity-left-area" },
+                  t("player.ui.dmsetting.density"),
                 ),
                 h(
                   "div",
-                  { class: "player-dm-setting-left-dmDensity-right-area" },
-                  ...(
-                    [
-                      { density: "normal", label: "正常", active: true },
-                      { density: "more", label: "较多" },
-                      { density: "most", label: "重叠" },
-                    ] as Array<{
-                      density: string;
-                      label: string;
-                      active?: boolean;
-                    }>
-                  ).map((item) =>
+                  { class: "nova-player-dm-setting-left-dmDensity-right-area" },
+                  ...densityOptions.map((item) =>
                     h(
                       "span",
                       {
-                        class: item.active
-                          ? "player-dm-setting-density active"
-                          : "player-dm-setting-density",
+                        // 选中态类名由 densityValueSignal 响应式驱动（__reactiveAttrs + normalizeClass）
+                        class: [
+                          "nova-player-dm-setting-density",
+                          { active: densityValueSignal.value === item.density },
+                        ],
                         "data-density": item.density,
-                        onClick: handleDensityClick,
+                        onClick: () => handleDensityPick(item.density),
                       },
                       item.label,
                     ),
@@ -492,47 +659,59 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
                 ),
               ),
               // 不透明度
-              renderSliderRow("player-dm-setting-left-opacity", "不透明度", {
-                value: 100,
-                onChange: handleOpacityChange,
-                onMounted: (api) => {
-                  sliderApis.opacity = api.setValue;
+              renderSliderRow(
+                "nova-player-dm-setting-left-opacity",
+                t("player.ui.dmsetting.opacity"),
+                {
+                  value: 100,
+                  onChange: handleOpacityChange,
+                  onMounted: (api) => {
+                    sliderApis.opacity = api.setValue;
+                  },
                 },
-              }),
+              ),
               // 弹幕字号
-              renderSliderRow("player-dm-setting-left-fontsize", "弹幕字号", {
-                value: 50,
-                onChange: handleFontsizeChange,
-                onMounted: (api) => {
-                  sliderApis.fontsize = api.setValue;
+              renderSliderRow(
+                "nova-player-dm-setting-left-fontsize",
+                t("player.ui.dmsetting.fontsize"),
+                {
+                  value: 50,
+                  onChange: handleFontsizeChange,
+                  onMounted: (api) => {
+                    sliderApis.fontsize = api.setValue;
+                  },
                 },
-              }),
+              ),
               // 弹幕速度
-              renderSliderRow("player-dm-setting-left-speedplus", "弹幕速度", {
-                value: 50,
-                step: 5,
-                marks: SPEED_MARKS,
-                onChange: handleSpeedChange,
-                onMounted: (api) => {
-                  sliderApis.speed = api.setValue;
+              renderSliderRow(
+                "nova-player-dm-setting-left-speedplus",
+                t("player.ui.dmsetting.speed"),
+                {
+                  value: 50,
+                  step: 5,
+                  marks: getSpeedMarks(),
+                  onChange: handleSpeedChange,
+                  onMounted: (api) => {
+                    sliderApis.speed = api.setValue;
+                  },
                 },
-              }),
+              ),
               // 高级设置
               h(
                 "div",
                 {
-                  class: "player-dm-setting-left-more",
+                  class: "nova-player-dm-setting-left-more",
                   onClick: () => toggleRight(true),
                 },
                 h(
                   "span",
-                  { class: "player-dm-setting-left-more-text" },
-                  "高级设置",
+                  { class: "nova-player-dm-setting-left-more-text" },
+                  t("player.ui.dmsetting.advanced"),
                 ),
                 h(
                   "span",
-                  { class: "player-dm-setting-left-more-senior-text" },
-                  "全新【硬核会员弹幕模式】",
+                  { class: "nova-player-dm-setting-left-more-senior-text" },
+                  t("player.ui.dmsetting.hardcore_member"),
                 ),
                 h("span", { class: "common-svg-icon" }, ArrowRight()),
               ),
@@ -542,53 +721,60 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
           h(
             "div",
             {
-              class: "ui-panel-item",
-              style: { width: "266px", height: "250px" },
+              // 第二页页签 active 类由 pageIndexSignal 响应式驱动
+              class: [
+                "ui-panel-item",
+                { "ui-panel-item-active": pageIndexSignal.value === 1 },
+              ],
+              style: {
+                width: `${DM_PAGE_MORE.width}px`,
+                height: `${DM_PAGE_MORE.height}px`,
+              },
             },
             h(
               "div",
-              { class: "player-dm-setting-right" },
+              { class: "nova-player-dm-setting-right" },
               h(
                 "div",
                 {
-                  class: "player-dm-setting-right-more",
+                  class: "nova-player-dm-setting-right-more",
                   onClick: () => toggleRight(false),
                 },
                 h("span", { class: "common-svg-icon" }, ArrowLeft()),
                 h(
                   "span",
-                  { class: "player-dm-setting-right-more-text" },
-                  "更多弹幕设置",
+                  { class: "nova-player-dm-setting-right-more-text" },
+                  t("player.ui.dmsetting.more"),
                 ),
               ),
-              h("div", { class: "player-dm-setting-right-separator" }),
+              h("div", { class: "nova-player-dm-setting-right-separator" }),
               h(
                 "div",
-                { class: "player-dm-setting-right-speedsync" },
+                { class: "nova-player-dm-setting-right-speedsync" },
                 h(
                   "span",
-                  { class: "player-dm-setting-right-speedsync-box" },
+                  { class: "nova-player-dm-setting-right-speedsync-box" },
                   h(Checkbox, {
-                    label: "弹幕速度同步播放倍数",
+                    label: t("player.ui.dmsetting.speed_sync"),
                   }),
                 ),
               ),
               h(
                 "div",
-                { class: "player-dm-setting-right-font" },
+                { class: "nova-player-dm-setting-right-font" },
                 h(
                   "div",
-                  { class: "player-dm-setting-right-font-title" },
-                  "弹幕字体",
+                  { class: "nova-player-dm-setting-right-font-title" },
+                  t("player.ui.dmsetting.font"),
                 ),
                 h(
                   "div",
-                  { class: "player-dm-setting-right-font-content" },
+                  { class: "nova-player-dm-setting-right-font-content" },
                   h(
                     "div",
                     {
                       class:
-                        "player-dm-setting-right-font-content-fontfamily ui ui-select ui-dark",
+                        "nova-player-dm-setting-right-font-content-fontfamily ui ui-select ui-dark",
                     },
                     h(
                       "div",
@@ -606,9 +792,11 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
                             "span",
                             {
                               class: "ui-select-result",
-                              ref: "dmFontResultRef",
                             },
-                            "黑体",
+                            // _reactiveText 创建响应式 Text 节点：
+                            // 编译器自动检测 t() 调用包装为 _reactiveText，
+                            // fontResultSignal（存 i18n key）或语言变化时自动更新 textContent
+                            t(fontResultSignal.value),
                           ),
                           h(
                             "span",
@@ -626,21 +814,31 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
                           h(
                             "ul",
                             { class: "ui-select-list" },
-                            ...FONT_FAMILIES.map((font, index) =>
-                              h(
-                                "li",
-                                {
-                                  class:
-                                    index === 0
-                                      ? "ui-select-item ui-select-item-active"
-                                      : "ui-select-item",
-                                  "data-value": font.value,
-                                  onClick: (event: MouseEvent) =>
-                                    handleFontPick(font.label, event),
-                                },
-                                font.label,
-                              ),
-                            ),
+                            // For 组件：key-based 精准更新，每个字体项只渲染一次
+                            // 选中态由响应式 class（fontValueSignal.value 自动驱动）自动同步，无需 forEach + classList.toggle
+                            h(For, {
+                              each: FONT_FAMILIES,
+                              key: (item: unknown, _index: number) =>
+                                isFontOption(item) ? item.value : "",
+                              render: (item: unknown, _index: number) => {
+                                if (!isFontOption(item)) return h("li", {});
+                                return h(
+                                  "li",
+                                  {
+                                    class: [
+                                      "ui-select-item",
+                                      {
+                                        "ui-select-item-active":
+                                          fontValueSignal.value === item.value,
+                                      },
+                                    ],
+                                    "data-value": item.value,
+                                    onClick: () => handleFontPick(item),
+                                  },
+                                  t(item.label),
+                                );
+                              },
+                            }),
                           ),
                         ),
                       ),
@@ -649,70 +847,68 @@ export const DmSetting = defineComponent<DmSettingProps, DmSettingEvents>(
                 ),
                 h(
                   "div",
-                  { class: "player-dm-setting-right-font-bold" },
+                  { class: "nova-player-dm-setting-right-font-bold" },
                   h(
                     "span",
-                    { class: "player-dm-setting-right-font-bold-box" },
+                    { class: "nova-player-dm-setting-right-font-bold-box" },
                     h(Checkbox, {
-                      label: "粗体",
+                      label: t("player.ui.dmsetting.bold"),
                     }),
                   ),
                 ),
               ),
               h(
                 "div",
-                { class: "player-dm-setting-right-fontborder" },
+                { class: "nova-player-dm-setting-right-fontborder" },
                 h(
                   "div",
-                  { class: "player-dm-setting-right-fontborder-title" },
-                  "描边类型",
+                  { class: "nova-player-dm-setting-right-fontborder-title" },
+                  t("player.ui.dmsetting.stroke_type"),
                 ),
                 h(
                   "div",
                   {
                     class:
-                      "player-dm-setting-right-fontborder-content ui ui-radio ui-dark",
+                      "nova-player-dm-setting-right-fontborder-content ui ui-radio ui-dark",
                   },
                   h(
                     "div",
-                    { class: "player-radio-wrap-button" },
+                    { class: "nova-player-radio-wrap-button" },
                     ...[
-                      { label: "重墨", active: true },
-                      { label: "描边" },
-                      { label: "45°投影" },
+                      { label: "player.ui.dmsetting.stroke.heavy" },
+                      { label: "player.ui.dmsetting.stroke.outline" },
+                      { label: "player.ui.dmsetting.stroke.projection" },
                     ].map((item) =>
                       h(
                         "div",
                         {
-                          class: item.active
-                            ? "radio-button active"
-                            : "radio-button",
-                          onClick: (event: MouseEvent) => {
-                            const target = event.currentTarget;
-                            if (!(target instanceof HTMLElement)) return;
-                            target.parentElement
-                              ?.querySelectorAll(".radio-button")
-                              .forEach((btn) => btn.classList.remove("active"));
-                            target.classList.add("active");
+                          // 响应式 class：strokeTypeSignal.value（i18n key）自动驱动 active 互斥高亮
+                          // 替代旧的 forEach + classList.add/remove('active') 命令式操作
+                          class: [
+                            "radio-button",
+                            { active: strokeTypeSignal.value === item.label },
+                          ],
+                          onClick: () => {
+                            strokeTypeSignal.value = item.label;
                           },
                         },
-                        h("span", {}, item.label),
+                        h("span", {}, t(item.label)),
                       ),
                     ),
                   ),
                 ),
               ),
-              h("div", { class: "player-dm-setting-right-separator" }),
+              h("div", { class: "nova-player-dm-setting-right-separator" }),
               h(
                 "div",
                 {
-                  class: "player-dm-setting-right-reset ui ui-button",
+                  class: "nova-player-dm-setting-right-reset ui ui-button",
                   onClick: handleReset,
                 },
                 h(
                   "div",
                   { class: "ui-area ui-button-transparent" },
-                  h("span", {}, "恢复默认设置"),
+                  h("span", {}, t("player.ui.dmsetting.reset_default")),
                 ),
               ),
             ),

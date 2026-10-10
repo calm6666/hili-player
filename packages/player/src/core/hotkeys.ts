@@ -172,7 +172,7 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "E",
-    desc: "收藏",
+    desc: "Favorite",
     keyMatcher: (e: KeyboardEvent) => e.key === "e" || e.key === "E",
     action: (ctx: HotkeyContext): void => {
       ctx.favorite();
@@ -185,7 +185,7 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "Space",
-    desc: "播放/暂停",
+    desc: "Play/Pause",
     keyMatcher: (e: KeyboardEvent) => e.key === " ",
     preventDefault: true,
     action: (ctx: HotkeyContext): void => {
@@ -194,7 +194,7 @@ export const HOTKEYS: HotkeyConfig[] = [
   },
   {
     name: "→",
-    desc: "单次快进5s，长按倍速播放",
+    desc: "Seek forward 5s, long-press for fast playback",
     keyMatcher: (e: KeyboardEvent) => e.key === "ArrowRight",
     preventDefault: true,
     action: (ctx: HotkeyContext): void => {
@@ -203,7 +203,7 @@ export const HOTKEYS: HotkeyConfig[] = [
   },
   {
     name: "←",
-    desc: "快退5s",
+    desc: "Seek backward 5s",
     keyMatcher: (e: KeyboardEvent) => e.key === "ArrowLeft",
     preventDefault: true,
     action: (ctx: HotkeyContext): void => {
@@ -217,7 +217,7 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "↑",
-    desc: "音量增加10%",
+    desc: "Volume up 10%",
     keyMatcher: (e: KeyboardEvent) => e.key === "ArrowUp",
     preventDefault: true,
     action: (ctx: HotkeyContext): void => {
@@ -226,7 +226,7 @@ export const HOTKEYS: HotkeyConfig[] = [
   },
   {
     name: "↓",
-    desc: "音量降低10%",
+    desc: "Volume down 10%",
     keyMatcher: (e: KeyboardEvent) => e.key === "ArrowDown",
     preventDefault: true,
     action: (ctx: HotkeyContext): void => {
@@ -240,15 +240,15 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "Esc",
-    desc: "退出全屏",
+    desc: "Exit fullscreen",
     keyMatcher: (e: KeyboardEvent) => e.key === "Escape",
     action: (ctx: HotkeyContext): void => {
       ctx.exitFullscreen();
     },
   },
   {
-    name: "媒体键 play/pause",
-    desc: "播放/暂停",
+    name: "Media key play/pause",
+    desc: "Play/Pause",
     keyMatcher: (e: KeyboardEvent) =>
       e.key === "MediaPlayPause" || e.key === "MediaPlay" || e.key === "MediaPause",
     action: (ctx: HotkeyContext): void => {
@@ -257,7 +257,7 @@ export const HOTKEYS: HotkeyConfig[] = [
   },
   {
     name: "F",
-    desc: "全屏/退出全屏",
+    desc: "Fullscreen/Exit fullscreen",
     keyMatcher: (e: KeyboardEvent) => e.key === "f" || e.key === "F",
     action: (ctx: HotkeyContext): void => {
       ctx.toggleFullscreen();
@@ -270,7 +270,7 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "[",
-    desc: "多P 上一个",
+    desc: "Previous episode",
     keyMatcher: (e: KeyboardEvent) => e.key === "[",
     action: (ctx: HotkeyContext): void => {
       ctx.prevEpisode();
@@ -278,7 +278,7 @@ export const HOTKEYS: HotkeyConfig[] = [
   },
   {
     name: "]",
-    desc: "多P 下一个",
+    desc: "Next episode",
     keyMatcher: (e: KeyboardEvent) => e.key === "]",
     action: (ctx: HotkeyContext): void => {
       ctx.nextEpisode();
@@ -291,7 +291,7 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "Enter",
-    desc: "发弹幕",
+    desc: "Send danmaku",
     keyMatcher: (e: KeyboardEvent) => e.key === "Enter",
     action: (ctx: HotkeyContext): void => {
       ctx.sendDanmaku();
@@ -299,7 +299,7 @@ export const HOTKEYS: HotkeyConfig[] = [
   },
   {
     name: "D",
-    desc: "开启/关闭弹幕",
+    desc: "Toggle danmaku",
     keyMatcher: (e: KeyboardEvent) => e.key === "d" || e.key === "D",
     action: (ctx: HotkeyContext): void => {
       ctx.toggleDanmaku();
@@ -312,7 +312,7 @@ export const HOTKEYS: HotkeyConfig[] = [
 
   {
     name: "M",
-    desc: "开启/关闭静音",
+    desc: "Toggle mute",
     keyMatcher: (e: KeyboardEvent) => e.key === "m" || e.key === "M",
     action: (ctx: HotkeyContext): void => {
       ctx.toggleMute();

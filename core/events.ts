@@ -8,6 +8,12 @@
 
 import type { TypedEventBus } from './eventBus';
 import type { QualityLevel } from '@/types/streamPlugin';
+import type { DisplayMode } from '@/types';
+import type {
+  SubtitleAiStatusPayload,
+  SubtitleItem,
+  SubtitleTrackInfo,
+} from '@/types/subtitle';
 
 /**
  * 播放器事件数据类型映射
@@ -105,6 +111,17 @@ export type PlayerEventMap = {
   pipChange: { isPip: boolean };
   webFullscreenChange: { isWebFullscreen: boolean };
   wideScreenChange: { isWideScreen: boolean };
+  /** 音效设置变化（音量均衡等），payload: { effect, mode } */
+  audioEffectChange: { effect: string; mode: number };
+
+  // 显示模式相关事件
+  /**
+   * 显示模式变化（normal / web / wide / mini 切换）
+   *
+   * 阶段 D.1：与 webFullscreenChange / wideScreenChange 同时发出，
+   * payload.mode 为切换后的目标模式。
+   */
+  displayModeChange: { mode: DisplayMode };
 
   // 持久化相关事件
   /** 已从持久化存储恢复上次观看位置，payload: { time }（秒） */
@@ -141,8 +158,25 @@ export type PlayerEventMap = {
   subtitleToggle: { visible: boolean };
   subtitleLangChange: string;
   subtitleSwitch: { lang: string };
-  /** 字幕列表变化 */
-  subtitleListChange: { count: number };
+  /**
+   * 字幕列表变化
+   * - count：字幕条数（loading / error 时为 0）
+   * - status：AI 字幕加载状态（兼容老监听器，未提供则表示普通列表更新）
+   *   - 'loading'：AI 字幕请求中
+   *   - 'ready'：AI 字幕已就绪（count 为实际条数）
+   *   - 'error'：AI 字幕加载失败
+   */
+  subtitleListChange: { count: number; status?: 'loading' | 'ready' | 'error' };
+  /**
+   * 本地 AI 引擎状态（模型下载/初始化/就绪/失败，UI 进度条与状态点用）
+   */
+  subtitleAiStatus: SubtitleAiStatusPayload;
+  /** 本地识别部分结果（灰显中的临时文本），null 表示清除 */
+  subtitlePartial: SubtitleItem | null;
+  /** 本地识别 final 结果（新字幕落定） */
+  subtitleCue: SubtitleItem;
+  /** 可用字幕轨道集合变化（服务端轨列表返回 / 本地轨就绪） */
+  subtitleTracksChange: { tracks: SubtitleTrackInfo[] };
 
   // 播放列表 / 多 P 相关事件
   /** 当前播放的条目发生变化（换源成功） */
@@ -261,6 +295,10 @@ export enum PlayerEventEnum {
   WEB_FULLSCREEN_CHANGE = 'webFullscreenChange',
   /** 宽屏模式改变 */
   WIDE_SCREEN_CHANGE = 'wideScreenChange',
+  /** 音效设置变化（音量均衡等），payload: { effect, mode } */
+  AUDIO_EFFECT_CHANGE = 'audioEffectChange',
+  /** 显示模式改变（normal / web / wide / mini 切换），payload: { mode } */
+  DISPLAY_MODE_CHANGE = 'displayModeChange',
 
   // 持久化相关事件
   /** 已从持久化存储恢复上次观看位置，payload: { time }（秒） */
@@ -311,6 +349,14 @@ export enum PlayerEventEnum {
   SUBTITLE_SWITCH = 'subtitleSwitch',
   /** 字幕列表变化，payload: { count } */
   SUBTITLE_LIST_CHANGE = 'subtitleListChange',
+  /** 本地 AI 引擎状态，payload: { phase, progress?, message? } */
+  SUBTITLE_AI_STATUS = 'subtitleAiStatus',
+  /** 本地识别部分结果（灰显临时文本），payload: SubtitleItem | null */
+  SUBTITLE_PARTIAL = 'subtitlePartial',
+  /** 本地识别 final 结果，payload: SubtitleItem */
+  SUBTITLE_CUE = 'subtitleCue',
+  /** 可用轨道集合变化，payload: { tracks } */
+  SUBTITLE_TRACKS_CHANGE = 'subtitleTracksChange',
 
   // 播放列表 / 多 P 相关事件
   /** 当前播放条目发生变化 */

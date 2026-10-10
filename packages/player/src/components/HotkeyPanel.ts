@@ -2,25 +2,14 @@
  * ============================================
  * 快捷键面板组件
  * ============================================
- *
- * DOM 结构与 CSS 类名与既有实现保持一致：
- *   .player-hotkey-panel
- *     .player-hotkey-panel-title
- *       「快捷键说明」
- *       .player-hotkey-panel-close > .common-svg-icon > svg
- *     .player-hotkey-panel-area
- *       .player-hotkey-panel-content
- *         .player-hotkey-panel-content-item
- *           .player-hotkey-panel-content-name
- *           .player-hotkey-panel-content-desc
- *
- * 显隐由根节点上的 player-panel-active 类控制（基态 display: none），
- * 不使用内联 display，否则会覆盖掉类选择器的 display: block。
+ * 声明式响应式版本：面板显隐由 activeSignal 驱动根节点
+ * nova-player-panel-active 类（__reactiveAttrs），
+ * 对外 show/hide/open/close API 契约不变，内部仅写信号。
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
-import type { ComponentLifecycle } from '@/types';
-import { HOTKEYS } from '@/hili-player/core/hotkeys';
+import { h, defineComponent, signal } from "@/core";
+import type { ComponentLifecycle } from "@/types";
+import { HOTKEYS } from "@/nova/core/hotkeys";
 
 /**
  * 快捷键项接口
@@ -60,10 +49,14 @@ export interface HotkeyPanelApi {
  */
 const CloseIcon = (): ReturnType<typeof h> =>
   h(
-    'svg',
-    { viewBox: '0 0 1024 1024', version: '1.1', xmlns: 'http://www.w3.org/2000/svg' },
-    h('path', {
-      d: 'M512 444.16l297.088-297.088c17.088-17.152 46.208-15.872 64.96 2.88 18.752 18.752 20.032 47.872 2.88 64.96L579.904 512l297.024 297.088c17.152 17.088 15.872 46.208-2.88 64.96-18.752 18.752-47.872 20.032-64.96 2.88L512 579.904l-297.088 297.024c-17.088 17.152-46.208 15.872-64.96-2.88-18.752-18.752-20.032-47.872-2.88-64.96L444.096 512 147.072 214.912c-17.152-17.088-15.872-46.208 2.88-64.96 18.752-18.752 47.872-20.032 64.96-2.88L512 444.096z',
+    "svg",
+    {
+      viewBox: "0 0 1024 1024",
+      version: "1.1",
+      xmlns: "http://www.w3.org/2000/svg",
+    },
+    h("path", {
+      d: "M512 444.16l297.088-297.088c17.088-17.152 46.208-15.872 64.96 2.88 18.752 18.752 20.032 47.872 2.88 64.96L579.904 512l297.024 297.088c17.152 17.088 15.872 46.208-2.88 64.96-18.752 18.752-47.872 20.032-64.96 2.88L512 579.904l-297.088 297.024c-17.088 17.152-46.208 15.872-64.96-2.88-18.752-18.752-20.032-47.872-2.88-64.96L444.096 512 147.072 214.912c-17.152-17.088-15.872-46.208 2.88-64.96 18.752-18.752 47.872-20.032 64.96-2.88L512 444.096z",
     }),
   );
 
@@ -71,118 +64,132 @@ const CloseIcon = (): ReturnType<typeof h> =>
  * 快捷键面板组件
  * 展示播放器支持的快捷键列表及其功能说明
  */
-export const HotkeyPanel = defineComponent<HotkeyPanelProps>((props, lifecycle: ComponentLifecycle) => {
-  // ============================================
-  // DOM 引用
-  // ============================================
+export const HotkeyPanel = defineComponent<HotkeyPanelProps>(
+  (props, lifecycle: ComponentLifecycle) => {
+    // ============================================
+    // 响应式信号（渲染层唯一数据源）
+    // ============================================
 
-  /** 面板根容器 DOM 引用 */
-  const panelRef = useTemplateRef<HTMLDivElement>(lifecycle, 'panelRef');
+    /**
+     * 面板显隐信号：true = 显示（nova-player-panel-active 类，基态为 display: none）
+     * 初值取 props.visible（与原 onMounted 内按 visible 补显隐的行为一致）
+     */
+    const activeSignal = signal<boolean>(props.visible === true);
 
-  /**
-   * 处理关闭面板操作
-   */
-  const handleClose = (): void => {
-    close();
-    props.onClose?.();
-  };
+    /**
+     * 处理关闭面板操作
+     */
+    const handleClose = (): void => {
+      close();
+      props.onClose?.();
+    };
 
-  /**
-   * 渲染快捷键列表项
-   * @returns 快捷键项虚拟节点数组
-   */
-  const renderHotkeyItems = (): ReturnType<typeof h>[] => {
-    /** 实际使用的快捷键列表，优先使用 props 传入值，否则使用 HOTKEYS */
-    const hotkeys: HotkeyItem[] = props.hotkeys ?? HOTKEYS;
+    /**
+     * 渲染快捷键列表项
+     * @returns 快捷键项虚拟节点数组
+     */
+    const renderHotkeyItems = (): ReturnType<typeof h>[] => {
+      /** 实际使用的快捷键列表，优先使用 props 传入值，否则使用 HOTKEYS */
+      const hotkeys: HotkeyItem[] = props.hotkeys ?? HOTKEYS;
 
-    return hotkeys.map((item: HotkeyItem) =>
-      h(
-        'div',
-        { class: 'player-hotkey-panel-content-item' },
-        h('span', { class: 'player-hotkey-panel-content-name' }, item.name),
-        h('span', { class: 'player-hotkey-panel-content-desc' }, item.desc)
-      )
-    );
-  };
+      return hotkeys.map((item: HotkeyItem) =>
+        h(
+          "div",
+          { class: "nova-player-hotkey-panel-content-item" },
+          h(
+            "span",
+            { class: "nova-player-hotkey-panel-content-name" },
+            item.name,
+          ),
+          h(
+            "span",
+            { class: "nova-player-hotkey-panel-content-desc" },
+            item.desc,
+          ),
+        ),
+      );
+    };
 
-  // ============================================
-  // DOM 更新方法
-  // ============================================
+    // ============================================
+    // 显隐控制（对外 API，内部写信号即可）
+    // ============================================
 
-  /**
-   * 显示面板组件
-   * 通过 player-panel-active 类切换（基态为 display: none）
-   */
-  const show = (): void => {
-    panelRef.value?.classList.add('player-panel-active');
-  };
+    /**
+     * 显示面板组件
+     * 写信号即可：nova-player-panel-active 类由响应式系统自动同步
+     */
+    const show = (): void => {
+      activeSignal.value = true;
+    };
 
-  /**
-   * 隐藏面板组件
-   */
-  const hide = (): void => {
-    panelRef.value?.classList.remove('player-panel-active');
-  };
+    /**
+     * 隐藏面板组件
+     */
+    const hide = (): void => {
+      activeSignal.value = false;
+    };
 
-  /**
-   * 打开面板（对外 API 语义化别名）
-   */
-  const open = (): void => {
-    show();
-  };
-
-  /**
-   * 关闭面板（对外 API 语义化别名）
-   */
-  const close = (): void => {
-    hide();
-  };
-
-  // ============================================
-  // 生命周期钩子
-  // ============================================
-
-  /**
-   * 组件挂载后：按 visible 决定初始显隐，并通过事件向外暴露控制方法
-   */
-  lifecycle.onMounted = (): void => {
-    if (props.visible) {
+    /**
+     * 打开面板（对外 API 语义化别名）
+     */
+    const open = (): void => {
       show();
-    }
-    lifecycle.emit?.('hotkeyPanelMounted', { show, hide, open, close });
-  };
+    };
 
-  return h(
-    'div',
-    {
-      class: 'player-hotkey-panel',
-      ref: 'panelRef',
-    },
-    h(
-      'div',
-      { class: 'player-hotkey-panel-title' },
-      '快捷键说明',
+    /**
+     * 关闭面板（对外 API 语义化别名）
+     */
+    const close = (): void => {
+      hide();
+    };
+
+    // ============================================
+    // 生命周期钩子
+    // ============================================
+
+    /**
+     * 组件挂载后：通过事件向外暴露控制方法
+     * （初始显隐已由 activeSignal 初值在渲染时体现）
+     */
+    lifecycle.onMounted = (): void => {
+      lifecycle.emit?.("hotkeyPanelMounted", { show, hide, open, close });
+    };
+
+    return h(
+      "div",
+      {
+        // 显隐类名由 activeSignal 响应式驱动（__reactiveAttrs + normalizeClass）
+        class: [
+          "nova-player-hotkey-panel",
+          { "nova-player-panel-active": activeSignal.value },
+        ],
+      },
       h(
-        'span',
-        { class: 'player-hotkey-panel-close', onClick: handleClose },
-        h('span', { class: 'common-svg-icon' }, CloseIcon())
-      )
-    ),
-    h(
-      'div',
-      { class: 'player-hotkey-panel-area' },
+        "div",
+        { class: "nova-player-hotkey-panel-title" },
+        "快捷键说明",
+        h(
+          "span",
+          { class: "nova-player-hotkey-panel-close", onClick: handleClose },
+          h("span", { class: "common-svg-icon" }, CloseIcon()),
+        ),
+      ),
       h(
-        'div',
-        {
-          class: 'player-hotkey-panel-content',
-          style: {
-            transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
-            transitionDuration: '0ms',
-            transform: 'translate(0px, 0px) scale(1) translateZ(0px)',
+        "div",
+        { class: "nova-player-hotkey-panel-area" },
+        h(
+          "div",
+          {
+            class: "nova-player-hotkey-panel-content",
+            style: {
+              transitionTimingFunction: "cubic-bezier(0.23, 1, 0.32, 1)",
+              transitionDuration: "0ms",
+              transform: "translate(0px, 0px) scale(1) translateZ(0px)",
+            },
           },
-        },
-        ...renderHotkeyItems()
-      )
-    )
-  );
-});
+          ...renderHotkeyItems(),
+        ),
+      ),
+    );
+  },
+);

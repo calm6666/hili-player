@@ -1,16 +1,16 @@
-.player-docker {
-  .player-container {
-    .player-ctrl-playbackrate {
+.nova-player-docker {
+  .nova-player-container {
+    .nova-player-ctrl-playbackrate {
       font-size: 14px;
       width: 50px;
 
-      .player-ctrl-playbackrate-result {
+      .nova-player-ctrl-playbackrate-result {
         cursor: pointer;
         font-weight: 600;
         width: 100%;
       }
 
-      .player-ctrl-playbackrate-menu {
+      .nova-player-ctrl-playbackrate-menu {
         background-color: hsla(0, 0%, 8%, 0.9);
         border-radius: 2px;
         bottom: 41px;
@@ -26,7 +26,7 @@
         transform: translateX(-50%);
         width: 70px;
 
-        .player-ctrl-playbackrate-menu-item {
+        .nova-player-ctrl-playbackrate-menu-item {
           cursor: pointer;
           height: 36px;
           line-height: 36px;
@@ -37,9 +37,9 @@
           }
         }
 
-        .player-ctrl-playbackrate-menu-item.player-state-active {
+        .nova-player-ctrl-playbackrate-menu-item.nova-player-state-active {
           color: #00a1d6;
-          color: var(--player-primary-color, #00a1d6);
+          color: var(--nova-player-primary-color, #00a1d6);
         }
       }
     }

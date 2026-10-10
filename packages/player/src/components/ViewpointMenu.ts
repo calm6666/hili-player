@@ -4,13 +4,22 @@
  * ============================================
  * 用于 LeftControls 的章节/视点选择菜单
  * 支持章节列表渲染、章节点击跳转、菜单悬停动画回调
+ *
+ * 声明式响应式版本：
+ * - 章节列表由 pointsSignal 驱动 For 控制流（key-based 精准更新），
+ *   rebuildPoints 仅写信号，替代旧的 menu.replaceChildren + materialize 重建
+ * - 章节文案由 currentTitleSignal 驱动（_reactiveText 自动更新 Text 节点），
+ *   替代旧的三处 viewpointTextRef.innerText 命令式写入
+ * - 面板展开态由 shownSignal 驱动根节点 state-show 类（__reactiveAttrs），
+ *   hover 定时器（rafTimeout）仅负责延迟时序并写信号，不直接操作 DOM
  */
 
-import { h, defineComponent, useTemplateRef, materialize } from "@/core";
-import { useComponentUnmount } from "@/hili-player/core/componentUnmount";
+import { h, defineComponent, signal, For } from "@/core";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
 import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
 import type { AnimationFrameID } from "@/utils/rafTimeout";
 import type { VNode } from "@/types";
+import { ArrowRight } from "@/components/icons";
 
 /** 展开 / 收起动画的延迟（毫秒） */
 const MENU_SHOW_DELAY = 120;
@@ -47,32 +56,42 @@ export type ViewpointMenuEvents = {
   viewpointMenuMounted: { rebuildPoints: (next: ViewpointItem[]) => void };
 };
 
+/**
+ * 运行时类型谓词：For 控制流的回调入参为 unknown（For 的 props 为
+ * Record<string, unknown>，类型信息在回调边界丢失），
+ * 用谓词收窄替代 as 断言
+ */
+const isViewpointItem = (item: unknown): item is ViewpointItem =>
+  typeof item === "object" &&
+  item !== null &&
+  "title" in item &&
+  typeof item.title === "string" &&
+  "time" in item &&
+  typeof item.time === "number";
+
 export const ViewpointMenu = defineComponent<
   ViewpointMenuProps,
   ViewpointMenuEvents
 >((props, lifecycle) => {
-  /** 章节列表（可被 rebuildPoints 整体替换） */
-  let points = props.points ?? [];
+  // 初值快照仅用于信号初始化（挂载后列表只经 rebuildPoints 写入信号更新）
+  const initialPoints = props.points ?? [];
   const { currentTime = 0 } = props;
 
   // ============================================
-  // DOM 引用
+  // 响应式信号（渲染层唯一数据源）
   // ============================================
 
-  /** 章节显示文本元素引用 */
-  const viewpointTextRef = useTemplateRef<HTMLDivElement>(
-    lifecycle,
-    "viewpointTextRef",
-  );
+  /** 章节列表信号（可被 rebuildPoints 整体替换，For 按新列表 diff） */
+  const pointsSignal = signal<ViewpointItem[]>(initialPoints);
 
-  /** 章节列表容器元素引用 */
-  const menuRef = useTemplateRef<HTMLUListElement>(
-    lifecycle,
-    "viewpointMenuRef",
+  /**
+   * 章节文案信号（按钮上显示的当前章节）
+   * 初值与原实现的首次渲染文案一致（首个章节 / 无章节时仅「章节」），
+   * 之后由挂载回调 / 点击 / rebuildPoints 写入
+   */
+  const currentTitleSignal = signal<string>(
+    initialPoints.length > 0 ? `章节 · ${initialPoints[0].title}` : "章节",
   );
-
-  /** 章节按钮根元素引用（面板显隐的类名挂载点） */
-  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, "viewpointRootRef");
 
   /** 展开定时器 */
   let showTimer: AnimationFrameID | null = null;
@@ -81,11 +100,19 @@ export const ViewpointMenu = defineComponent<
   let hideTimer: AnimationFrameID | null = null;
 
   /**
-   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * 响应式信号：面板展开态
+   * 驱动根节点 state-show 类（编译器包装为 __reactiveAttrs，
+   * 变化时经 normalizeClass 精准更新类名），
+   * 替代旧的 rootRef.classList.toggle 命令式写法
+   */
+  const shownSignal = signal<boolean>(false);
+
+  /**
+   * 落地面板展开态：写信号即可，DOM 类名由响应式系统自动同步
    * @param show - 是否展开
    */
   const setShown = (show: boolean): void => {
-    rootRef.value?.classList.toggle("state-show", show);
+    shownSignal.value = show;
   };
 
   /** 取消两个方向的排队任务 */
@@ -96,25 +123,48 @@ export const ViewpointMenu = defineComponent<
     hideTimer = null;
   };
 
+  // ============================================
+  // 派生计算
+  // ============================================
+
   /**
-   * 用新的章节数据重建列表 DOM（时长到手后重建，使章节时间与进度条同轴）
+   * 判断指定时间是否属于当前章节
+   * @param time - 章节起始时间
+   * @param index - 章节在列表中的索引
+   * @returns 是否为当前正在播放的章节
+   */
+  const isCurrentPoint = (time: number, index: number): boolean => {
+    // 当前时间 >= 该章节时间，且 < 下一章节时间
+    if (currentTime < time) return false;
+    /** 下一个章节的数据 */
+    const nextPoint = pointsSignal.value[index + 1];
+    if (!nextPoint) return true;
+    return currentTime < nextPoint.time;
+  };
+
+  /**
+   * 解析当前章节文案（播放时间所属章节，无匹配时回退首个章节）
+   * 调用方需保证列表非空
+   * @returns 按钮显示文案
+   */
+  const resolveCurrentTitle = (): string => {
+    const list = pointsSignal.value;
+    const current = list.find((point, index) =>
+      isCurrentPoint(point.time, index),
+    );
+    return `章节 · ${current?.title ?? list[0].title}`;
+  };
+
+  /**
+   * 用新的章节数据重建列表（时长到手后重建，使章节时间与进度条同轴）
+   * 写入信号即可：For 按新列表 diff 更新 DOM，文案随信号自动刷新
    * @param next - 归一后的章节数据
    */
   const rebuildPoints = (next: ViewpointItem[]): void => {
-    points = next ?? [];
-    const menu = menuRef.value;
-    if (!menu) return;
-    menu.replaceChildren(
-      ...points.map((point, index) =>
-        materialize(renderViewpointItem(point, index)),
-      ),
-    );
-    if (viewpointTextRef.value && points.length > 0) {
-      const current = points.find((point, index) =>
-        isCurrentPoint(point.time, index),
-      );
-      viewpointTextRef.value.innerText =
-        "章节 · " + (current?.title ?? points[0].title);
+    pointsSignal.value = next ?? [];
+    // 与原实现一致：仅非空列表时刷新章节文案
+    if (pointsSignal.value.length > 0) {
+      currentTitleSignal.value = resolveCurrentTitle();
     }
   };
 
@@ -153,22 +203,8 @@ export const ViewpointMenu = defineComponent<
   // ============================================
 
   /**
-   * 判断指定时间是否属于当前章节
-   * @param time - 章节起始时间
-   * @param index - 章节在列表中的索引
-   * @returns 是否为当前正在播放的章节
-   */
-  const isCurrentPoint = (time: number, index: number): boolean => {
-    // 当前时间 >= 该章节时间，且 < 下一章节时间
-    if (currentTime < time) return false;
-    /** 下一个章节的数据 */
-    const nextPoint = points[index + 1];
-    if (!nextPoint) return true;
-    return currentTime < nextPoint.time;
-  };
-
-  /**
-   * 渲染单个章节菜单项
+   * 渲染单个章节菜单项（For 组件的 render 回调，每个 key 只调用一次；
+   * 选中态在项创建时求值一次，与原 DOM 构建时机一致）
    * @param point - 章节数据
    * @param index - 章节在列表中的索引
    * @returns 菜单项 VNode
@@ -179,27 +215,27 @@ export const ViewpointMenu = defineComponent<
     return h(
       "li",
       {
-        class: ["player-ctrl-viewpoint-menu-item", isActive ? "active" : ""]
-          .filter(Boolean)
-          .join(" "),
+        // 选中态类名用对象形式（normalizeClass 展开），替代旧的 filter().join() 字符串拼接
+        class: [
+          "nova-player-ctrl-viewpoint-menu-item",
+          { active: isActive },
+        ],
         "data-time": point.time,
         onClick: () => {
           lifecycle.emit?.("seek", point.time);
-          // 更新章节文本显示
-          if (viewpointTextRef.value) {
-            viewpointTextRef.value.innerText = "章节 · " + point.title;
-          }
+          // 点击后章节文案立即跟随（signal 驱动 _reactiveText 自动更新）
+          currentTitleSignal.value = `章节 · ${point.title}`;
         },
       },
       h("span", {
-        class: "player-ctrl-viewpoint-menu-item-team team-blue",
+        class: "nova-player-ctrl-viewpoint-menu-item-team team-blue",
         style: { opacity: "0", display: "none" },
         "data-time": point.time,
       }),
       h(
         "span",
         {
-          class: "player-ctrl-viewpoint-menu-item-content",
+          class: "nova-player-ctrl-viewpoint-menu-item-content",
           "data-time": point.time,
         },
         point.title,
@@ -212,15 +248,12 @@ export const ViewpointMenu = defineComponent<
   // ============================================
 
   /**
-   * 组件挂载后的回调，设置初始章节文本并通知外部组件已就绪
+   * 组件挂载后的回调，设置初始章节文案并通知外部组件已就绪
    */
   lifecycle.onMounted = (): void => {
-    // 设置初始章节文本
-    if (viewpointTextRef.value && points.length > 0) {
-      // 找到当前章节
-      const currentPoint = points.find((p, i) => isCurrentPoint(p.time, i));
-      viewpointTextRef.value.innerText =
-        "章节 · " + (currentPoint?.title ?? points[0].title);
+    // 初始章节文案：找到当前章节（无匹配时回退首个章节），与原实现一致
+    if (pointsSignal.value.length > 0) {
+      currentTitleSignal.value = resolveCurrentTitle();
     }
     lifecycle.emit?.("viewpointMenuMounted", { rebuildPoints });
   };
@@ -233,37 +266,53 @@ export const ViewpointMenu = defineComponent<
   return h(
     "div",
     {
-      class: "player-ctrl-btn player-ctrl-viewpoint",
-      ref: "viewpointRootRef",
+      // 展开态类名由 shownSignal 响应式驱动（__reactiveAttrs + normalizeClass）
+      class: [
+        "nova-player-ctrl-btn",
+        "nova-player-ctrl-viewpoint",
+        { "state-show": shownSignal.value },
+      ],
       onMouseEnter: handleMouseEnter,
       onMouseLeave: handleMouseLeave,
     },
     h(
       "div",
-      { class: "player-ctrl-viewpoint-inner" },
+      { class: "nova-player-ctrl-viewpoint-inner" },
       h(
         "div",
-        { class: "player-ctrl-viewpoint-content" },
-        // 章节文本
+        { class: "nova-player-ctrl-viewpoint-content" },
+        // 章节文本（子节点位置零参箭头函数 → _reactiveText：
+        // currentTitleSignal 变化时自动更新 Text 节点）
         h(
           "span",
-          { class: "player-ctrl-viewpoint-text", ref: "viewpointTextRef" },
-          points.length > 0 ? "章节 · " + points[0].title : "章节",
+          { class: "nova-player-ctrl-viewpoint-text" },
+          () => currentTitleSignal.value,
         ),
         // 章节图标
         h(
           "span",
-          { class: "player-ctrl-viewpoint-icon" },
-          h("span", { class: "common-svg-icon" }),
+          { class: "nova-player-ctrl-viewpoint-icon" },
+          h("span", { class: "common-svg-icon" },
+            h(ArrowRight)
+          ),
         ),
-        // 章节下拉菜单
+        // 章节下拉菜单（For：key-based 精准更新，pointsSignal 变化时自动同步，
+        // 替代旧的 points.map 静态展开 + replaceChildren 命令式重建）
         h(
           "div",
-          { class: "player-ctrl-viewpoint-menu-wrap" },
+          { class: "nova-player-ctrl-viewpoint-menu-wrap" },
           h(
             "ul",
-            { class: "player-ctrl-viewpoint-menu", ref: "viewpointMenuRef" },
-            ...points.map((point, index) => renderViewpointItem(point, index)),
+            { class: "nova-player-ctrl-viewpoint-menu" },
+            h(For, {
+              each: pointsSignal,
+              key: (item: unknown, index: number): string =>
+                isViewpointItem(item) ? String(item.time) : String(index),
+              render: (item: unknown, index: number): VNode =>
+                isViewpointItem(item)
+                  ? renderViewpointItem(item, index)
+                  : h("li", {}),
+            }),
           ),
         ),
       ),

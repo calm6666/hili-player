@@ -8,7 +8,7 @@
  */
 
 import { h } from "@/core";
-import { parseSvgMarkup } from "@/hili-player/utils/svgMarkup";
+import { parseSvgMarkup } from "@/nova/utils/svgMarkup";
 import type { VNode } from "@/types";
 
 /** Close 图标（既有实现原样复制） */

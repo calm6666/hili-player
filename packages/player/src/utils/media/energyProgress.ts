@@ -1,22 +1,20 @@
 /**
  * 高能进度条（PBP）数据
  *
- * 数据源：mock-server 的 `GET /x/player/pbp` →
- * `{ code, message, data: { step_sec, data: number[], count, duration } }`，
+ * 数据源由外部注入（`PlayerConfig.progress.energyProvider`），
+ * 归一化后的形态：`{ stepSec, data: number[], duration? }`，
  * 其中 `data[i]` 是第 i 个采样点的热度（0-1，首点对应 0 秒）。
  *
  * 本模块只做「数据 → SVG path」的纯换算，渲染交给 PbpControls。
  */
 
-/** 高能进度条数据 */
-export interface EnergyProgressData {
-  /** 采样间隔（秒） */
-  stepSec: number;
-  /** 采样点（0-1） */
-  data: number[];
-  /** 总时长（秒），用于把播放进度换算成采样点下标 */
-  duration?: number;
-}
+import type { EnergyProgressData } from '@/types';
+
+/**
+ * 高能进度条数据（类型定义已上移到公共类型模块 `@/types`，
+ * 此处 re-export 保持既有导入路径兼容）
+ */
+export type { EnergyProgressData };
 
 /** 曲线坐标系尺寸（与实际像素解耦，靠 preserveAspectRatio="none" 拉伸） */
 export const ENERGY_VIEW_WIDTH = 1000;

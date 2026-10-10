@@ -1,5 +1,5 @@
-.player-container {
-  .player-toast-wrap {
+.nova-player-container {
+  .nova-player-toast-wrap {
     box-sizing: content-box;
     border-radius: 4px;
     background-color: rgba(0, 0, 0, 0.8);
@@ -9,7 +9,7 @@
     display: flex;
     bottom: 70px;
     font-size: 14px;
-    font-size: var(--player-toast-font-size, 14px);
+    font-size: var(--nova-player-toast-font-size, 14px);
     left: 10px;
     line-height: 36px;
     pointer-events: none;
@@ -27,7 +27,7 @@
     opacity: 0;
     display: none;
 
-    .player-toast-close {
+    .nova-player-toast-close {
       fill: #fff;
       float: left;
       height: 100%;
@@ -38,8 +38,8 @@
       line-height: 28px;
     }
 
-    .player-toast-jump {
-      color: var(--player-brand_pink, #ff6699);
+    .nova-player-toast-jump {
+      color: var(--nova-player-brand_pink, #ff6699);
       margin: 0 6px 0 6px;
       text-decoration: none;
       cursor: pointer;

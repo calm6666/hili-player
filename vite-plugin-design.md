@@ -1,7 +1,7 @@
 # Vite 编译插件设计（零配置版）
 
 > 参照 Vue/Solid/Svelte 插件设计模式：零配置、自动检测环境、编译期分流。
-> 用户只需 `plugins: [hiliCompile()]`，无需任何选项。
+> 用户只需 `plugins: [luminaCompile()]`，无需任何选项。
 
 ---
 
@@ -9,12 +9,12 @@
 
 ### 与 Vue/Solid/Svelte 插件的对照
 
-| 维度 | Vue plugin-vue | Solid vite-plugin-solid | **本插件 hili-compile** |
+| 维度 | Vue plugin-vue | Solid vite-plugin-solid | **本插件 lumina-compile** |
 |------|---------------|------------------------|----------------------|
 | 环境检测 | `configResolved` 读 `isProduction` | `config` 读 `command` | `configResolved` 读 `command` + `isProduction` |
 | Dev 行为 | 保留 source map + HMR | alias 重定向到 `/dev` 入口 | 最小转换，保持 HMR 速度 |
 | Prod 行为 | 传 `isProd` 给编译器 | `define.DEV=false` 触发 DCE | 全量优化转换 |
-| 环境注入 | 不用 define | `define: { DEV: true/false }` | `define: { __HILI_DEV__: true/false }` |
+| 环境注入 | 不用 define | `define: { DEV: true/false }` | `define: { __LUMINA_DEV__: true/false }` |
 | 用户配置 | 零配置 | 零配置 | **零配置** |
 | 编译产物 | 模板 → render 函数 | JSX → createSignal/createEffect | h() → 专用内部函数 |
 
@@ -37,16 +37,16 @@
 ### 插件骨架
 
 ```typescript
-// plugins/vite-plugin-hili-compile/index.ts
+// plugins/vite-plugin-lumina-compile/index.ts
 import type { Plugin, ResolvedConfig } from 'vite';
 import { transformCode } from './transform';
 
-export function hiliCompile(): Plugin {
+export function luminaCompile(): Plugin {
   let isServe = false;
   let isProduction = false;
 
   return {
-    name: 'hili-compile',
+    name: 'lumina-compile',
 
     /**
      * configResolved 钩子：自动检测当前环境
@@ -62,13 +62,13 @@ export function hiliCompile(): Plugin {
     /**
      * config 钩子：自动注入环境变量
      * 与 Solid 插件的 define: { DEV: true/false } 模式一致
-     * 框架代码中用 if (__HILI_DEV__) 做条件分支，
+     * 框架代码中用 if (__LUMINA_DEV__) 做条件分支，
      * 生产环境被 esbuild 替换为 false 后触发死代码消除
      */
     config() {
       return {
         define: {
-          __HILI_DEV__: JSON.stringify(!isProduction),
+          __LUMINA_DEV__: JSON.stringify(!isProduction),
         },
       };
     },
@@ -98,10 +98,10 @@ export function hiliCompile(): Plugin {
 
 ### 关键设计点
 
-1. **零配置**：`hiliCompile()` 无参数，环境检测全自动
+1. **零配置**：`luminaCompile()` 无参数，环境检测全自动
 2. **Dev 零开销**：开发模式直接 `return null`，不做任何转换，HMR 不受影响
 3. **Prod 全量优化**：生产模式才执行 AST 转换
-4. **自动注入 `__HILI_DEV__`**：框架代码中的 `if (__HILI_DEV__)` 在生产环境被 esbuild 替换为 `if (false)`，触发死代码消除
+4. **自动注入 `__LUMINA_DEV__`**：框架代码中的 `if (__LUMINA_DEV__)` 在生产环境被 esbuild 替换为 `if (false)`，触发死代码消除
 
 ---
 
@@ -195,7 +195,7 @@ const MyComp = defineComponent<{ name: string }>((props, lc) => {
   return h('div', {}, props.name);
 });
 // 编译期注入：标记组件类型，运行时不再反射判断
-MyComp.__hili_type = 'fn';
+MyComp.__lumina_type = 'fn';
 
 // h(MyComp, ...) → _createComp(MyComp, ...)
 _createComp(MyComp, {
@@ -204,10 +204,10 @@ _createComp(MyComp, {
 })
 ```
 
-`_createComp` 直接读 `__hili_type`，跳过 `Object.getOwnPropertyDescriptor`：
+`_createComp` 直接读 `__lumina_type`，跳过 `Object.getOwnPropertyDescriptor`：
 ```typescript
 function _createComp(component: Function, props: Record<string, unknown>): VNode {
-  const type = (component as any).__hili_type;
+  const type = (component as any).__lumina_type;
   // type === 'fn' → 直接调用 component(props)
   // type === 'class' → new component(props).render()
   // undefined → fallback 到运行时判断（兼容未编译代码）
@@ -289,7 +289,7 @@ _createFragment([
 ``### 核心转换器代码结构
 
 ```typescript
-// plugins/vite-plugin-hili-compile/transform.ts
+// plugins/vite-plugin-lumina-compile/transform.ts
 import { parse } from '@babel/parser';
 import { traverse } from '@babel/traverse';
 import * as t from '@babel/types';
@@ -491,7 +491,7 @@ function markComponentType(path: any, s: MagicString, ctx: TransformContext): vo
     const compName = parent.id.name;
     // 在 defineComponent 调用后注入类型标记
     const insertPos = node.end;
-    s.appendRight(insertPos, `;\n${compName}.__hili_type = 'fn'`);
+    s.appendRight(insertPos, `;\n${compName}.__lumina_type = 'fn'`);
   }
 }
 
@@ -513,7 +513,7 @@ function markClassComponent(path: any, s: MagicString, ctx: TransformContext): v
 
   // 在类声明后注入类型标记
   const insertPos = node.end;
-  s.appendRight(insertPos, `;\n${className}.__hili_type = 'class'`);
+  s.appendRight(insertPos, `;\n${className}.__lumina_type = 'class'`);
 }
 ```
 
@@ -567,7 +567,7 @@ export function _createComp(
   component: Function,
   props: Record<string, unknown>,
 ): VNode {
-  const type = (component as any).__hili_type;
+  const type = (component as any).__lumina_type;
   if (type === 'fn') {
     return (component as FnComponent)(props);
   }
@@ -582,12 +582,12 @@ export function _createComp(
 ### 5.2 修改 core/h.ts
 
 ```typescript
-// isClassComponent / isFnComponent 增加 __hili_type 快速路径
+// isClassComponent / isFnComponent 增加 __lumina_type 快速路径
 function getComponentType(fn: unknown): 'class' | 'fn' | null {
   if (typeof fn !== 'function') return null;
 
   // 编译期标记优先（O(1) 属性读取，无需反射）
-  const marker = (fn as { __hili_type?: string }).__hili_type;
+  const marker = (fn as { __lumina_type?: string }).__lumina_type;
   if (marker === 'class' || marker === 'fn') return marker;
 
   // fallback：运行时反射判断（开发模式或未编译代码）
@@ -635,13 +635,13 @@ function applyAttrs(el: Element, attrs: VNodeAttrs, vnode: VNode): void {
 ### 5.4 修改 core/warning.ts
 
 ```typescript
-// isDev() 不再需要手动注入 __HILI_DEV__
+// isDev() 不再需要手动注入 __LUMINA_DEV__
 // 插件通过 config.define 自动注入
 export function isDev(): boolean {
-  // __HILI_DEV__ 由 Vite 插件自动注入：
-  // - dev 模式: __HILI_DEV__ = true
-  // - prod 模式: __HILI_DEV__ = false（触发死代码消除）
-  return typeof __HILI_DEV__ !== 'undefined' ? __HILI_DEV__ : true;
+  // __LUMINA_DEV__ 由 Vite 插件自动注入：
+  // - dev 模式: __LUMINA_DEV__ = true
+  // - prod 模式: __LUMINA_DEV__ = false（触发死代码消除）
+  return typeof __LUMINA_DEV__ !== 'undefined' ? __LUMINA_DEV__ : true;
 }
 ```
 
@@ -654,11 +654,11 @@ export function isDev(): boolean {
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
-import { hiliCompile } from './plugins/vite-plugin-hili-compile';
+import { luminaCompile } from './plugins/vite-plugin-lumina-compile';
 
 export default defineConfig({
   plugins: [
-    hiliCompile(),  // 零配置，自动检测环境
+    luminaCompile(),  // 零配置，自动检测环境
   ],
 });
 ```
@@ -684,7 +684,7 @@ h(MyComp, { name: 'World', onClick: () => console.log('clicked') });
 ```
 vite dev
   → 插件 configResolved 检测到 command === 'serve'
-  → define 注入 __HILI_DEV__ = true
+  → define 注入 __LUMINA_DEV__ = true
   → transform 钩子 return null（不做转换）
   → 代码原样执行，HMR 正常工作
   → isDev() 返回 true，开发警告正常输出
@@ -695,12 +695,12 @@ vite dev
 ```
 vite build
   → 插件 configResolved 检测到 command === 'build'
-  → define 注入 __HILI_DEV__ = false
+  → define 注入 __LUMINA_DEV__ = false
   → transform 钩子执行 AST 转换
   → h() 调用被替换为 _createEl/_createComp/_createSvgEl
-  → defineComponent 后注入 __hili_type 标记
+  → defineComponent 后注入 __lumina_type 标记
   → 静态 h() 调用被提升为模块级常量
-  → __HILI_DEV__ = false 触发 esbuild 死代码消除
+  → __LUMINA_DEV__ = false 触发 esbuild 死代码消除
   → isDev() 返回 false，开发警告代码被移除
 ```
 
@@ -710,9 +710,9 @@ vite build
 
 ### 阶段 1：插件骨架 + 环境检测（1天）
 
-- [ ] 创建 `plugins/vite-plugin-hili-compile/` 目录
+- [ ] 创建 `plugins/vite-plugin-lumina-compile/` 目录
 - [ ] 实现 `configResolved` 自动检测 dev/prod
-- [ ] 实现 `config` 自动注入 `__HILI_DEV__`
+- [ ] 实现 `config` 自动注入 `__LUMINA_DEV__`
 - [ ] 实现 `transform` 钩子骨架（dev return null，prod 调用 transformCode）
 - [ ] 验证：`vite dev` 正常启动，`vite build` 正常打包
 
@@ -754,10 +754,10 @@ vite build
 
 | 维度 | 旧设计 | 新设计 |
 |------|--------|--------|
-| 配置 | 需手动指定 `hoistStatic`/`compileComponentType` 等选项 | **零配置**，`hiliCompile()` 无参数 |
+| 配置 | 需手动指定 `hoistStatic`/`compileComponentType` 等选项 | **零配置**，`luminaCompile()` 无参数 |
 | 环境检测 | 需手动写 `process.env.NODE_ENV === 'production'` | **自动检测**，`configResolved` 读取 |
 | Dev 模式 | 需手动配置 `dev: false` | **自动跳过**，dev 模式 return null |
-| __HILI_DEV__ 注入 | 需用户在 vite.config 中手动 define | **自动注入**，插件 config 钩子处理 |
+| __LUMINA_DEV__ 注入 | 需用户在 vite.config 中手动 define | **自动注入**，插件 config 钩子处理 |
 | 编译策略 | 在 h() 调用上"打补丁"注入标记 | **编译为专用内部函数**，彻底消除判断 |
 | 与 Vue/Solid 相似度 | 低（自定义模式） | **高**（相同的设计模式） |
 | 开发周期 | 10-15 天 | **7 天**（更聚焦） |

@@ -3,8 +3,7 @@
  * 用于复用弹幕DOM元素和Canvas对象，减少GC压力
  */
 
-import { DanmakuType } from '@/types/danmaku';
-import type { DanmakuRenderItem } from './types';
+import { type DanmakuRenderItem, DanmakuType } from './types';
 
 /** 对象池配置 */
 interface ObjectPoolConfig {
@@ -39,18 +38,11 @@ export class DOMElementPool {
     }
   }
 
-  /** 创建新元素 */
+  /** 创建新元素（外观由使用方 danmaku.scss 的 .danmaku-x-dm 类体系提供） */
   private createElement(): HTMLElement {
     const el = document.createElement('div');
+    // 仅作池内标记类，不携带任何样式
     el.className = 'danmaku-item';
-    el.style.cssText = `
-      position: absolute;
-      white-space: nowrap;
-      pointer-events: auto;
-      will-change: transform;
-      backface-visibility: hidden;
-      transform: translateZ(0);
-    `;
     return el;
   }
 
@@ -77,9 +69,8 @@ export class DOMElementPool {
 
     if (el) {
       this.inUse.add(el);
-      // 重置元素状态
-      el.style.transform = '';
-      el.style.opacity = '1';
+      // 重置元素状态：清空全部内联样式与 CSS 变量，外观由使用方重新以类+变量设置
+      el.removeAttribute('style');
       el.textContent = '';
       el.className = 'danmaku-item';
     }
@@ -91,16 +82,9 @@ export class DOMElementPool {
   release(el: HTMLElement): void {
     if (this.inUse.has(el)) {
       this.inUse.delete(el);
-      // 清理元素
+      // 清理元素：清空全部内联样式与 CSS 变量（含动画进度等运行态），防止复用残留
+      el.removeAttribute('style');
       el.textContent = '';
-      el.style.cssText = `
-        position: absolute;
-        white-space: nowrap;
-        pointer-events: auto;
-        will-change: transform;
-        backface-visibility: hidden;
-        transform: translateZ(0);
-      `;
       el.className = 'danmaku-item';
 
       if (this.pool.length < this.config.maxCapacity) {
@@ -112,15 +96,8 @@ export class DOMElementPool {
   /** 释放所有元素 */
   releaseAll(): void {
     this.inUse.forEach((el) => {
+      el.removeAttribute('style');
       el.textContent = '';
-      el.style.cssText = `
-        position: absolute;
-        white-space: nowrap;
-        pointer-events: auto;
-        will-change: transform;
-        backface-visibility: hidden;
-        transform: translateZ(0);
-      `;
       el.className = 'danmaku-item';
       this.pool.push(el);
     });

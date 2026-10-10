@@ -162,7 +162,7 @@ export class TooltipManager {
 
     // 创建 tooltip DOM 元素
     this.tooltipEl = document.createElement('div');
-    this.tooltipEl.className = 'hili-tooltip';
+    this.tooltipEl.className = 'nova-tooltip';
     this.tooltipEl.textContent = message;
     this.tooltipEl.setAttribute('role', 'tooltip');
     this.tooltipEl.style.cssText = `

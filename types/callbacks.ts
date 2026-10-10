@@ -33,6 +33,14 @@ export interface DanmakuCallbacks {
   onPerformanceWarning?: (stats: PerformanceStats) => void;
   /** 渲染模式切换回调 */
   onModeChange?: (mode: RenderMode) => void;
+  /** 弹幕点赞回调（Tip 操作条点赞按钮，liked 为点击后的新状态） */
+  onDanmakuLike?: (danmaku: DanmakuItem, liked: boolean) => void;
+  /** 弹幕复制回调（Tip 操作条复制按钮，剪贴板写入完成后触发） */
+  onDanmakuCopy?: (danmaku: DanmakuItem) => void;
+  /** 弹幕撤回回调（本人弹幕的撤回按钮，触发后插件自动从画面移除该弹幕） */
+  onDanmakuRecall?: (danmaku: DanmakuItem) => void;
+  /** 弹幕举报回调（Tip 操作条举报按钮） */
+  onDanmakuReport?: (danmaku: DanmakuItem) => void;
 }
 
 /** 播放器回调 */

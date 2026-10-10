@@ -4,25 +4,37 @@
  * ============================================
  * 独立的函数组件，拥有自己的生命周期
  *
- * 设计模式（与 RightControls 一致）：
+ * 设计模式（响应式系统）：
  *   - config 通过 useContext(ConfigContext) 获取，不走 props 传递
- *   - duration / currentTime 通过 useState 订阅 StateContext 获取
+ *   - duration / currentTime 通过 useReactiveState 获取 Signal
+ *   - 时间显示通过 _reactiveText 在 VNode 中响应式渲染（signal 变化自动更新 Text 节点）
+ *   - 按钮显隐通过 Show 控制流组件条件渲染（mount/destroy 切换，不重渲染）
+ *   - 章节按钮通过 Show 在 VNode 树中条件渲染（替代 mount(vnode, container)）
  *   - 事件通过 defineComponent 的第二泛型参数声明，用 lifecycle.emit 发射
- *   - 框架无响应式，DOM 更新必须手动完成（通过 useState 订阅 + updater 回调）
+ *   - 保留命令式：LottieIcon.play() / ViewpointMenu.rebuildPoints() 等组件 API 调用
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext, mount } from '@/core';
-import type { VNode } from '@/types';
-import { PlayerStateKeyEnum, ConfigContext } from '@/store/runtimeState';
-import { StateContext } from '@/store/runtimeState';
-import { ConfigStoreContext } from '@/store/configStore';
-import { PlayerState } from '@/types';
-import { formatTime } from '@/utils/formatTime';
-import { normalizeSegmentSpan } from '@/hili-player/utils/media/progressSegment';
-import { LottieIcon, type LottieIconApi } from './LottieIcon';
-import { ViewpointMenu, type ViewpointItem } from './ViewpointMenu';
-import pauseToPlayAnimationData from '../assets/lottie-icon/pause-to-play-animation.json';
-import playToPauseAnimationData from '../assets/lottie-icon/play-to-pause-animation.json';
+import {
+  h,
+  defineComponent,
+  useTemplateRef,
+  useReactiveState,
+  useContext,
+  Show,
+  signal,
+  onEffect,
+} from "@/core";
+import type { VNode } from "@/types";
+import { PlayerStateKeyEnum, ConfigContext } from "@/store/runtimeState";
+import { StateContext } from "@/store/runtimeState";
+import { ConfigStoreContext } from "@/store/configStore";
+import { PlayerState } from "@/types";
+import { formatTime } from "@/utils/formatTime";
+import { normalizeSegmentSpan } from "@/nova/utils/media/progressSegment";
+import { LottieIcon, type LottieIconApi } from "./LottieIcon";
+import { ViewpointMenu, type ViewpointItem } from "./ViewpointMenu";
+import pauseToPlayAnimationData from "../assets/lottie-icon/pause-to-play-animation.json";
+import playToPauseAnimationData from "../assets/lottie-icon/play-to-pause-animation.json";
 
 /**
  * LeftControls 组件事件映射
@@ -56,7 +68,10 @@ export interface LeftControlsProps {}
  * 第二泛型参数 LeftControlsEvents 声明组件可发射的事件
  * 父组件通过 onPrev、onNext 等 props 监听事件
  */
-export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvents>((_props, lifecycle) => {
+export const LeftControls = defineComponent<
+  LeftControlsProps,
+  LeftControlsEvents
+>((_props, lifecycle) => {
   /**
    * 通过 useContext 获取配置上下文
    * ConfigContext 由父组件 Controls 通过 provide 注入
@@ -68,45 +83,42 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   /** 可订阅配置中心（由 VideoPlayer 注入），用于 prev/next 按钮「设置即生效」 */
   const configStore = useContext(ConfigStoreContext);
 
-  /** 底部左侧根节点（用于按类名检索按钮） */
-  const bottomLeftRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bottomLeftRef');
-
-  /** 受配置控制的按钮键 → 选择器 */
-  const CONTROL_SELECTORS: Record<'prev' | 'next', string> = {
-    prev: '.player-ctrl-prev',
-    next: '.player-ctrl-next',
-  };
-
   /** 配置订阅清理函数 */
   const configCleanups: Array<() => void> = [];
 
   /**
-   * 命令式显示 / 隐藏 prev / next 按钮
-   * @param key - 控件键
-   * @param visible - 是否可见
-   */
-  const setControlVisible = (key: 'prev' | 'next', visible: boolean): void => {
-    const el = bottomLeftRef.value?.querySelector<HTMLElement>(
-      CONTROL_SELECTORS[key],
-    );
-    if (el) el.style.display = visible ? '' : 'none';
-  };
-
-  const applyPlaylistControls = (): void => {
-    const total = state?.get(PlayerStateKeyEnum.PLAYLIST_LENGTH) ?? 0;
-    const index = state?.get(PlayerStateKeyEnum.PLAYLIST_INDEX) ?? 0;
-    setControlVisible('prev', total > 1 && index > 0);
-    setControlVisible('next', total > 1 && index < total - 1);
-  };
-
-  /**
    * 通过 useContext 获取状态管理器
    * StateContext 由 VideoPlayer 通过 provide 注入
-   * duration / currentTime 等动态数据通过 useState 订阅获取
+   * duration / currentTime 等动态数据通过 useReactiveState 获取 Signal
    */
   const state = useContext(StateContext);
 
-  /** 从状态管理器读取当前时长与当前时间，用于 onMounted 初始化显示 */
+  /**
+   * 响应式状态 Signal（useReactiveState 返回 Signal，读取 .value 自动建立依赖）
+   * 在 _reactiveText / Show 的 getter 内读取 .value，signal 变化时自动更新
+   */
+  const currentTimeSignal = state
+    ? useReactiveState(state, PlayerStateKeyEnum.CURRENT_TIME, lifecycle)
+    : signal<number | undefined>(undefined);
+  const durationSignal = state
+    ? useReactiveState(state, PlayerStateKeyEnum.DURATION, lifecycle)
+    : signal<number | undefined>(undefined);
+  const playlistLengthSignal = state
+    ? useReactiveState(state, PlayerStateKeyEnum.PLAYLIST_LENGTH, lifecycle)
+    : signal<number | undefined>(undefined);
+  const playlistIndexSignal = state
+    ? useReactiveState(state, PlayerStateKeyEnum.PLAYLIST_INDEX, lifecycle)
+    : signal<number | undefined>(undefined);
+
+  /**
+   * configStore 没有原生 Signal API，用 signal 包装其路径值
+   * subscribePath 回调中写入 signal，VNode 内读取 .value 自动追踪
+   */
+  const prevConfigSignal = signal<boolean>(true);
+  const nextConfigSignal = signal<boolean>(true);
+  const segmentsSignal = signal<boolean>(false);
+
+  /** 从状态管理器读取当前时长与当前时间，用于章节按钮等非响应式路径的初始值 */
   const duration = state?.get(PlayerStateKeyEnum.DURATION) ?? 0;
   const currentTime = state?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0;
 
@@ -115,17 +127,14 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
     null;
 
   // ============================================
-  // DOM 引用
+  // DOM 引用（仅保留组件 API 引用，DOM 文本/显隐已由响应式系统管理）
   // ============================================
 
-  /** 当前时间显示元素引用 */
-  const playerCtrlTimeCurrentRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerCtrlTimeCurrentRef');
-
-  /** 总时长显示元素引用 */
-  const playerCtrlTimeDurationRef = useTemplateRef<HTMLDivElement>(lifecycle, 'playerCtrlTimeDurationRef');
-
-  /** 播放/暂停按钮图标 API 引用（LottieIcon 暴露的接口） */
-  const playOrPauseIconBtnRef = useTemplateRef<LottieIconApi>(lifecycle, 'playOrPauseIconBtnRef');
+  /** 播放/暂停按钮图标 API 引用（LottieIcon 暴露的接口，用于调用 play/advanceSlot） */
+  const playOrPauseIconBtnRef = useTemplateRef<LottieIconApi>(
+    lifecycle,
+    "playOrPauseIconBtnRef",
+  );
 
   // ============================================
   // 事件处理函数
@@ -135,13 +144,17 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    * 处理上一个按钮点击
    * 通过 lifecycle.emit 发射事件，父组件通过 onPrev 监听
    */
-  const handlePrev = (): void => { lifecycle.emit?.('prev'); };
+  const handlePrev = (): void => {
+    lifecycle.emit?.("prev");
+  };
 
   /**
    * 处理下一个按钮点击
    * 通过 lifecycle.emit 发射事件，父组件通过 onNext 监听
    */
-  const handleNext = (): void => { lifecycle.emit?.('next'); };
+  const handleNext = (): void => {
+    lifecycle.emit?.("next");
+  };
 
   /** 当前是否正在播放（用于切换播放/暂停图标动画方向） */
   let playing: boolean = false;
@@ -158,7 +171,7 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
       pauseToPlayAnimation();
       playing = true;
     }
-    lifecycle.emit?.('playPause');
+    lifecycle.emit?.("playPause");
   };
 
   /**
@@ -188,298 +201,243 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
    * 返回内联 SVG VNode，包含播放控制箭头图标
    */
   const nextBtnIconRenderer: () => VNode | null = () => {
-    return h('svg', {
-      'xml:space': 'preserve',
-      'data-pointer': 'none',
-      style: 'enable-background:new 0 0 22 22',
-      viewBox: '0 0 22 22'
-    },
-      h('path', { d: 'M16 5a1 1 0 0 0-1 1v4.615a1.431 1.431 0 0 0-.615-.829L7.21 5.23A1.439 1.439 0 0 0 5 6.445v9.11a1.44 1.44 0 0 0 2.21 1.215l7.175-4.555a1.436 1.436 0 0 0 .616-.828V16a1 1 0 0 0 2 0V6C17 5.448 16.552 5 16 5z' })
+    return h(
+      "svg",
+      {
+        "xml:space": "preserve",
+        "data-pointer": "none",
+        style: "enable-background:new 0 0 22 22",
+        viewBox: "0 0 22 22",
+      },
+      h("path", {
+        d: "M16 5a1 1 0 0 0-1 1v4.615a1.431 1.431 0 0 0-.615-.829L7.21 5.23A1.439 1.439 0 0 0 5 6.445v9.11a1.44 1.44 0 0 0 2.21 1.215l7.175-4.555a1.436 1.436 0 0 0 .616-.828V16a1 1 0 0 0 2 0V6C17 5.448 16.552 5 16 5z",
+      }),
     );
   };
 
   // ============================================
-  // 状态监听（通过 useState + useContext 订阅 TypedStateManager）
+  // 状态监听（响应式系统：useReactiveState + onEffect）
   // ============================================
   // useContext(StateContext) 从最近的 Provider 获取状态管理器实例
-  // 无需 props 传递，组件直接订阅，避免层级穿透
   //
-  // useState 工作原理：
-  //   1. 读取 state.get(path) 的当前值并返回
-  //   2. 自动订阅 path 的变化，变化时调用 updater 回调更新 DOM
-  //   3. 组件销毁时自动取消订阅（通过 lifecycle.onDestroyed）
-  //   4. updater 在 queueMicrotask 中执行，瞬时通知且不阻塞主线程
+  // 响应式工作原理：
+  //   1. useReactiveState(state, path, lifecycle) 返回 Signal<T>
+  //   2. 在 _reactiveText getter 内读取 .value 自动建立响应式依赖
+  //   3. signal 变化时 effect 自动重跑，精准更新对应 Text 节点（不重渲染组件）
+  //   4. 在 Show 的 when getter 内读取 .value 自动条件切换
   //
-  // 框架无响应式：状态变化不会自动更新 DOM
-  // 必须在 updater 回调中手动更新已持有的元素引用（如 el.textContent = ...）
-  // 这是本框架的核心约束，与 Vue/React 的响应式系统根本不同
+  // 时间显示已迁移到 _reactiveText（VNode 中响应式渲染），无需 useState 订阅
+  // prev/next 显隐已迁移到 Show + signal（VNode 中条件渲染），无需 setControlVisible
+  // 播放状态仍保留 onEffect（驱动 LottieIcon.play() 组件 API 调用）
 
   if (state) {
     /**
-     * 监听播放状态变化
-     * 当外部（VideoPlayer / 插件）改变播放状态时，自动更新播放/暂停图标
-     * 例如：state.set(PlayerStateKeyEnum.STATE, PlayerState.PLAYING)
+     * 监听播放状态变化（保留命令式：LottieIcon.play() 是组件 API 调用，非 DOM 操作）
+     * 当外部（VideoPlayer / 插件）改变播放状态时，自动切换播放/暂停图标动画
      */
-    useState(
+    const playStateSignal = useReactiveState(
       state,
       PlayerStateKeyEnum.STATE,
-      (newState) => {
-        const ps = newState as PlayerState;
-        if (ps === PlayerState.PLAYING) {
-          playing = true;
-          pauseToPlayAnimation();
-        } else if (ps === PlayerState.PAUSED || ps === PlayerState.ENDED) {
-          playing = false;
-          playToPauseAnimation();
-        }
-      },
-      lifecycle
+      lifecycle,
     );
-
-    /**
-     * 监听当前播放时间变化
-     * 当 timeupdate 触发时，手动更新时间显示 DOM
-     * 框架无响应式，必须手动更新已持有的元素引用：el.textContent = formatTime(newTime)
-     * 例如：state.set(PlayerStateKeyEnum.CURRENT_TIME, 123.45)
-     */
-    useState(
-      state,
-      PlayerStateKeyEnum.CURRENT_TIME,
-      (newTime) => {
-        if (playerCtrlTimeCurrentRef.value) {
-          playerCtrlTimeCurrentRef.value.textContent = formatTime(newTime as number);
-        }
-      },
-      lifecycle
-    );
-
-    /**
-     * 监听视频总时长变化
-     * 当视频元数据加载完成时，手动更新时长显示 DOM
-     * 例如：state.set(PlayerStateKeyEnum.DURATION, 3600)
-     */
-    useState(
-      state,
-      PlayerStateKeyEnum.DURATION,
-      (newDuration) => {
-        if (playerCtrlTimeDurationRef.value) {
-          playerCtrlTimeDurationRef.value.textContent = formatTime(newDuration as number);
-        }
-      },
-      lifecycle
-    );
-
-    /**
-     * 监听加载状态变化
-     * 加载中时禁用播放按钮，防止重复操作
-     * 手动操作 DOM：el.style.pointerEvents = 'none'
-     * 例如：state.set(PlayerStateKeyEnum.IS_LOADING, true)
-     * TODO: 待确认 loading 期间的 DOM 表现——既有实现中 loading 由独立的 Loading 组件
-     *       （player-loading-panel / state-loading 类）负责，未在控制栏切换 pointer-events，
-     *       且本组件没有播放按钮的 DOM 引用，故暂不实现回调体，仅占位监听。
-     */
-    useState(
-      state,
-      PlayerStateKeyEnum.IS_LOADING,
-      (_isLoading) => {
-      },
-      lifecycle
-    );
-
-    /**
-     * 监听缓冲进度变化
-     * 可用于显示缓冲进度条（当前未渲染缓冲条 UI，预留监听）
-     * 例如：state.set(PlayerStateKeyEnum.BUFFERED, 0.75)
-     */
-    useState(
-      state,
-      PlayerStateKeyEnum.BUFFERED,
-      (_buffered) => {
-        // 预留：可用于更新缓冲进度条 UI
-      },
-      lifecycle
-    );
-
-    useState(
-      state,
-      PlayerStateKeyEnum.PLAYLIST_LENGTH,
-      () => {
-        applyPlaylistControls();
-      },
-      lifecycle
-    );
-
-    useState(
-      state,
-      PlayerStateKeyEnum.PLAYLIST_INDEX,
-      () => {
-        applyPlaylistControls();
-      },
-      lifecycle
-    );
+    onEffect(lifecycle, () => {
+      const ps = playStateSignal.value as PlayerState | undefined;
+      if (ps === PlayerState.PLAYING) {
+        playing = true;
+        pauseToPlayAnimation();
+      } else if (ps === PlayerState.PAUSED || ps === PlayerState.ENDED) {
+        playing = false;
+        playToPauseAnimation();
+      }
+    });
   }
 
   // ============================================
   // 底部左侧按钮渲染器映射表
   // ============================================
 
-  /** 章节按钮是否已挂载（首帧渲染自带或运行时补挂都算） */
-  let viewpointMounted = false;
+  /**
+   * 上一个按钮的 VNode 模板（不含显隐逻辑，由 Show 控制流包裹决定显隐）
+   * Show 的 when getter 读取 playlistLengthSignal/playlistIndexSignal/prevConfigSignal，
+   * 任意 signal 变化时自动重新评估条件，mount/destroy 切换按钮（不重渲染）
+   */
+  const prevButtonVNode = () =>
+    h(
+      "div",
+      {
+        role: "button",
+        "aria-label": "上一个",
+        class: "nova-player-ctrl-btn nova-player-ctrl-prev",
+        onClick: handlePrev,
+      },
+      h(
+        "div",
+        { class: "nova-player-ctrl-btn-icon" },
+        h(
+          "span",
+          {
+            class: "common-svg-icon",
+            "data-name": "prev",
+          },
+          nextBtnIconRenderer(),
+        ),
+      ),
+    );
+
+  /** 下一个按钮的 VNode 模板（同上，由 Show 控制流决定显隐） */
+  const nextButtonVNode = () =>
+    h(
+      "div",
+      {
+        role: "button",
+        "aria-label": "下一个",
+        class: "nova-player-ctrl-btn nova-player-ctrl-next",
+        onClick: handleNext,
+      },
+      h(
+        "div",
+        { class: "nova-player-ctrl-btn-icon" },
+        h(
+          "span",
+          {
+            class: "common-svg-icon",
+            "data-name": "next",
+          },
+          nextBtnIconRenderer(),
+        ),
+      ),
+    );
+
+  /**
+   * prev 按钮显隐条件 getter（在 Show 的 effect 内运行，自动追踪 signal 依赖）
+   * - playlistLength > 1 且 playlistIndex > 0：播放列表有多个视频且不在第一个
+   * - prevConfigSignal：configStore 的 ui.controls.prev 开关
+   */
+  const isPrevVisible = (): boolean => {
+    const total = playlistLengthSignal.value ?? 0;
+    const index = playlistIndexSignal.value ?? 0;
+    return total > 1 && index > 0 && prevConfigSignal.value;
+  };
+
+  /** next 按钮显隐条件 getter（同上，index < total - 1 判断不在最后一个） */
+  const isNextVisible = (): boolean => {
+    const total = playlistLengthSignal.value ?? 0;
+    const index = playlistIndexSignal.value ?? 0;
+    return total > 1 && index < total - 1 && nextConfigSignal.value;
+  };
 
   /** 按钮类型到渲染函数的映射表，每个键对应一种控制按钮的渲染逻辑 */
   const bottomLeftRenderers: Record<string, () => VNode | null> = {
-    /** 渲染上一个按钮，config.prev 为 true 时显示 */
-    prev: () => h('div', {
-      role: 'button',
-      'aria-label': '上一个',
-      class: 'player-ctrl-btn player-ctrl-prev',
-      onClick: handlePrev
-    },
-      h('div', { class: 'player-ctrl-btn-icon' },
-        h('span',
-          {
-            class: 'common-svg-icon',
-            'data-name': 'prev'
-          },
-          nextBtnIconRenderer()
-        )
-      )
-    ),
-    /** 渲染播放/暂停按钮，包含播放和暂停两个 Lottie 动画图标 */
-    play: () => h('div', {
-      role: 'button',
-      'aria-label': '播放/暂停',
-      class: 'player-ctrl-btn player-ctrl-play',
-      onClick: togglePlayPause
-    },
-      h('div', {
-        class: 'player-ctrl-btn-icon'
-      },
-        h(LottieIcon, {
-          name: 'play-or-pause',
-          sequence: [
-            {
-              animationData: pauseToPlayAnimationData,
-              complete: 'stop',
-              autoplay: false
-            },
-            {
-              animationData: playToPauseAnimationData,
-              complete: 'stop',
-              autoplay: false
-            }
-          ],
-          ref: 'playOrPauseIconBtnRef'
-        }),
-      )
-    ),
-    /** 渲染下一个按钮，config.next 为 true 时显示 */
-    next: () => h('div', {
-      role: 'button',
-      'aria-label': '下一个',
-      class: 'player-ctrl-btn player-ctrl-next',
-      onClick: handleNext
-    },
-      h('div', { class: 'player-ctrl-btn-icon' },
-        h('span',
-          {
-            class: 'common-svg-icon',
-            'data-name': 'next'
-          },
-          nextBtnIconRenderer()
-        )
-      )
-    ),
-    /** 渲染时间显示区域，包含当前时间和总时长 */
-    time: () => h('div', { class: 'player-ctrl-btn player-ctrl-time' },
-      h('input', { id: 'playerCtrlTimeSeekInput', class: 'player-ctrl-time-seek', type: 'text', value: '0:00', style: 'display: none;' },),
-      h('div', { class: 'player-ctrl-time-label' },
-        // 初始即渲染 formatTime(0)（"00:00"），未播放时时间显示不再是空白
-        h('span', { class: 'player-ctrl-time-current', ref: 'playerCtrlTimeCurrentRef' }, formatTime(currentTime)),
-        h('span', { class: 'player-ctrl-time-divide' }, '/'),
-        h('span', { class: 'player-ctrl-time-duration', ref: 'playerCtrlTimeDurationRef' }, formatTime(duration))
-      )
-    ),
     /**
-     * 渲染看点（章节）菜单
-     *
-     * 数据源为 `progress.segments`（对应参考实现的 progressViewPoints：
-     * ProgressSegment 与 ProgressViewPoint 字段一一对应，label 即 pointText）。
-     * 仅在开启看点且分段数大于 1 时渲染。
+     * 渲染上一个按钮（Show 控制流包裹，条件变化时 mount/destroy 切换，不重渲染）
+     * 替代旧的 setControlVisible + el.style.display = '...' 命令式操作
      */
-    viewpoint: (): VNode | null => {
-      const vnode = buildViewpointVNode();
-      // 首帧渲染自带即视为已挂载，避免 onMounted 里再补挂一个
-      if (vnode) viewpointMounted = true;
-      return vnode;
-    },
+    prev: () => h(Show, { when: isPrevVisible }, prevButtonVNode()),
+    /** 渲染播放/暂停按钮，包含播放和暂停两个 Lottie 动画图标 */
+    play: () =>
+      h(
+        "div",
+        {
+          role: "button",
+          "aria-label": "播放/暂停",
+          class: "nova-player-ctrl-btn nova-player-ctrl-play",
+          onClick: togglePlayPause,
+        },
+        h(
+          "div",
+          {
+            class: "nova-player-ctrl-btn-icon",
+          },
+          h(LottieIcon, {
+            name: "play-or-pause",
+            sequence: [
+              {
+                animationData: pauseToPlayAnimationData,
+                complete: "stop",
+                autoplay: false,
+              },
+              {
+                animationData: playToPauseAnimationData,
+                complete: "stop",
+                autoplay: false,
+              },
+            ],
+            ref: "playOrPauseIconBtnRef",
+          }),
+        ),
+      ),
+    /** 渲染下一个按钮（Show 控制流包裹，同 prev） */
+    next: () => h(Show, { when: isNextVisible }, nextButtonVNode()),
+    /** 渲染时间显示区域，包含当前时间和总时长（响应式文本，signal 变化自动更新 Text 节点） */
+    time: () =>
+      h(
+        "div",
+        { class: "nova-player-ctrl-btn nova-player-ctrl-time" },
+        h("input", {
+          id: "playerCtrlTimeSeekInput",
+          class: "nova-player-ctrl-time-seek",
+          type: "text",
+          value: "0:00",
+          style: "display: none;",
+        }),
+        h(
+          "div",
+          { class: "nova-player-ctrl-time-label" },
+          // 零参箭头函数 = 显式响应式 getter 协议（与 Solid 的 {() => expr} 一致）：
+          // 编译器包装为 _reactiveText(() => formatTime(...))，mount 建 Text 节点 + effect，
+          // currentTimeSignal 变化时自动更新 textContent，无需手动 el.textContent = ...
+          h("span", { class: "nova-player-ctrl-time-current" }, () =>
+            formatTime(currentTimeSignal.value ?? 0),
+          ),
+          h("span", { class: "nova-player-ctrl-time-divide" }, "/"),
+          h("span", { class: "nova-player-ctrl-time-duration" }, () =>
+            formatTime(durationSignal.value ?? 0),
+          ),
+        ),
+      ),
+    /**
+     * 渲染看点（章节）菜单（Show 控制流包裹，segmentsSignal 为 true 时 mount，false 时 destroy）
+     *
+     * 替代旧的 mount(vnode, container) 命令式补挂：
+     * segments 变化时 segmentsSignal 自动驱动 Show mount/destroy，
+     * ViewpointMenu 挂载后通过 rebuildPoints 增量更新章节点（组件 API 调用，非 DOM 操作）
+     */
+    viewpoint: () =>
+      h(
+        Show,
+        { when: () => segmentsSignal.value },
+        h(ViewpointMenu, {
+          points: computeViewpointPoints(),
+          currentTime,
+          onSeek: (time: number) => lifecycle.emit?.("seek", time),
+          onViewpointMenuMounted: (api: {
+            rebuildPoints: (next: ViewpointItem[]) => void;
+          }) => {
+            viewpointApi = api;
+            // 挂载后用当前 segments 重建点位（可能比 VNode 创建时更新）
+            const pts = computeViewpointPoints();
+            if (pts.length > 0) api.rebuildPoints(pts);
+          },
+        }),
+      ),
   };
 
   /** 底部左侧按钮的渲染顺序配置 */
-  const bottomLeftOrder = ['prev', 'play', 'next', 'time', 'viewpoint'];
+  const bottomLeftOrder = ["prev", "play", "next", "time", "viewpoint"];
 
   /**
-   * 章节按钮的渲染节点
-   *
-   * 首帧渲染时 `progress.segments` 可能还是空数组，此时按钮不会出现在初始
-   * 渲染结果里；框架没有响应式，配置后到必须在这里补挂一次，否则「章节菜单」
-   * 永远不出现（点击自然打不开）。
-   *
-   * @returns 章节按钮 VNode；分段不足 2 个时返回 null
+   * 从当前 config.progressSegments 计算章节点位
+   * 供 ViewpointMenu 初始 props 和 rebuildPoints 调用共用
+   * @returns 章节点位数组；分段不足 2 个时返回空数组
    */
-  const buildViewpointVNode = (): VNode | null => {
+  const computeViewpointPoints = (): ViewpointItem[] => {
     const segments = config.progressSegments;
-    if (!segments || segments.length <= 1) return null;
+    if (!segments || segments.length <= 1) return [];
     const mediaDuration = state?.get(PlayerStateKeyEnum.DURATION) ?? duration;
-    const points: ViewpointItem[] = normalizeSegmentSpan(
-      segments,
-      mediaDuration,
-    ).map((segment) => ({
+    return normalizeSegmentSpan(segments, mediaDuration).map((segment) => ({
       title: segment.label,
       time: segment.startTime,
     }));
-    return h(ViewpointMenu, {
-      points,
-      currentTime,
-      onSeek: (time: number) => lifecycle.emit?.('seek', time),
-      onViewpointMenuMounted: (api: {
-        rebuildPoints: (next: ViewpointItem[]) => void;
-      }) => {
-        viewpointApi = api;
-        viewpointApi.rebuildPoints(
-          normalizeSegmentSpan(segments, mediaDuration).map((segment) => ({
-            title: segment.label,
-            time: segment.startTime,
-          })),
-        );
-      },
-    });
-  };
-
-  /**
-   * 确保章节按钮存在于底部左侧容器中（幂等）
-   * 配置晚到 / 分段数量变化时调用；已存在则只重建章节点。
-   */
-  const ensureViewpointButton = (): void => {
-    const container = bottomLeftRef.value;
-    if (!container) return;
-    // 是否已挂载只看本组件持有的状态，不再反查容器里的子元素
-    if (viewpointMounted) {
-      const mediaDuration = state?.get(PlayerStateKeyEnum.DURATION) ?? duration;
-      viewpointApi?.rebuildPoints(
-        normalizeSegmentSpan(config.progressSegments ?? [], mediaDuration).map(
-          (segment) => ({
-            title: segment.label,
-            time: segment.startTime,
-          }),
-        ),
-      );
-      return;
-    }
-    const vnode = buildViewpointVNode();
-    if (!vnode) return;
-    mount(vnode, container);
-    viewpointMounted = true;
   };
 
   // ============================================
@@ -487,74 +445,56 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   // ============================================
 
   /**
-   * 组件挂载后，初始化当前时间与总时长显示
-   * 手动更新 DOM：el.textContent = formatTime(...)
-   * 框架无响应式，必须手动更新 DOM
-   *
-   * 说明：useState 的订阅在首帧不执行回调（core/state.ts subscribe 跳过初始运行），
-   * 因此挂载时需手动刷一次，保证未播放时显示 "00:00 / 00:00" 而非空白
+   * 组件挂载后：
+   * - 时间显示已由 _reactiveText 响应式管理，无需手动初始化 textContent
+   * - prev/next 显隐已由 Show + signal 响应式管理，无需 setControlVisible
+   * - 章节按钮已由 Show 控制流响应式管理（segmentsSignal 驱动 mount/destroy），无需命令式补挂
+   * - 这里只需：初始化 config signal + 订阅 configStore + 注册 durationSignal 重建 effect
    */
   lifecycle.onMounted = (): void => {
-    if (playerCtrlTimeCurrentRef.value) {
-      playerCtrlTimeCurrentRef.value.textContent = formatTime(
-        state?.get(PlayerStateKeyEnum.CURRENT_TIME) ?? 0,
-      );
-    }
-    if (playerCtrlTimeDurationRef.value) {
-      playerCtrlTimeDurationRef.value.textContent = formatTime(duration);
-    }
+    // 初始化 config signal（从 configStore 读取当前值写入 signal，驱动 Show 首次评估）
+    prevConfigSignal.value =
+      configStore?.getPath<boolean>("ui.controls.prev") ?? config.prev ?? true;
+    nextConfigSignal.value =
+      configStore?.getPath<boolean>("ui.controls.next") ?? config.next ?? true;
+    segmentsSignal.value = (config.progressSegments?.length ?? 0) > 1;
 
-    // prev / next 按钮：按当前配置初始化显隐，并订阅 ui.controls.* 实现设置即生效
-    (['prev', 'next'] as const).forEach((key) => {
-      const initial =
-        configStore?.getPath<boolean>(`ui.controls.${key}`) ??
-        config[key] ??
-        true;
-      setControlVisible(key, initial !== false);
-    });
+    // 订阅 configStore 路径变化，更新 signal（Show 自动响应 signal 变化）
     if (configStore) {
-      (['prev', 'next'] as const).forEach((key) => {
+      (["prev", "next"] as const).forEach((key) => {
         configCleanups.push(
           configStore.subscribePath(`ui.controls.${key}`, (value) => {
-            setControlVisible(key, value !== false);
+            if (key === "prev") prevConfigSignal.value = value !== false;
+            else nextConfigSignal.value = value !== false;
           }),
         );
       });
-    }
-
-    applyPlaylistControls();
-
-    // 章节按钮容错：首帧若因 progress.segments 未就绪而没有渲染，这里补挂
-    ensureViewpointButton();
-    if (configStore) {
       configCleanups.push(
-        configStore.subscribePath('ui.controls.progressSegments', () => {
-          ensureViewpointButton();
+        configStore.subscribePath("ui.controls.progressSegments", () => {
+          segmentsSignal.value = (config.progressSegments?.length ?? 0) > 1;
+          // segments 变化后重建点位（Show 根据 segmentsSignal 决定是否 mount/destroy）
+          viewpointApi?.rebuildPoints(computeViewpointPoints());
         }),
       );
       configCleanups.push(
-        configStore.subscribePath('progress.segments', () => {
-          ensureViewpointButton();
+        configStore.subscribePath("progress.segments", () => {
+          segmentsSignal.value = (config.progressSegments?.length ?? 0) > 1;
+          viewpointApi?.rebuildPoints(computeViewpointPoints());
         }),
       );
     }
 
-    // 时长到手后把章节点重建成与进度条同轴的时间（setup 期快照 duration 为 0，
-    // 归一化会原样返回，必须等 DURATION 状态变化时再重建一次）
-    state?.subscribe(PlayerStateKeyEnum.DURATION, () => {
-      const mediaDuration = state.get(PlayerStateKeyEnum.DURATION) ?? 0;
-      const next = normalizeSegmentSpan(
-        config.progressSegments ?? [],
-        mediaDuration,
-      ).map((segment) => ({
-        title: segment.label,
-        time: segment.startTime,
-      }));
-      viewpointApi?.rebuildPoints(next);
-      ensureViewpointButton();
+    // 时长到手后把章节点重建成与进度条同轴的时间（依赖 durationSignal）
+    // 保留命令式：ViewpointMenu.rebuildPoints 是组件 API 调用，非 DOM 操作
+    onEffect(lifecycle, () => {
+      const mediaDuration = durationSignal.value ?? 0;
+      if (mediaDuration <= 0) return;
+      const segments = config.progressSegments;
+      if (!segments || segments.length <= 1) return;
+      viewpointApi?.rebuildPoints(computeViewpointPoints());
     });
 
-    lifecycle.emit?.('leftControlsMounted');
+    lifecycle.emit?.("leftControlsMounted");
   };
 
   /** 组件销毁前取消配置订阅 */
@@ -566,14 +506,16 @@ export const LeftControls = defineComponent<LeftControlsProps, LeftControlsEvent
   // ============================================
   // 主渲染函数
   // ============================================
-  return h('div', { class: 'player-control-bottom-left', ref: 'bottomLeftRef' },
+  return h(
+    "div",
+    { class: "nova-player-control-bottom-left" },
     ...bottomLeftOrder
-      .map(key => {
+      .map((key) => {
         /** 当前键对应的渲染函数 */
         const renderer = bottomLeftRenderers[key];
         if (!renderer) return null;
         return renderer();
       })
-      .filter((vnode): vnode is VNode => vnode !== null)
+      .filter((vnode): vnode is VNode => vnode !== null),
   );
 });

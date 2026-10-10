@@ -1,7 +1,7 @@
-import type { PlayerConfig } from '@/types';
-import type { ControlsConfig } from '@/hili-player/types';
-import { PlayMode } from '@/types';
-import { LogLevel } from '@/utils';
+import type { PlayerConfig } from "@/types";
+import type { ControlsConfig } from "@/nova/types";
+import { PlayMode } from "@/types";
+import { LogLevel } from "@/utils";
 
 /**
  * 默认控件开关
@@ -34,8 +34,8 @@ export const defaultControlConfig: ControlsConfig = {
 const defaultConfig: PlayerConfig = {
   // ── 顶层资源 ──
   container: undefined,
-  src: '',
-  poster: '',
+  src: "",
+  poster: "",
 
   // ── 播放行为 ──
   playback: {
@@ -45,7 +45,7 @@ const defaultConfig: PlayerConfig = {
     playbackRate: 1,
     loop: false,
     playMode: PlayMode.ORDER,
-    preload: 'metadata',
+    preload: "metadata",
     playsinline: true,
     startTime: 0,
   },
@@ -56,7 +56,7 @@ const defaultConfig: PlayerConfig = {
 
   // ── 外观与控件 ──
   ui: {
-    title: '嗨哩播放器',
+    title: "Nova Player",
     controls: defaultControlConfig,
   },
 
@@ -67,8 +67,8 @@ const defaultConfig: PlayerConfig = {
 
   // ── 清晰度 ──
   quality: {
-    default: 'auto',
-    mode: 'auto',
+    default: "auto",
+    mode: "auto",
   },
 
   // ── 进度条 ──
@@ -79,7 +79,7 @@ const defaultConfig: PlayerConfig = {
   // ── 弹幕 ──
   danmaku: {
     enabled: false,
-    url: '',
+    url: "",
     visible: true,
     opacity: 0.8,
     speed: 1,
@@ -102,13 +102,13 @@ const defaultConfig: PlayerConfig = {
   // ── 持久化 ──
   storage: {
     enabled: true,
-    prefix: 'hili-player:',
+    prefix: "nova-player:",
   },
 
   // ── SSR ──
   ssr: {
     enabled: false,
-    placeholder: '<div class="hili-player-placeholder">视频加载中...</div>',
+    placeholder: '<div class="nova-player-placeholder">视频加载中...</div>',
     deferHydration: false,
   },
 

@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite';
 import path from 'node:path';
-import { hiliCompile } from '../plugins/vite-plugin-hili-compile';
+import { luminaCompile } from '../plugins/vite-plugin-lumina-compile';
 
 export default defineConfig({
   root: path.resolve(__dirname),
-  plugins: [hiliCompile()],
+  plugins: [luminaCompile()],
   resolve: {
     alias: [
       { find: /^@\/core$/, replacement: path.resolve(__dirname, '../core/index.ts') },
@@ -13,8 +13,8 @@ export default defineConfig({
       { find: /^@\/events$/, replacement: path.resolve(__dirname, '../events/index.ts') },
       { find: /^@\/error$/, replacement: path.resolve(__dirname, '../error/index.ts') },
       { find: /^@\/directives$/, replacement: path.resolve(__dirname, '../directives/index.ts') },
-      { find: /^@\/hili-player\/plugins\/(.*)/, replacement: path.resolve(__dirname, '../packages/plugins/src/$1') },
-      { find: /^@\/hili-player\/(.*)/, replacement: path.resolve(__dirname, '../packages/player/src/$1') },
+      { find: /^@\/lumina\/plugins\/(.*)/, replacement: path.resolve(__dirname, '../packages/plugins/src/$1') },
+      { find: /^@\/nova\/(.*)/, replacement: path.resolve(__dirname, '../packages/player/src/$1') },
       { find: /^@\/core\/(.*)/, replacement: path.resolve(__dirname, '../core/$1') },
       { find: /^@\/types\/(.*)/, replacement: path.resolve(__dirname, '../types/$1') },
       { find: /^@\/utils\/(.*)/, replacement: path.resolve(__dirname, '../utils/$1') },

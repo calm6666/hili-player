@@ -2,28 +2,41 @@
  * ============================================
  * 控制条组件 (Controls)
  * ============================================
- * 所有 DOM 引用通过 useTemplateRef 获取
+ * 声明式响应式版本：
+ * - 时间文本由 LeftControls 响应式渲染（订阅 DURATION/CURRENT_TIME 运行时状态）
+ * - 音量数值 / 音量条 / 静音图标由 VolumeSlider 响应式管理（订阅 VOLUME 状态）
+ * - 进度滑块由 TopControls 自行管理
+ *   历史遗留的对应 DOM 引用与命令式更新函数已随子组件接管而移除；
+ *   对外 ControlsAPI 契约保持不变（显示类方法保留为文档化空实现，父层零改动）
+ * - 控制栏本体保留的命令式仅为 C 类时序行为：tooltip 按钮由左右控制栏
+ *   子组件渲染，父层挂载后 querySelector 检索并挂载原生鼠标事件
+ * - data-shadow-show 由 shadowShowSignal 响应式驱动（__reactiveAttrs），
+ *   高能进度条由 Show + pbpRenderedSignal 条件渲染
  */
 
-import { h, defineComponent, useTemplateRef, useContext, useState } from "@/core";
+import {
+  h,
+  defineComponent,
+  useTemplateRef,
+  useContext,
+  useReactiveState,
+  signal,
+  onEffect,
+  Show,
+} from "@/core";
+import type { Tooltip, ControlsConfig } from "@/nova/types";
 import type {
-  VolumeProgress,
-  Tooltip,
-  ControlsConfig,
-} from "@/hili-player/types";
-import type { ProgressSegment } from "@/types";
-import type { ProgressPreviewSource } from "@/hili-player/utils/media/progressPreview";
-import type { EnergyProgressData } from "@/hili-player/utils/media/energyProgress";
+  EnergyProgressData,
+  EnergyProgressProvider,
+  ProgressPreviewProvider,
+  ProgressSegment,
+} from "@/types";
 import {
   ConfigContext,
   PlayerStateKeyEnum,
   StateContext,
 } from "@/store/runtimeState";
-import type {
-  PlayerStateMap,
-  TypedStateManager,
-} from "@/store/runtimeState";
-import { formatTime } from "@/utils/formatTime";
+import type { PlayerStateMap, TypedStateManager } from "@/store/runtimeState";
 import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
 import type { AnimationFrameID } from "@/utils/rafTimeout";
 import { ComponentEventEnum } from "@/core/events";
@@ -39,8 +52,6 @@ import type { ProgressBarApi } from "./ProgressBar";
  * 视频进度数据
  */
 interface VideoPlayerProgress {
-  /** 缓冲进度时间（秒） */
-  bufferTime: number;
   /** 当前播放时间（秒） */
   currentTime: number;
 }
@@ -93,10 +104,10 @@ export interface ControlsProps {
   duration: number;
   volume: number;
   backrate: number;
-  /** 预览数据提供者（雪碧图或逐帧，透传给顶部进度条） */
-  getPreviewFrames?: () => ProgressPreviewSource | string[] | null;
-  /** 高能进度条数据提供者（/x/player/pbp 采样点，透传给 PbpControls） */
-  getEnergyProgress?: () => EnergyProgressData | null;
+  /** 预览图提供者（progress.previewProvider 配置注入，透传给顶部进度条） */
+  previewProvider?: ProgressPreviewProvider;
+  /** 高能进度条数据提供者（progress.energyProvider 配置注入，异步到达后写入 PbpControls） */
+  energyProvider?: EnergyProgressProvider;
 }
 
 /**
@@ -134,10 +145,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
 
     /** 视频总时长（秒），元数据加载后由 setDuration 更新 */
     let duration = props.duration;
-    /** 当前音量，范围 0-1 */
-    let volume = props.volume;
-    /** 当前播放倍速 */
-    const backrate = props.backrate;
     const configCtx = useContext<ControlsConfig>(ConfigContext);
     /** 控制条配置（浅拷贝，避免修改原始 props） */
     const config: ControlsConfig = {
@@ -151,11 +158,24 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     /** 底部影子进度条 API（由 ShadowProgressArea 挂载后填充） */
     let shadowApi: ShadowProgressAreaApi | null = null;
 
-    /** 高能进度条常驻态：存在多个分段即常驻，之后由 `.player-pbp-pin` 或设置面板切换 */
+    /** 高能进度条常驻态：存在多个分段即常驻，之后由 `.nova-player-pbp-pin` 图钉切换 */
     let permanent = (config.progressSegments?.length ?? 0) > 1;
 
     // 常驻态是全局状态，写入运行时状态（PbpControls / 影子进度条 / 设置面板订阅同一份）
     stateMgr?.set(PlayerStateKeyEnum.PBP_PERMANENT, permanent);
+
+    // 渲染态初始化：默认渲染（设置面板复选框取消勾选后写 false）
+    stateMgr?.set(PlayerStateKeyEnum.PBP_RENDERED, true);
+
+    /**
+     * 响应式信号：高能进度条渲染态
+     * 驱动 PbpControls 的条件渲染（Show 控制流）：
+     * false → 整个组件不挂载；重新勾选 → 重新挂载并通过 onPbpControlsMounted 恢复数据
+     * undefined 兜底为 true（状态写入早于本组件 setup，正常不会出现）
+     */
+    const pbpRenderedSignal = stateMgr
+      ? useReactiveState(stateMgr, PlayerStateKeyEnum.PBP_RENDERED, lifecycle)
+      : signal<boolean | undefined>(undefined);
 
     /** 应用常驻态到运行时状态（订阅方据此更新影子进度条与高能进度条） */
     const applyPermanent = (next: boolean): void => {
@@ -163,18 +183,33 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       stateMgr?.set(PlayerStateKeyEnum.PBP_PERMANENT, next);
     };
 
-    /** 视频进度数据 */
+    // 常驻态订阅：图钉点击写入运行时状态，这里落到影子条与高能条。
+    // ★ 必须在 setup 阶段调用 onEffect：mount 在 onMounted 阶段先启动 _effects 再执行用户钩子，
+    //   若在 onMounted 回调内注册，effect 将错过启动窗口永不运行，pin 点击后状态无人消费（点击失效根因）
+    if (stateMgr) {
+      const pbpPermanentSignal = useReactiveState(
+        stateMgr,
+        PlayerStateKeyEnum.PBP_PERMANENT,
+        lifecycle,
+      );
+      onEffect(lifecycle, () => {
+        permanent = Boolean(pbpPermanentSignal.value);
+        shadowApi?.setPermanent(permanent);
+        pbpApi?.setPermanent(permanent);
+      });
+    }
+
+    /** 视频进度数据（currentTime 用于高能进度条重挂时恢复进度） */
     const videoProgress: VideoPlayerProgress = {
-      bufferTime: 0,
       currentTime: 0,
     };
 
-    /** 音量滑块拖拽状态 */
-    const volumeProgress: VolumeProgress = {
-      isDragging: false,
-      startY: 0,
-      isMuted: false,
-    };
+    // ============================================
+    // 响应式 Signal（驱动 onEffect / _reactiveText 自动更新 DOM）
+    // ============================================
+
+    /** 影子进度条显隐 Signal（驱动 data-shadow-show 属性） */
+    const shadowShowSignal = signal<boolean>(true);
 
     /** 需要显示提示信息的按钮列表 */
     const tooltipBtns: Tooltip[] = [
@@ -191,65 +226,26 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
 
     /** 提示按钮名 → 选择器（按钮由左右控制栏子组件渲染，父层挂载后才可检索到） */
     const TOOLTIP_SELECTORS: Record<string, string> = {
-      prev: ".player-ctrl-btn.player-ctrl-prev",
-      next: ".player-ctrl-btn.player-ctrl-next",
-      pip: ".player-ctrl-btn.player-ctrl-pip",
-      wide: ".player-ctrl-btn.player-ctrl-wide",
-      web: ".player-ctrl-btn.player-ctrl-web",
-      full: ".player-ctrl-btn.player-ctrl-full",
+      prev: ".nova-player-ctrl-btn.nova-player-ctrl-prev",
+      next: ".nova-player-ctrl-btn.nova-player-ctrl-next",
+      pip: ".nova-player-ctrl-btn.nova-player-ctrl-pip",
+      wide: ".nova-player-ctrl-btn.nova-player-ctrl-wide",
+      web: ".nova-player-ctrl-btn.nova-player-ctrl-web",
+      full: ".nova-player-ctrl-btn.nova-player-ctrl-full",
     };
 
     // ============================================
     // DOM 元素引用（全部通过 ref 对象获取）
     // ============================================
 
-    /** 控制栏主体容器元素 */
+    /** 控制栏主体容器元素（tooltip 按钮检索的根节点） */
     const controlEntityRef = useTemplateRef<HTMLDivElement>(
       lifecycle,
       "controlEntityRef",
     );
-    /** 进度条区域容器元素 */
-    const playerProgressAreaRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "playerProgressAreaRef",
-    );
-    /** 进度条拖拽滑块元素 */
-    const progressThumbRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "progressThumbRef",
-    );
-    /** 当前播放时间文本元素 */
-    const playerCtrlTimeCurrentRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "playerCtrlTimeCurrentRef",
-    );
-    /** 总时长文本元素 */
-    const playerCtrlTimeDurationRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "playerCtrlTimeDurationRef",
-    );
-    /** 音量按钮元素 */
-    const ctrlVolumeBtnRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "ctrlVolumeBtnRef",
-    );
-    /** 音量数值文本元素 */
-    const volumeNumberRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "volumeNumberRef",
-    );
-    /** 音量进度条元素 */
-    const volumeProgressbarRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "volumeProgressbarRef",
-    );
-    /** 音量滑块拖拽手柄元素 */
-    const volumeSliderThumbRef = useTemplateRef<HTMLDivElement>(
-      lifecycle,
-      "volumeSliderThumbRef",
-    );
-    /** 倍速菜单项元素列表 */
-    const backrateMenuItems: HTMLLIElement[] = [];
+    // 说明：时间 / 音量 / 倍速 / 进度滑块的显示元素已由 LeftControls /
+    // VolumeSlider / RightControls / TopControls 子组件自行渲染并响应式管理，
+    // 控制栏不再持有对应 DOM 引用（历史遗留的空引用已移除）
     // 高能进度条 API（由 PbpControls 挂载后填充）
     let pbpApi: {
       setShow: (show: boolean) => void;
@@ -259,48 +255,45 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       setDuration: (duration: number) => void;
     } | null = null;
 
-    // ============================================
-    // 工具函数
-    // ============================================
+    /** 高能数据请求序号（异步 energyProvider 竞态保护：仅应用最新一次请求的结果） */
+    let energyRequestId = 0;
 
     /**
-     * 对元素应用 scaleX 变换，用于更新进度条填充比例
-     * @param element - 目标 DOM 元素
-     * @param scale - 缩放比例，会被限制在 0-1 之间
-     * @param extraTransform - 额外的 CSS transform 字符串
+     * 拉取高能进度条数据（同步或异步 provider 均兼容）
+     *
+     * 数据获取逻辑由外部实现（progress.energyProvider 配置注入）：
+     * - 同步返回：立即写入 PbpControls；
+     * - 异步返回：resolve 后经序号校验再写入，过期的响应（组件重挂期间
+     *   发起的更新请求）直接丢弃，避免旧数据覆盖新数据。
      */
-    const applyTransform = (
-      element: HTMLDivElement | null | undefined,
-      scale?: number,
-      extraTransform = "",
-    ): void => {
-      if (!element) return;
-      const clampedScale = Math.min(Math.max(scale ?? 0, 0), 1);
-      element.style.transform =
-        `scaleX(${clampedScale}) ${extraTransform}`.trim();
+    const loadEnergyData = (): void => {
+      const provider = props.energyProvider;
+      if (!provider) return;
+      energyRequestId += 1;
+      const requestId = energyRequestId;
+      const result = provider();
+      if (result instanceof Promise) {
+        void result
+          .then((data) => {
+            if (requestId !== energyRequestId) return;
+            pbpApi?.setEnergy(data);
+          })
+          .catch(() => {
+            // 获取失败视为无高能数据：不影响曲线已绘制的状态，静默降级
+          });
+        return;
+      }
+      pbpApi?.setEnergy(result);
     };
-
-    // ============================================
-    // 进度条元素创建
-    // ============================================
 
     // ============================================
     // 事件处理函数
     // ============================================
 
     /**
-     * 初始化倍速菜单项，为当前倍速添加激活样式
-     */
-    const initBackrate = (): void => {
-      backrateMenuItems.forEach((item) => {
-        if (item.getAttribute("data-value") === backrate.toString()) {
-          item.classList.add("player-state-active");
-        }
-      });
-    };
-
-    /**
      * 初始化提示按钮的鼠标悬浮事件，延迟 300ms 显示/隐藏提示
+     * （C 类保留命令式：按钮由 LeftControls / RightControls 子组件渲染，
+     *   onMounted 阶段经 querySelector 检索后挂载原生事件，属一次性时序行为）
      */
     const initTooltip = (): void => {
       tooltipBtns.forEach((btn) => {
@@ -330,13 +323,12 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // ============================================
 
     /**
-     * 更新当前播放时间，同步更新进度条、时间文本和滑块位置
+     * 更新当前播放时间，转发给底部影子进度条与高能进度条
+     * （时间文本由 LeftControls 响应式渲染、滑块由 TopControls 自行管理，无需命令式同步）
      * @param current - 当前播放时间（秒）
      */
     const updateCurrent = (current: number): void => {
       videoProgress.currentTime = current;
-      updateMainProgress(current);
-      updateThumbPosition(current);
       // 底部影子进度条与顶部进度条同源：控制栏隐藏时显示的就是它
       shadowApi?.updateProgress(current);
       // 高能进度条按同一进度重绘已播放面积
@@ -344,57 +336,20 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     };
 
     /**
-     * 更新主进度条的时间文本显示
-     * @param current - 当前时间（秒）
+     * 更新音量显示（契约保留，内部为空实现）
+     * 音量数值 / 音量条 / 静音图标已由 VolumeSlider 子组件响应式管理
+     * （订阅 PlayerStateKeyEnum.VOLUME 运行时状态，父层写状态后自动同步），
+     * 本方法仅为维持 ControlsAPI 对外契约（PlayerDocker 沿用既有调用）
+     * @param _newVolume - 新的音量值，范围 0-1（显示已由子组件接管，未使用）
      */
-    const updateMainProgress = (current: number): void => {
-      if (!playerCtrlTimeCurrentRef.value) return;
-      playerCtrlTimeCurrentRef.value.textContent = formatTime(current);
-    };
+    const updateVolumeDisplay = (_newVolume: number): void => {};
 
     /**
-     * 更新进度条拖拽滑块的位置
-     * @param current - 当前时间（秒）
+     * 初始化总时长文本显示（契约保留，内部为空实现）
+     * 总时长文本由 LeftControls 响应式渲染（订阅 DURATION 运行时状态），
+     * 本方法仅为维持 ControlsAPI 对外契约（PlayerDocker 沿用既有调用）
      */
-    const updateThumbPosition = (current: number): void => {
-      // 总时长非法时跳过，避免除零产生 NaN/Infinity（与 ProgressBar 的边界处理一致）
-      if (!progressThumbRef.value || !playerProgressAreaRef.value) return;
-      if (duration <= 0) return;
-      const position =
-        (current / duration) * playerProgressAreaRef.value.clientWidth - 10;
-      applyTransform(progressThumbRef.value, 1, `translateX(${position}px)`);
-    };
-
-    /**
-     * 更新音量显示，包括音量数值、进度条高度和滑块位置
-     * @param newVolume - 新的音量值，范围 0-1
-     */
-    const updateVolumeDisplay = (newVolume: number): void => {
-      if (volume <= 0 && newVolume > 0) {
-        ctrlVolumeBtnRef.value?.classList.remove("state-muted");
-      } else if (volume > 0 && newVolume <= 0) {
-        ctrlVolumeBtnRef.value?.classList.add("state-muted");
-      }
-      volume = newVolume;
-      if (
-        volumeNumberRef.value &&
-        volumeProgressbarRef.value &&
-        volumeSliderThumbRef.value
-      ) {
-        volumeNumberRef.value.textContent = Math.floor(volume * 100).toString();
-        volumeProgressbarRef.value.style.transform = `scaleY(${volume})`;
-        volumeSliderThumbRef.value.style.transform = `translateY(${-(60 * volume - 6)}px)`;
-      }
-    };
-
-    /**
-     * 初始化总时长文本显示
-     */
-    const initDuration = (): void => {
-      if (playerCtrlTimeDurationRef.value) {
-        playerCtrlTimeDurationRef.value.textContent = formatTime(duration);
-      }
-    };
+    const initDuration = (): void => {};
 
     /**
      * 更新总时长，并同步到底部影子进度条
@@ -405,7 +360,6 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       shadowApi?.setDuration(value);
       // 高能进度条需要总时长把播放进度换算成采样点下标
       pbpApi?.setDuration(value);
-      initDuration();
     };
 
     /**
@@ -421,55 +375,13 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
     // 生命周期钩子
     // ============================================
 
-    let shadowShow = true;
-    let shadowObserver: MutationObserver | null = null;
-
     const applyShadowShow = (show: boolean): void => {
-      shadowShow = show;
-      controlEntityRef.value?.setAttribute(
-        "data-shadow-show",
-        show ? "true" : "false",
-      );
+      shadowShowSignal.value = show;
       pbpApi?.setShow(!show);
     };
 
-    const shadowObserve = (): void => {
-      controlEntityRef.value?.setAttribute(
-        "data-shadow-show",
-        shadowShow ? "true" : "false",
-      );
-      const container = controlEntityRef.value?.closest(".player-container");
-      if (!container || typeof MutationObserver === "undefined") return;
-      shadowObserver?.disconnect();
-      shadowObserver = new MutationObserver(() => {
-        controlEntityRef.value?.setAttribute(
-          "data-shadow-show",
-          shadowShow ? "true" : "false",
-        );
-      });
-      shadowObserver.observe(container, {
-        attributeFilter: ["data-screen"],
-        attributes: true,
-      });
-    };
-
     lifecycle.onMounted = (): void => {
-      initDuration();
-      initBackrate();
-
-      // 常驻态订阅：设置面板勾选 / 图钉点击任一处写入运行时状态，这里落到影子条与高能条
-      if (stateMgr) {
-        useState(
-          stateMgr,
-          PlayerStateKeyEnum.PBP_PERMANENT,
-          (value) => {
-            permanent = value;
-            shadowApi?.setPermanent(value);
-            pbpApi?.setPermanent(value);
-          },
-          lifecycle,
-        );
-      }
+      // 常驻态订阅已在 setup 阶段注册（onEffect 依赖 mount 的 _effects 启动窗口，onMounted 回调内注册不会生效）
       shadowApi?.setPermanent(permanent);
       pbpApi?.setPermanent(permanent);
 
@@ -486,7 +398,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         initTooltip();
       }
 
-      shadowObserve();
+      // 影子进度条显隐初始态（响应式 attr 已订阅 shadowShowSignal，自动驱动 data-shadow-show 属性）
+      shadowShowSignal.value = true;
 
       // 暴露控制栏 API 给父组件
       lifecycle.emit?.("controlsMounted", {
@@ -497,11 +410,10 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         hideControl: () => {
           applyShadowShow(true);
         },
-        updateMute: (isMuted: boolean) => {
-          volumeProgress.isMuted = isMuted;
+        updateMute: (_isMuted: boolean) => {
+          // 契约保留：静音图标由 VolumeSlider 响应式管理，无需转发
         },
         updateBuffer: (buffer: number) => {
-          updateMainProgress(buffer);
           shadowApi?.updateBuffer(buffer);
         },
         updateCurrent,
@@ -578,6 +490,8 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
       key: string;
       value: boolean | string | number;
     }): void => {
+      // 「高能进度条」复选框（key=highenergy）现在只写渲染态（PBP_RENDERED），
+      // 渲染由 Controls 的 Show 条件渲染消费，常驻态归图钉（pbpPinClick）管理，无需命令式转发
       lifecycle.emit?.("settingChange", payload);
     };
 
@@ -587,22 +501,23 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
 
     return h(
       "div",
-      { class: "player-control-wrap" },
-      h("div", { class: "player-control-mask" }),
+      { class: "nova-player-control-wrap" },
+      h("div", { class: "nova-player-control-mask" }),
       h(
         "div",
         {
-          class: "player-control-entity",
-          // 初始为 "true"（与既有实现一致）：
-          // scss 中 data-shadow-show="false" 会强制显示 .player-control-top（进度条），
-          // 而 data-ctrl-hidden 只控制 .player-control-bottom 的显隐。
+          class: "nova-player-control-entity",
+          // shadowShowSignal 初始为 true（与既有实现一致）：
+          // scss 中 data-shadow-show="false" 会强制显示 .nova-player-control-top（进度条），
+          // 而 data-ctrl-hidden 只控制 .nova-player-control-bottom 的显隐。
           // 若初始为 "false"，会出现「进度条显示了但底部按钮没一起显示」的不同步现象。
-          "data-shadow-show": "true",
+          // 响应式 attr：编译器自动 __reactiveAttrs，shadowShowSignal 变化时自动更新 DOM
+          "data-shadow-show": shadowShowSignal.value ? "true" : "false",
           ref: "controlEntityRef",
         },
         h(TopControls, {
           progressSegments: config.progressSegments,
-          getPreviewFrames: props.getPreviewFrames,
+          previewProvider: props.previewProvider,
           onSeek: (time) => {
             updateCurrent(time);
             lifecycle.emit?.("seek", time);
@@ -619,14 +534,14 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
         }),
         h(
           "div",
-          { class: "player-control-bottom" },
+          { class: "nova-player-control-bottom" },
           h(LeftControls, {
             onPrev: () => lifecycle.emit?.("prev"),
             onNext: () => lifecycle.emit?.("next"),
             onPlayPause: () => lifecycle.emit?.("playPause"),
             onSeek: handleLeftSeek,
           }),
-          h("div", { class: "player-control-bottom-center" }),
+          h("div", { class: "nova-player-control-bottom-center" }),
           h(RightControls, {
             onFullscreen: () => lifecycle.emit?.("fullscreenToggle"),
             onWebFullscreen: () => lifecycle.emit?.("webFullscreenToggle"),
@@ -660,27 +575,42 @@ export const Controls = defineComponent<ControlsProps, ControlsEvents>(
           },
         }),
         // 高能进度条（常驻 DOM，控制栏展开时由 setShow(true) 抬到控制栏之上）
-        h(PbpControls, {
-          onPbpControlsMounted: (api: {
-            setShow: (show: boolean) => void;
-            setPermanent: (permanent: boolean) => void;
-            setEnergy: (data: EnergyProgressData | null) => void;
-            setProgress: (time: number) => void;
-            setDuration: (duration: number) => void;
-          }) => {
-            pbpApi = api;
-            // 数据与常驻态可能早于组件挂载到达：挂载时补一次
-            api.setDuration(duration);
-            api.setPermanent(permanent);
-            api.setEnergy(props.getEnergyProgress?.() ?? null);
-            api.setProgress(videoProgress.currentTime);
-          },
-          onPbpClick: () => {},
-          // 图钉：切换《高能进度条》常驻（与提示文案语义一致）
-          onPbpPinClick: () => {
-            applyPermanent(!permanent);
-          },
-        }),
+        // 渲染开关（设置面板复选框）驱动 Show 条件渲染：false → 整个组件不挂载
+        h(
+          Show,
+          { when: () => pbpRenderedSignal.value !== false },
+          h(PbpControls, {
+            onPbpControlsMounted: (api: {
+              setShow: (show: boolean) => void;
+              setPermanent: (permanent: boolean) => void;
+              setEnergy: (data: EnergyProgressData | null) => void;
+              setProgress: (time: number) => void;
+              setDuration: (duration: number) => void;
+            }) => {
+              pbpApi = api;
+              // 数据与常驻态可能早于组件挂载到达：挂载时补一次
+              // 重新勾选（Show 由 false → true）时也走这里恢复数据
+              api.setDuration(duration);
+              api.setPermanent(permanent);
+              // 恢复展开态：重挂实例的 showSignal 重置为 false，
+              // 若控制栏正显示中（shadowShow=false）不补调 setShow，
+              // 高能条会落回 bottom:3px 被 mask 遮罩盖住（z-index:-1），勾选后肉眼不可见
+              api.setShow(!shadowShowSignal.value);
+              // 高能数据经 energyProvider 拉取（异步结果经序号校验写入，
+              // 重新勾选 Show 由 false → true 时也走这里恢复数据）
+              loadEnergyData();
+              api.setProgress(videoProgress.currentTime);
+            },
+            onPbpClick: ({ time }: { time: number }) => {
+              // 点击高能进度条曲线：跳转到对应时间点（上抛 seek 事件由 VideoPlayer 处理）
+              lifecycle.emit?.("seek", time);
+            },
+            // 图钉：切换《高能进度条》常驻（与提示文案语义一致）
+            onPbpPinClick: () => {
+              applyPermanent(!permanent);
+            },
+          }),
+        ),
       ),
     );
   },

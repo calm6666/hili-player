@@ -27,7 +27,7 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['@hili-player/player', 'dashjs', 'flv.js'],
+      external: ['@lumina/nova', 'dashjs', 'flv.js'],
       output: {
         preserveModules: true,
         preserveModulesRoot: 'src',
@@ -40,8 +40,8 @@ export default defineConfig({
   },
   resolve: {
     alias: [
-      { find: /^@\/hili-player\/plugins/, replacement: resolve(__dirname, 'src') },
-      { find: /^@\/hili-player/, replacement: resolve(__dirname, '../player/src') },
+      { find: /^@\/lumina\/plugins/, replacement: resolve(__dirname, 'src') },
+      { find: /^@\/nova/, replacement: resolve(__dirname, '../player/src') },
       { find: /^@\//, replacement: resolve(__dirname, '../..') + '/' },
       { find: 'hls.js', replacement: resolve(__dirname, '../../hls-fork/dist/hls.mjs') },
     ],

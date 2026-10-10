@@ -100,7 +100,7 @@
 }
 
 // 播放器主题适配
-.player-docker {
+.nova-player-docker {
   .scroll-view {
     .scroll-view-scrollbar-track {
       background: rgba(0, 0, 0, 0.1);
@@ -121,7 +121,7 @@
 }
 
 // 暗色主题
-.player-docker[data-theme="dark"],
+.nova-player-docker[data-theme="dark"],
 .ui-dark {
   .scroll-view {
     .scroll-view-scrollbar-track {

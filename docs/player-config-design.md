@@ -383,7 +383,7 @@ if (this.props.volume === defaultConfig.volume) {
 **问题**：
 - 无 `storage.enabled` 开关，用户无法关闭
 - 判定条件是"**等于默认值**"→ 用户显式传 `volume: 1`（正好等于默认）会被 localStorage 覆盖，**违反最小惊讶原则**
-- 无 `persistKey` 配置（硬编码 `"hili_player_state"`）
+- 无 `persistKey` 配置（硬编码 `"nova_player_state"`）
 
 #### 问题 9｜默认值两份、且不一致 🟠
 
@@ -524,7 +524,7 @@ interface PlayerConfig {
 // 文件：types/config.ts（新增，从 types/index.ts 拆出）
 // ============================================================
 
-import type { Plugin } from '@/hili-player/core/plugin';
+import type { Plugin } from '@/nova/core/plugin';
 import type { PlayerCallbacks } from './index';
 
 /** 深层可选（用于用户输入类型） */
@@ -1579,7 +1579,7 @@ callbacks: { seeked: (t: number) => {} }         // 参数类型自动推断
 ### ADR-8｜为什么不引入 JSON Schema / zod 校验？
 
 - **决策**：手写轻量校验（约 80 行）
-- **理由**：框架核心追求零运行时依赖（目前仅 `@preact/signals-core`）；校验只在 dev 执行，且只需"未知键 + 枚举值"两类检查
+- **理由**：框架核心追求零运行时依赖（signalsCore 已自研内置，无任何外部依赖）；校验只在 dev 执行，且只需"未知键 + 枚举值"两类检查
 - **代价**：类型定义与校验逻辑是两份（用 `as const` 白名单数组共享枚举值来降低漂移风险）
 
 ---

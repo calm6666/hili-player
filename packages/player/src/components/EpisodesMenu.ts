@@ -2,24 +2,30 @@
  * ============================================
  * 选集面板组件 (EpisodesMenu)
  * ============================================
- * 控制栏右下角「选集」按钮 + 悬浮选集面板，支持命令式列表渲染、
- * 当前集高亮与播放中图标、空态展示、面板悬停动画回调。
- *
- * 框架无虚拟 DOM diff：`episodes` 数组变化不会触发重渲染，必须在
- * 状态订阅回调 / 生命周期钩子里手动重建 <li> 节点（与 QualityMenu 一致）。
- *
- * 可见性（普通模式隐藏 / 网页全屏与全屏可见）全部由
- * `styles/eplistmenu.scss` 用 visibility + width 控制，
- * 绝不能用 display —— 父层 RightControls 会用内联 style.display 控制该按钮显隐，
- * 内联优先级最高，用 display 会互相打架。
+ * 声明式响应式版本：
+ * - 当前集下标由 activeIndexSignal 驱动（For 项 class / Show 播放中图标）
+ * - 面板展开态由 shownSignal 驱动根节点 state-show 类（__reactiveAttrs），
+ *   hover 定时器（rafTimeout）仅负责延迟时序并写信号，不直接操作 DOM
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext, materialize } from '@/core';
-import { useComponentUnmount } from '@/hili-player/core/componentUnmount';
-import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
-import type { AnimationFrameID } from '@/utils/rafTimeout';
-import { PlayerStateKeyEnum, StateContext } from '@/store/runtimeState';
-import type { VNode } from '@/types';
+import {
+  h,
+  defineComponent,
+  useReactiveState,
+  useContext,
+  t,
+  signal,
+  computed,
+  onEffect,
+  For,
+  Show,
+} from "@/core";
+import type { ReadonlySignal } from "@/core";
+import { useComponentUnmount } from "@/nova/core/componentUnmount";
+import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
+import type { AnimationFrameID } from "@/utils/rafTimeout";
+import { PlayerStateKeyEnum, StateContext } from "@/store/runtimeState";
+import type { VNode } from "@/types";
 
 /**
  * 选集项
@@ -38,6 +44,18 @@ export interface EpisodesMenuProps {
   episodes: EpisodeOption[];
   /** 当前集下标 */
   currentIndex: number;
+  /**
+   * 配置显隐（ui.controls.episodes）
+   * 父层可传 Signal 形态（props 惰性代理读取穿透建立依赖），
+   * 缺省可见；display 由本组件根节点响应式 style 单一来源管理
+   */
+  visible?: boolean | ReadonlySignal<boolean>;
+  /**
+   * 是否有播放列表（长度 > 1）
+   * 父层可传 Signal 形态；驱动根节点 nova-player-has-playlist 类
+   * （替代旧的 RightControls querySelector + classList.toggle 命令式写入）
+   */
+  hasPlaylist?: boolean | ReadonlySignal<boolean>;
 }
 
 export interface EpisodesMenuEvents {
@@ -45,39 +63,47 @@ export interface EpisodesMenuEvents {
   episodeChange: (index: number) => void;
 }
 
+/**
+ * 运行时类型谓词：For 控制流的回调入参为 unknown（For 的 props 为
+ * Record<string, unknown>，类型信息在回调边界丢失），
+ * 用谓词收窄替代 as 断言
+ */
+const isEpisodeOption = (item: unknown): item is EpisodeOption =>
+  typeof item === "object" &&
+  item !== null &&
+  "index" in item &&
+  typeof item.index === "number";
+
 /** 列表区域最小高度，与参考实现的 min-height: 480px 对齐（普通模式盖掉，由 scss 控制） */
-const MENU_MIN_HEIGHT = '180px';
+const MENU_MIN_HEIGHT = "180px";
 
 /** 当前集「播放中」三段竖条图标（参考 DOM：viewBox 0 0 12 13 + 3 个 rect） */
 const PlayingIcon = (): VNode =>
   h(
-    'svg',
+    "svg",
     {
-      xmlns: 'http://www.w3.org/2000/svg',
-      'data-pointer': 'none',
-      viewBox: '0 0 12 13',
+      xmlns: "http://www.w3.org/2000/svg",
+      "data-pointer": "none",
+      viewBox: "0 0 12 13",
     },
-    h('rect', { width: '2', height: '6', x: '1', y: '3.5', rx: '1' }),
-    h('rect', { width: '2', height: '4', x: '9', y: '4.5', rx: '1' }),
-    h('rect', { width: '2', height: '10', x: '5', y: '1.5', rx: '1' }),
+    h("rect", { width: "2", height: "6", x: "1", y: "3.5", rx: "1" }),
+    h("rect", { width: "2", height: "4", x: "9", y: "4.5", rx: "1" }),
+    h("rect", { width: "2", height: "10", x: "5", y: "1.5", rx: "1" }),
   );
 
 /**
  * EpisodesMenu 组件 - 使用 defineComponent 创建独立组件
  * 渲染选集按钮与选集面板，当前集高亮 + 播放中图标
  */
-export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvents>((props, lifecycle) => {
+export const EpisodesMenu = defineComponent<
+  EpisodesMenuProps,
+  EpisodesMenuEvents
+>((props, lifecycle) => {
   const state = useContext(StateContext);
 
   // ============================================
-  // DOM 引用
+  // 面板展开态（hover 定时器时序 + signal 驱动类名）
   // ============================================
-
-  /** 选集列表容器（ul）引用 */
-  const listRef = useTemplateRef<HTMLUListElement>(lifecycle, 'eplistListRef');
-
-  /** 按钮根元素引用（面板显隐的类名挂载点） */
-  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'eplistRootRef');
 
   /** 展开定时器 */
   let showTimer: AnimationFrameID | null = null;
@@ -86,11 +112,34 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
   let hideTimer: AnimationFrameID | null = null;
 
   /**
-   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * 响应式信号：面板展开态
+   * 驱动根节点 state-show 类（编译器包装为 __reactiveAttrs，
+   * 变化时经 normalizeClass 精准更新类名），
+   * 替代旧的 rootRef.classList.toggle 命令式写法
+   */
+  const shownSignal = signal<boolean>(false);
+
+  /**
+   * 配置显隐派生信号：父层经 visible prop 传入（支持 Signal 形态，
+   * props 惰性代理读取穿透 Signal.value 自动建立依赖），
+   * display 由本组件根节点响应式 style 单一来源管理，
+   * 消除旧的 RightControls querySelector 直写 display
+   */
+  const configVisibleSignal = computed(() => props.visible !== false);
+
+  /**
+   * 是否有播放列表派生信号：父层经 hasPlaylist prop 传入（支持 Signal 形态），
+   * 驱动根节点 nova-player-has-playlist 类（__reactiveAttrs + normalizeClass），
+   * 替代旧的 classList.toggle 命令式写入
+   */
+  const hasPlaylistSignal = computed(() => props.hasPlaylist === true);
+
+  /**
+   * 落地面板展开态：写信号即可，DOM 类名由响应式系统自动同步
    * @param show - 是否展开
    */
   const setShown = (show: boolean): void => {
-    rootRef.value?.classList.toggle('state-show', show);
+    shownSignal.value = show;
   };
 
   /** 取消两个方向的排队任务 */
@@ -102,114 +151,34 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
   };
 
   // ============================================
-  // 内部状态（非响应式，仅渲染时手动维护）
-  // ============================================
-
-  /** 当前集下标（初始取 props，之后由 props/运行时状态推动） */
-  let activeIndex: number = props.currentIndex ?? 0;
-
-  /** 最近一次渲染的选集列表（供选中态 / 空态判断） */
-  let currentList: EpisodeOption[] = [];
-
-  // ============================================
-  // 渲染辅助函数
+  // 响应式信号
   // ============================================
 
   /**
-   * 创建当前集「播放中」图标虚拟节点（仅当前集插入）
-   * @returns 图标 span 的虚拟节点
+   * 响应式信号：当前集下标
+   * 替代旧的 let activeIndex 可变变量
+   * signal 变化时自动驱动 onEffect 互斥高亮 + Show 切换播放中图标
    */
-  const renderPlayingIcon = (): VNode =>
-    h('span', { class: 'player-ctrl-eplist-multi-menu-item-icon' }, PlayingIcon());
+  const activeIndexSignal = signal<number>(props.currentIndex ?? 0);
 
   /**
-   * 创建单个选集项
-   * 普通项：li[data-index] > span.player-ctrl-eplist-multi-menu-item-text
-   * 当前项：额外加 player-state-active 类，并在文字前插播放中图标
-   * @param item - 选集项
-   * @returns 选集项 li 元素
+   * 响应式信号：运行时播放列表下标（外部切集时同步）
+   * useReactiveState 返回 Signal，读取 .value 自动建立依赖
+   * 替代旧的 useState(state, PLAYLIST_INDEX, (index) => { activeIndex = index; ... }, lifecycle)
    */
-  const createItem = (item: EpisodeOption): HTMLLIElement => {
-    const isActive = item.index === activeIndex;
-    return materialize(
-      h(
-        'li',
-        {
-          class: isActive
-            ? 'player-ctrl-eplist-multi-menu-item player-state-active'
-            : 'player-ctrl-eplist-multi-menu-item',
-          'data-index': String(item.index),
-          onClick: () => {
-            // 当前项点击不做任何事
-            if (item.index === activeIndex) return;
-            activeIndex = item.index;
-            renderEpisodes(currentList);
-            lifecycle.emit?.('episodeChange', item.index);
-          },
-        },
-        ...(isActive ? [renderPlayingIcon()] : []),
-        h(
-          'span',
-          { class: 'player-ctrl-eplist-multi-menu-item-text' },
-          item.title ?? '',
-        ),
-      ),
-    ) as HTMLLIElement;
-  };
+  const playlistIndexStateSignal = state
+    ? useReactiveState(state, PlayerStateKeyEnum.PLAYLIST_INDEX, lifecycle)
+    : signal<unknown>(undefined);
 
   /**
-   * 创建空态项（episodes 为空数组时展示）
-   * @returns 空态 li 元素
+   * 响应式同步：运行时播放列表下标变化 → 更新本地 activeIndex 信号
+   * onEffect 内读取 playlistIndexStateSignal.value 自动追踪
+   * 替代旧的 useState updater 回调（不再需要重建整个列表）
    */
-  const createEmptyItem = (): HTMLLIElement =>
-    materialize(
-      h(
-        'li',
-        {
-          class:
-            'player-ctrl-eplist-multi-menu-item player-ctrl-eplist-empty',
-        },
-        h(
-          'span',
-          { class: 'player-ctrl-eplist-multi-menu-item-text' },
-          '暂无选集',
-        ),
-      ),
-    ) as HTMLLIElement;
-
-  /**
-   * 命令式重建选集列表（列表数据 / 当前集变化时调用）
-   * @param list - 选集列表
-   */
-  const renderEpisodes = (list?: EpisodeOption[]): void => {
-    const items = list ?? [];
-    currentList = items;
-
-    if (!listRef.value) return;
-    listRef.value.replaceChildren(
-      ...(items.length === 0
-        ? [createEmptyItem()]
-        : items.map((item) => createItem(item))),
-    );
-  };
-
-  // ============================================
-  // 状态监听（当前集下标变化 → 重建高亮与图标）
-  // ============================================
-
-  // 框架无响应式：外部切换剧集时 props/状态不会自动刷新 DOM，只能订阅运行时下标
-  if (state) {
-    useState(
-      state,
-      PlayerStateKeyEnum.PLAYLIST_INDEX,
-      (index) => {
-        if (typeof index !== 'number') return;
-        activeIndex = index;
-        renderEpisodes(currentList);
-      },
-      lifecycle,
-    );
-  }
+  onEffect(lifecycle, () => {
+    const index = playlistIndexStateSignal.value;
+    if (typeof index === "number") activeIndexSignal.value = index;
+  });
 
   // ============================================
   // 事件处理函数
@@ -247,7 +216,7 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
    */
   const handleKeydown = (event: KeyboardEvent): void => {
     const key = event.key;
-    if (key !== 'Enter' && key !== ' ') return;
+    if (key !== "Enter" && key !== " ") return;
     event.preventDefault();
     clearTimers();
     setShown(true);
@@ -258,16 +227,16 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
   // ============================================
 
   /**
-   * 组件挂载后：按 props 首渲染（运行时订阅后续变化自行重建），并同步一次当前集下标
+   * 组件挂载后：从运行时状态同步一次当前集下标
+   * 列表渲染与高亮已由 For / onEffect 响应式管理，无需手动重建
    */
   lifecycle.onMounted = (): void => {
     const stateIndex = state?.get(PlayerStateKeyEnum.PLAYLIST_INDEX);
-    if (typeof stateIndex === 'number') {
-      activeIndex = stateIndex;
-    } else if (typeof props.currentIndex === 'number') {
-      activeIndex = props.currentIndex;
+    if (typeof stateIndex === "number") {
+      activeIndexSignal.value = stateIndex;
+    } else if (typeof props.currentIndex === "number") {
+      activeIndexSignal.value = props.currentIndex;
     }
-    renderEpisodes(props.episodes ?? []);
   };
 
   useComponentUnmount(lifecycle, clearTimers);
@@ -276,33 +245,124 @@ export const EpisodesMenu = defineComponent<EpisodesMenuProps, EpisodesMenuEvent
   // 主渲染函数
   // ============================================
 
-  return h('div', {
-    class: 'player-ctrl-btn player-ctrl-eplist',
-    role: 'button',
-    'aria-label': '选集',
-    tabindex: '0',
-    ref: 'eplistRootRef',
-    onMouseEnter: handleMouseEnter,
-    onMouseLeave: handleMouseLeave,
-    onKeydown: handleKeydown,
-  },
+  return h(
+    "div",
+    {
+      // 展开态类名由 shownSignal 响应式驱动（__reactiveAttrs + normalizeClass）；
+      // has-playlist 类由 hasPlaylistSignal 响应式驱动
+      class: [
+        "nova-player-ctrl-btn",
+        "nova-player-ctrl-eplist",
+        { "state-show": shownSignal.value },
+        { "nova-player-has-playlist": hasPlaylistSignal.value },
+      ],
+      role: "button",
+      "aria-label": "选集",
+      // 配置显隐：display 单一来源（父层 ui.controls.episodes 经 visible prop 传入）
+      style: { display: configVisibleSignal.value ? "" : "none" },
+      tabindex: "0",
+      onMouseEnter: handleMouseEnter,
+      onMouseLeave: handleMouseLeave,
+      onKeydown: handleKeydown,
+    },
     // 按钮文案
-    h('div', { class: 'player-ctrl-eplist-result' }, '选集'),
+    h(
+      "div",
+      { class: "nova-player-ctrl-eplist-result" },
+      t("player.ui.settings.episodes"),
+    ),
     // 选集面板
-    h('div', { class: 'player-ctrl-eplist-menu-wrap', style: { minHeight: MENU_MIN_HEIGHT } },
-      h('div', { class: 'player-ctrl-eplist-section' },
-        h('div', {
-          class: 'player-ctrl-eplist-section-bottom',
-          style: {
-            touchAction: 'pan-x',
-            userSelect: 'none',
-            webkitUserDrag: 'none',
-            webkitTapHighlightColor: 'rgba(0, 0, 0, 0)',
+    h(
+      "div",
+      {
+        class: "nova-player-ctrl-eplist-menu-wrap",
+        style: { minHeight: MENU_MIN_HEIGHT },
+      },
+      h(
+        "div",
+        { class: "nova-player-ctrl-eplist-section" },
+        h(
+          "div",
+          {
+            class: "nova-player-ctrl-eplist-section-bottom",
+            style: {
+              touchAction: "pan-x",
+              userSelect: "none",
+              webkitUserDrag: "none",
+              webkitTapHighlightColor: "rgba(0, 0, 0, 0)",
+            },
           },
-        },
-          h('ul', { class: 'player-ctrl-eplist-section-content', ref: 'eplistListRef' })
-        )
-      )
-    )
+          h(
+            "ul",
+            { class: "nova-player-ctrl-eplist-section-content" },
+            // For 组件：key-based 精准更新，每个选集项只渲染一次
+            // 选中态由响应式 class（activeIndexSignal.value 自动驱动）自动同步，无需 onEffect + classList.toggle
+            h(For, {
+              each: props.episodes ?? [],
+              key: (item: unknown, _index: number): string =>
+                isEpisodeOption(item) ? String(item.index) : "",
+              render: (item: unknown, _index: number): VNode => {
+                // For 回调入参为 unknown：类型谓词收窄（替代 as 断言）
+                if (!isEpisodeOption(item)) return h("li", {});
+                const ep = item;
+                return h(
+                  "li",
+                  {
+                    class: [
+                      "nova-player-ctrl-eplist-multi-menu-item",
+                      {
+                        "nova-player-state-active":
+                          activeIndexSignal.value === ep.index,
+                      },
+                    ],
+                    "data-index": String(ep.index),
+                    onClick: () => {
+                      // 当前项点击不做任何事
+                      if (ep.index === activeIndexSignal.value) return;
+                      activeIndexSignal.value = ep.index;
+                      lifecycle.emit?.("episodeChange", ep.index);
+                    },
+                  },
+                  // Show 控制流：当前集时 mount 播放中图标，非当前集时 destroy
+                  // 替代旧的 ...(isActive ? [renderPlayingIcon()] : []) 条件数组
+                  h(
+                    Show,
+                    { when: () => activeIndexSignal.value === ep.index },
+                    h(
+                      "span",
+                      { class: "nova-player-ctrl-eplist-multi-menu-item-icon" },
+                      PlayingIcon(),
+                    ),
+                  ),
+                  h(
+                    "span",
+                    { class: "nova-player-ctrl-eplist-multi-menu-item-text" },
+                    ep.title ?? "",
+                  ),
+                );
+              },
+            }),
+            // Show 控制流：选集列表为空时 mount 空态项，非空时 destroy
+            // 替代旧的 items.length === 0 ? [createEmptyItem()] : ... 三元
+            h(
+              Show,
+              { when: () => (props.episodes ?? []).length === 0 },
+              h(
+                "li",
+                {
+                  class:
+                    "nova-player-ctrl-eplist-multi-menu-item nova-player-ctrl-eplist-empty",
+                },
+                h(
+                  "span",
+                  { class: "nova-player-ctrl-eplist-multi-menu-item-text" },
+                  "暂无选集",
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 });

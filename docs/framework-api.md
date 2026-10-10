@@ -1,8 +1,8 @@
-# hili-player 框架使用文档 · 完整 API 手册
+# Lumina 框架使用文档 · 完整 API 手册
 
 > 版本：1.0.0
 > 定位：极简 TypeScript VNode 框架 —— **无虚拟 DOM diff、挂载一次 + 手动更新 DOM**
-> 响应式引擎：[@preact/signals-core](https://github.com/preactjs/signals)
+> 响应式引擎：自研 signalsCore（[core/signalsCore.ts](../core/signalsCore.ts)），零外部运行时依赖
 
 ---
 
@@ -37,7 +37,7 @@
 | 特性 | 说明 |
 |---|---|
 | 无 diff | 没有虚拟 DOM 比对，**挂载一次**后由你手动更新 DOM |
-| 无模板编译 | 用 `h()` 函数直接描述结构（可选 `vite-plugin-hili-compile` 做编译期优化） |
+| 无模板编译 | 用 `h()` 函数直接描述结构（可选 `vite-plugin-lumina-compile` 做编译期优化） |
 | 响应式可选 | 用 `signal` + `effect` 精确驱动 DOM 更新，**读谁追踪谁** |
 | 同引擎 | `signal` / `computed` / `effect` / `onEffect` / `useState` / 模板引用**全部基于 signals** |
 
@@ -378,7 +378,7 @@ isSignalRef(value): value is Signal<unknown>
 
 ## 八、响应式系统：signal / computed / effect / onEffect
 
-全部基于 `@preact/signals-core`。
+全部基于自研 signalsCore（`core/signalsCore.ts`），零外部运行时依赖。
 
 ### `signal(initial)`
 
@@ -869,7 +869,7 @@ enum ErrorSource { RENDER='render', LIFECYCLE='lifecycle', EVENT_HANDLER='event-
 | `assertWarn(condition, source, message)` | 条件为假时输出警告 |
 | `onFrameworkError(handler)` | 注册全局错误处理器，返回取消函数 |
 | `onFrameworkWarning(handler)` | 注册全局警告处理器，返回取消函数 |
-| `isDev()` | 是否开发环境（由 `__HILI_DEV__` 注入，未注入时默认 `false`） |
+| `isDev()` | 是否开发环境（由 `__LUMINA_DEV__` 注入，未注入时默认 `false`） |
 
 ```ts
 const unsub = onFrameworkError((err) => {
@@ -879,7 +879,7 @@ const unsub = onFrameworkError((err) => {
 safeCall(() => riskyOperation(), ErrorSource.RENDER, '渲染失败');
 ```
 
-### `__HILI_DEV__`
+### `__LUMINA_DEV__`
 
 由 Vite 编译插件通过 `define` 自动注入：dev `true`、prod `false`（触发死代码消除）。生产构建需开启 `minify` 才能真正 DCE。
 
@@ -889,10 +889,10 @@ safeCall(() => riskyOperation(), ErrorSource.RENDER, '渲染失败');
 
 ```ts
 // vite.config.ts
-import { hiliCompile } from './plugins/vite-plugin-hili-compile';
+import { luminaCompile } from './plugins/vite-plugin-lumina-compile';
 
 export default defineConfig({
-  plugins: [hiliCompile()],   // 零配置
+  plugins: [luminaCompile()],   // 零配置
 });
 ```
 
@@ -906,24 +906,24 @@ export default defineConfig({
 | `h('svg', {}, h('circle'))` | `_createSvgEl(...)` | 跳过 SVG_TAGS 查找 |
 | `h('fragment', {}, ...)` / `h(Fragment, {}, ...)` | `_createFragment(...)` | 丢弃 attrs，直接 rest children |
 | `h(MyComp, { p: 1 })` | `_createComp(MyComp, { p: 1 })` | 跳过组件类型反射 |
-| `const C = defineComponent(...)` | 追加 `C.__hili_type = 'fn'` | 运行时 O(1) 读标记 |
-| `class C extends Component {}` | 追加 `C.__hili_type = 'class'` | 同上 |
+| `const C = defineComponent(...)` | 追加 `C.__lumina_type = 'fn'` | 运行时 O(1) 读标记 |
+| `class C extends Component {}` | 追加 `C.__lumina_type = 'class'` | 同上 |
 | `export default defineComponent(...)` | 改为 `const _defaultComponent_1 = ...` + 标记 + re-export | 同上 |
 
 ### 安全设计
 
-- **binding 校验**：只有从框架模块（`@/core`、`@/hili-player`）导入的 `h`/`defineComponent`/`Fragment`/`Component` 才被转换，**不误伤 preact 等其他库的同名导出**
-- **dev/prod 同一套产物**：开发环境也编译（与 Vue/Solid 一致），差异只由 `__HILI_DEV__` 控制
+- **binding 校验**：只有从框架模块（`@/core`、`@/nova`）导入的 `h`/`defineComponent`/`Fragment`/`Component` 才被转换，**不误伤 preact 等其他库的同名导出**
+- **dev/prod 同一套产物**：开发环境也编译（与 Vue/Solid 一致），差异只由 `__LUMINA_DEV__` 控制
 - **静态提升仅生产生效**（与 Vue plugin-vue 一致），使用点用 `_cloneHoisted` 克隆避免共享节点污染
 - 语法错误时跳过转换、返回原码
 
 ### 选项
 
 ```ts
-interface HiliCompileOptions {
+interface LuminaCompileOptions {
   /** 静态提升，默认 true（仅生产构建生效） */
   hoistStatic?: boolean;
-  /** 注入 __hili_type 组件类型标记，默认 true */
+  /** 注入 __lumina_type 组件类型标记，默认 true */
   compileComponentType?: boolean;
   /** onXxx → __events、ref → __ref 预分类，默认 true */
   compileAttrs?: boolean;
@@ -931,7 +931,7 @@ interface HiliCompileOptions {
   dev?: boolean;
   /** 包含的文件，默认 [/\.tsx?$/] */
   include?: RegExp[];
-  /** 排除的文件，默认 [/node_modules/, /\.test\./, /\.spec\./, /[\\/]core[\\/]/, /plugins[\\/]vite-plugin-hili-compile/] */
+  /** 排除的文件，默认 [/node_modules/, /\.test\./, /\.spec\./, /[\\/]core[\\/]/, /plugins[\\/]vite-plugin-lumina-compile/] */
   exclude?: RegExp[];
   /** 编译产物引用的内部函数导入路径，默认 '@/core/internal' */
   internalImportSource?: string;
@@ -950,7 +950,7 @@ interface HiliCompileOptions {
 | `_createEl(tag, attrs?, ...children)` | 动态元素（`__events`/`__ref` 已预分类） |
 | `_createSvgEl(tag, attrs?, ...children)` | SVG 元素（预设命名空间） |
 | `_createFragment(...children)` | Fragment |
-| `_createComp(component, attrs?, ...children)` | 组件（读 `__hili_type` 跳过反射） |
+| `_createComp(component, attrs?, ...children)` | 组件（读 `__lumina_type` 跳过反射） |
 | `_cloneHoisted(vnode)` | 克隆静态提升节点（每个使用点独立，避免 `el` 互相覆盖） |
 
 这些函数都**保留完整运行时语义**（`__providers` 提取、children 扁平化、错误上报、`__parent` 设置）。

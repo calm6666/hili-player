@@ -3,7 +3,7 @@
  * ============================================
  * 与 demo/server.mjs 架构完全一致：Vite 中间件模式。
  * demo-prod/ 下无 vite.config.ts，Vite 自动向上查找到根目录的 vite.config.ts，
- * 复用其 resolve.alias（@/core → core/index.ts 等）和 hiliCompile 插件。
+ * 复用其 resolve.alias（@/core → core/index.ts 等）和 luminaCompile 插件。
  *
  * 启动：node demo-prod/server.mjs
  * 端口：5175

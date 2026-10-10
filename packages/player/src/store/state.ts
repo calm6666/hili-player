@@ -65,7 +65,7 @@ export const defaultSubtitlePreferences: SubtitlePreferences = {
 
 /**
  * 默认持久化状态
- * 对应 localStorage 的 hili_player_profile JSON
+ * 对应 localStorage 的 nova_player_profile JSON
  *
  * 对照 store.txt:
  *   volume/isMuted → bpx_player_profile.media.volume

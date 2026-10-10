@@ -598,12 +598,12 @@ export async function fetchAndParseManifest(url: string): Promise<HlsManifestDat
   } else if (ext === '.mpd') {
     accept = 'application/dash+xml';
   } else {
-    throw new Error(`不支持的清单扩展名："${ext || '(无)'}"，仅支持 .m3u8 / .mpd：${url}`);
+    throw new Error(`Unsupported manifest extension: "${ext || '(none)'}", only .m3u8 / .mpd supported: ${url}`);
   }
 
   const response = await fetch(url, { headers: { Accept: accept } });
   if (!response.ok) {
-    throw new Error(`拉取清单失败：HTTP ${response.status} ${response.statusText}（${url}）`);
+    throw new Error(`Failed to fetch manifest: HTTP ${response.status} ${response.statusText} (${url})`);
   }
 
   const text = await response.text();

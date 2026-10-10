@@ -1,10 +1,10 @@
 /**
  * ============================================
- * hili-player 核心播放器
+ * Nova 核心播放器（基于 Lumina 框架）
  * ============================================
  *
  * 使用方式：
- * import { VideoPlayer } from '@hili-player/core';
+ * import { VideoPlayer } from '@lumina/nova';
  *
  * const player = new VideoPlayer({
  *   src: 'video.mp4',
@@ -21,6 +21,13 @@ export { createPlayer, mountPlayer, getPlayerInstance } from './player';
 
 // 导出类型
 export type { PlayerConfig } from '@/types';
+// 进度条扩展 API：预览图 / 高能进度条数据均由外部 Provider 提供
+export type {
+  ProgressPreviewFrame,
+  ProgressPreviewProvider,
+  EnergyProgressData,
+  EnergyProgressProvider,
+} from '@/types';
 export type {
   StateManager,
   EventBus,
@@ -31,8 +38,8 @@ export type {
 export type {
   Plugin,
   PluginContext,
-} from '@/hili-player/core/plugin';
-export { PlayerHooks } from '@/hili-player/core/plugin';
+} from '@/nova/core/plugin';
+export { PlayerHooks } from '@/nova/core/plugin';
 
 // 导出事件系统
 export { createEventBus } from '@/events';
@@ -64,9 +71,9 @@ export {
   isSegmentBaseManifest,
   isMediaManifestLike,
   resolveManifestProtocolProfile,
-} from '@/hili-player/utils/media/manifestProtocol';
+} from '@/nova/utils/media/manifestProtocol';
 export type {
   ManifestProtocol,
   ManifestSegmentMode,
   ManifestProtocolProfile,
-} from '@/hili-player/utils/media/manifestProtocol';
+} from '@/nova/utils/media/manifestProtocol';

@@ -180,7 +180,7 @@ export interface StreamPlugin extends Plugin {
 
 **后果**：外部使用者写
 ```ts
-import type { StreamPlugin } from '@hili-player/plugins';
+import type { StreamPlugin } from '@lumina/plugins';
 const p: StreamPlugin = new HlsPlugin(...);
 p.getQualities();   // ❌ 类型报错：属性不存在
 ```

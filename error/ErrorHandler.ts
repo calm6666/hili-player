@@ -122,7 +122,7 @@ export class ErrorHandler {
       this.handle({
         type: ErrorType.RUNTIME,
         level: ErrorLevel.ERROR,
-        message: `未处理的 Promise 错误: ${String(event.reason)}`,
+        message: `Unhandled promise rejection: ${String(event.reason)}`,
         error: event.reason instanceof Error ? event.reason : new Error(String(event.reason)),
         timestamp: Date.now(),
         source: 'global',
@@ -134,7 +134,7 @@ export class ErrorHandler {
       this.handle({
         type: ErrorType.RUNTIME,
         level: ErrorLevel.ERROR,
-        message: `全局错误: ${event.message}`,
+        message: `Global error: ${event.message}`,
         error: event.error as Error | undefined,
         data: {
           filename: event.filename,
@@ -263,7 +263,7 @@ export class ErrorHandler {
         try {
           handler(error);
         } catch (e) {
-          logger.error('错误处理器执行失败:', e);
+          logger.error('Error handler execution failed:', e);
         }
       });
     }
@@ -285,11 +285,11 @@ export class ErrorHandler {
       }),
       ErrorType.NETWORK,
       'REPORT_FAILED',
-      '错误上报失败',
+      'Error report failed',
       'ErrorHandler',
     );
     if (!result.success) {
-      logger.error('错误上报失败');
+      logger.error('Error report failed');
     }
   }
 

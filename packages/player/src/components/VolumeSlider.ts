@@ -6,19 +6,24 @@
  * 处理垂直滑块拖拽、静音切换、音量数字显示
  */
 
-import { h, defineComponent, useTemplateRef, useState, useContext } from '@/core';
-import { rafTimeout, cancelRaf } from '@/utils/rafTimeout';
-import type { AnimationFrameID } from '@/utils/rafTimeout';
-import { isBrowser } from '@/utils';
-import { PlayerStateKeyEnum } from '@/store/runtimeState';
-import { StateContext } from '@/store/runtimeState';
-import { LottieIcon, LottieIconApi } from './LottieIcon';
-import volumeHoverAnimationData from '../assets/lottie-icon/volume-hover-animation.json';
-import volumeMuteHoverAnimationData from '../assets/lottie-icon/volume-mute-hover-animation.json';
-import volumeToMuteAnimationData from '../assets/lottie-icon/volume-to-mute-animation.json';
-import muteToVolumeAnimationData from '../assets/lottie-icon/mute-to-volume-animation.json';
-
-
+import {
+  h,
+  defineComponent,
+  useTemplateRef,
+  useState,
+  useContext,
+  signal,
+} from "@/core";
+import { rafTimeout, cancelRaf } from "@/utils/rafTimeout";
+import type { AnimationFrameID } from "@/utils/rafTimeout";
+import { isBrowser } from "@/utils";
+import { PlayerStateKeyEnum } from "@/store/runtimeState";
+import { StateContext } from "@/store/runtimeState";
+import { LottieIcon, LottieIconApi } from "./LottieIcon";
+import volumeHoverAnimationData from "../assets/lottie-icon/volume-hover-animation.json";
+import volumeMuteHoverAnimationData from "../assets/lottie-icon/volume-mute-hover-animation.json";
+import volumeToMuteAnimationData from "../assets/lottie-icon/volume-to-mute-animation.json";
+import muteToVolumeAnimationData from "../assets/lottie-icon/mute-to-volume-animation.json";
 
 /**
  * VolumeSlider 组件 Props 接口
@@ -26,7 +31,10 @@ import muteToVolumeAnimationData from '../assets/lottie-icon/mute-to-volume-anim
 export type VolumeSliderEvents = {
   volumeChange: number;
   muteToggle: undefined;
-  volumeSliderMounted: { setVolume: (vol: number) => void; setMuted: (mutedState: boolean) => void };
+  volumeSliderMounted: {
+    setVolume: (vol: number) => void;
+    setMuted: (mutedState: boolean) => void;
+  };
 };
 
 export interface VolumeSliderProps {}
@@ -38,7 +46,10 @@ const MENU_HIDE_DELAY = 220;
  * VolumeSlider 组件 - 使用 defineComponent 创建独立组件
  * 支持垂直滑块拖拽、静音切换和音量数字显示
  */
-export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvents>((_props, lifecycle) => {
+export const VolumeSlider = defineComponent<
+  VolumeSliderProps,
+  VolumeSliderEvents
+>((_props, lifecycle) => {
   const state = useContext(StateContext);
   const initialVolume = state?.get(PlayerStateKeyEnum.VOLUME) ?? 1;
   const initialMuted = state?.get(PlayerStateKeyEnum.MUTED) ?? false;
@@ -48,22 +59,34 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   // ============================================
 
   /** 音量图标元素引用 */
-  const volumeIconRef = useTemplateRef<LottieIconApi>(lifecycle, 'volumeIconRef');
+  const volumeIconRef = useTemplateRef<LottieIconApi>(
+    lifecycle,
+    "volumeIconRef",
+  );
 
   /** 音量数字显示元素引用 */
-  const volumeNumberRef = useTemplateRef<HTMLDivElement>(lifecycle, 'volumeNumberRef');
+  const volumeNumberRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "volumeNumberRef",
+  );
 
   /** 垂直滑块区域元素引用 */
-  const sliderAreaRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderAreaRef');
+  const sliderAreaRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "sliderAreaRef",
+  );
 
   /** 垂直滑块进度条元素引用 */
-  const sliderBarRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderBarRef');
+  const sliderBarRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "sliderBarRef",
+  );
 
   /** 垂直滑块拖拽手柄元素引用 */
-  const sliderThumbRef = useTemplateRef<HTMLDivElement>(lifecycle, 'sliderThumbRef');
-
-  /** 音量按钮根元素引用（面板显隐的类名挂载点） */
-  const rootRef = useTemplateRef<HTMLDivElement>(lifecycle, 'volumeRootRef');
+  const sliderThumbRef = useTemplateRef<HTMLDivElement>(
+    lifecycle,
+    "sliderThumbRef",
+  );
 
   /** 展开定时器 */
   let showTimer: AnimationFrameID | null = null;
@@ -72,11 +95,19 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   let hideTimer: AnimationFrameID | null = null;
 
   /**
-   * 落地面板展开态：直接给自己根节点的 DOM 加 / 去状态类
+   * 响应式信号：面板展开态
+   * 替代旧的 rootRef.classList.toggle('state-show', show) 命令式操作
+   * 信号在根节点 class 数组+对象形式中被读取，编译期提取到 __reactiveAttrs，
+   * mount 时注册 effect，信号变化时自动 normalizeClass 重新应用
+   */
+  const shownSignal = signal<boolean>(false);
+
+  /**
+   * 落地面板展开态：更新信号（响应式系统自动同步根节点 state-show 类）
    * @param show - 是否展开
    */
   const setShown = (show: boolean): void => {
-    rootRef.value?.classList.toggle('state-show', show);
+    shownSignal.value = show;
   };
 
   /** 取消两个方向的排队任务 */
@@ -122,7 +153,6 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     }, MENU_SHOW_DELAY);
   };
 
-
   /**
    * 音量按钮鼠标离开：延迟收起音量面板
    */
@@ -165,9 +195,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    * 更新静音图标显示
    * @param mutedState - 是否静音
    */
-  const updateMuteUI = (_mutedState: boolean): void => {
-
-  };
+  const updateMuteUI = (_mutedState: boolean): void => {};
 
   /**
    * 根据鼠标位置计算音量
@@ -180,7 +208,8 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     const rect = sliderAreaRef.value.getBoundingClientRect();
     // 垂直滑块：底部为最大值，顶部为最小值
     /** 鼠标位置在滑块上的比例 (0-1)，底部为 1，顶部为 0 */
-    const ratio = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    const ratio =
+      1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
     return Math.round(ratio * 100) / 100;
   };
 
@@ -211,7 +240,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
         currentVolume = newVolume;
         updateVolumeUI(newVolume);
       },
-      lifecycle
+      lifecycle,
     );
 
     /**
@@ -233,7 +262,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
           volumeIconRef.value.play();
         }
       },
-      lifecycle
+      lifecycle,
     );
   }
 
@@ -246,7 +275,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
    */
   const handleMuteToggle = (): void => {
     handleVolumeIconAnimation();
-    lifecycle.emit?.('muteToggle');
+    lifecycle.emit?.("muteToggle");
   };
 
   /**
@@ -263,7 +292,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     volumeIconRef.value?.play();
   };
 
-  /** 
+  /**
    * 音量图标鼠标进入事件处理
    */
 
@@ -277,7 +306,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     const vol = getVolumeFromY(event.clientY);
     currentVolume = vol;
     updateVolumeUI(vol);
-    lifecycle.emit?.('volumeChange', vol);
+    lifecycle.emit?.("volumeChange", vol);
   };
 
   /**
@@ -294,7 +323,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     const vol = getVolumeFromY(event.clientY);
     currentVolume = vol;
     updateVolumeUI(vol);
-    lifecycle.emit?.('volumeChange', vol);
+    lifecycle.emit?.("volumeChange", vol);
 
     /**
      * 拖拽过程中鼠标移动的处理函数
@@ -305,7 +334,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
       const v = getVolumeFromY(e.clientY);
       currentVolume = v;
       updateVolumeUI(v);
-      lifecycle.emit?.('volumeChange', v);
+      lifecycle.emit?.("volumeChange", v);
     };
 
     /**
@@ -313,8 +342,8 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
      */
     const onMouseUp = (): void => {
       isDragging = false;
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
       dragMouseMove = null;
       dragMouseUp = null;
     };
@@ -322,8 +351,8 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     dragMouseMove = onMouseMove;
     dragMouseUp = onMouseUp;
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   };
 
   // ============================================
@@ -355,7 +384,7 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   lifecycle.onMounted = (): void => {
     updateVolumeUI(currentVolume);
     updateMuteUI(isMuted);
-    lifecycle.emit?.('volumeSliderMounted', { setVolume, setMuted });
+    lifecycle.emit?.("volumeSliderMounted", { setVolume, setMuted });
   };
 
   /**
@@ -365,11 +394,11 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
     clearTimers();
     isDragging = false;
     if (dragMouseMove) {
-      document.removeEventListener('mousemove', dragMouseMove);
+      document.removeEventListener("mousemove", dragMouseMove);
       dragMouseMove = null;
     }
     if (dragMouseUp) {
-      document.removeEventListener('mouseup', dragMouseUp);
+      document.removeEventListener("mouseup", dragMouseUp);
       dragMouseUp = null;
     }
   };
@@ -377,75 +406,99 @@ export const VolumeSlider = defineComponent<VolumeSliderProps, VolumeSliderEvent
   // ============================================
   // 主渲染函数
   // ============================================
-  return h('div', {
-    class: 'player-ctrl-btn player-ctrl-volume',
-    role: 'button',
-    'aria-label': '音量',
-    ref: 'volumeRootRef',
-    onMouseEnter: mouseVolumeEnter,
-    onMouseLeave: mouseVolumeLeave,
-  },
+  return h(
+    "div",
+    {
+      // 响应式 class：编译期将含 signal.value 的数组提取到 __reactiveAttrs，
+      // mount 时注册 effect，shownSignal 变化时自动 normalizeClass 重新应用
+      class: [
+        "nova-player-ctrl-btn nova-player-ctrl-volume",
+        {
+          "state-show": shownSignal.value,
+        },
+      ],
+      role: "button",
+      "aria-label": "音量",
+      // 响应式迁移后根节点 class 由 shownSignal 信号驱动，不再需要 volumeRootRef 引用（删除残留 ref 字符串，避免运行时未注册告警）
+      onMouseEnter: mouseVolumeEnter,
+      onMouseLeave: mouseVolumeLeave,
+    },
     // 音量图标（静音切换挂在这里）
-    h('div', { class: 'player-ctrl-btn-icon', onClick: handleMuteToggle },
+    h(
+      "div",
+      { class: "nova-player-ctrl-btn-icon", onClick: handleMuteToggle },
       h(LottieIcon, {
-        name: 'volume',
+        name: "volume",
         initialSlotIndex: isMuted ? 3 : 1,
         sequence: [
           {
             animationData: muteToVolumeAnimationData,
             startFrame: 2,
-            complete: 'next',
-            autoplay: false
+            complete: "next",
+            autoplay: false,
           },
           {
             animationData: volumeHoverAnimationData,
-            complete: 'stop',
-            autoplay: false
+            complete: "stop",
+            autoplay: false,
           },
           {
             animationData: volumeToMuteAnimationData,
-            complete: 'next',
-            autoplay: false
+            complete: "next",
+            autoplay: false,
           },
           {
             animationData: volumeMuteHoverAnimationData,
-            complete: 'stop',
-            autoplay: false
-          }
+            complete: "stop",
+            autoplay: false,
+          },
         ],
         loop: false,
         autoplay: false,
-        ref: 'volumeIconRef'
-      })
+        ref: "volumeIconRef",
+      }),
     ),
     // 音量控制区域
-    h('div', { class: 'player-ctrl-volume-box' },
+    h(
+      "div",
+      { class: "nova-player-ctrl-volume-box" },
       // 音量数字
-      h('div', { class: 'player-ctrl-volume-number', ref: 'volumeNumberRef' }),
+      h("div", {
+        class: "nova-player-ctrl-volume-number",
+        ref: "volumeNumberRef",
+      }),
       // 垂直滑块
-      h('div', { class: 'player-ctrl-volume-progress slider' },
-        h('div', {
-          class: 'slider-area',
-          ref: 'sliderAreaRef',
-          onClick: handleSliderClick,
-          onMouseDown: handleSliderMouseDown,
-        },
-          h('div', { class: 'slider-bar-wrap' },
-            h('div', {
-              class: 'slider-bar',
-              role: 'progressbar',
-              ref: 'sliderBarRef',
-            })
-          ),
-          h('div', {
-            class: 'slider-thumb',
-            role: 'thumb',
-            ref: 'sliderThumbRef',
+      h(
+        "div",
+        { class: "nova-player-ctrl-volume-progress slider" },
+        h(
+          "div",
+          {
+            class: "slider-area",
+            ref: "sliderAreaRef",
+            onClick: handleSliderClick,
+            onMouseDown: handleSliderMouseDown,
           },
-            h('div', { class: 'slider-thumb-dot' })
-          )
-        )
-      )
-    )
+          h(
+            "div",
+            { class: "slider-bar-wrap" },
+            h("div", {
+              class: "slider-bar",
+              role: "progressbar",
+              ref: "sliderBarRef",
+            }),
+          ),
+          h(
+            "div",
+            {
+              class: "slider-thumb",
+              role: "thumb",
+              ref: "sliderThumbRef",
+            },
+            h("div", { class: "slider-thumb-dot" }),
+          ),
+        ),
+      ),
+    ),
   );
 });

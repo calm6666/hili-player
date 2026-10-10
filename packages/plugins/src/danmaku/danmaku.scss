@@ -1,0 +1,599 @@
+.nova-player-adv-dm-wrap,
+.nova-player-bas-dm-wrap,
+.nova-player-row-dm-wrap {
+  cursor: pointer;
+  height: 100%;
+  left: 0;
+  -webkit-mask-position: center;
+  mask-position: center;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  width: 100%;
+  z-index: 2;
+}
+
+.nova-player-bas-dm-wrap {
+  .bas-danmaku {
+    background: transparent;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+    height: 100%;
+    left: 50%;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    -webkit-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    width: 100%;
+    z-index: 10;
+  }
+}
+
+.danmaku-x-dm-rotate {
+  position: absolute;
+  // 旋转弹幕容器必须收敛在播放器边界内：原先 top/bottom:-15%、
+  // left/right:-6% 的负外边使该容器（弹幕区域的组成部分）在盒模型上
+  // 向上/向下超出播放器 15%、左右超出 6%（全屏切换后检查可见「弹幕
+  // 区域越过播放器上缘」）。因 row-dm-wrap 的 overflow:hidden 裁剪且
+  // 容器内无渲染内容，越界部分在外部不可见，负外边不产生任何视觉
+  // 收益，只会让弹幕区域范围失真
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  -webkit-transform: rotate(15deg);
+  transform: rotate(15deg);
+  -webkit-transform-origin: center;
+  transform-origin: center;
+  z-index: 4;
+}
+
+.nova-player-row-dm-wrap {
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  justify-content: center;
+  z-index: 11;
+}
+
+.danmaku-x-dm {
+  position: absolute;
+  line-height: 1.125;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  white-space: pre;
+  -webkit-perspective: 500px;
+  perspective: 500px;
+  will-change: transform, opacity, top, left;
+  font-weight: bold;
+  font-weight: var(--fontWeight, bold);
+  font-family: var(--fontFamily);
+  font-size: 25px;
+  font-size: var(--fontSize, 25px);
+  color: #ffffff;
+  color: var(--color, #ffffff);
+  text-shadow: var(--textShadow);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  top: 0;
+  top: var(--top, 0);
+  opacity: 0;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  left: -10px;
+  left: var(--offset, -10px);
+  z-index: 200;
+  z-index: var(--zIndex, 200);
+  display: var(--display, flex);
+  pointer-events: auto;
+}
+
+.danmaku-x-dm.danmaku-x-show {
+  opacity: 1;
+  opacity: var(--opacity, 1);
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+}
+
+.danmaku-x-dm.danmaku-x-show.danmaku-x-roll {
+  -webkit-animation: roll linear var(--duration) forwards;
+  animation: roll linear var(--duration) forwards;
+}
+
+.danmaku-x-dm.danmaku-x-center {
+  top: 0;
+  left: 50%;
+  -webkit-transform: translate(-50%, 0);
+  transform: translate(-50%, 0);
+  -webkit-transform: translate(-50%, var(--translateY, 0));
+  transform: translate(-50%, var(--translateY, 0));
+  -webkit-animation: fixed-x-center linear var(--duration) forwards;
+  animation: fixed-x-center linear var(--duration) forwards;
+}
+
+.danmaku-x-high {
+  z-index: 300;
+  will-change: transform, opacity, top, left, width, height;
+}
+
+.danmaku-x-up {
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 1em;
+  line-height: 1.6 !important;
+  padding: 0 0.5em 0 2.8em;
+}
+
+.danmaku-x-up-tip {
+  position: absolute;
+  left: 0.66em;
+  top: 50%;
+  background: #00a1d6;
+  color: #fff;
+  border-radius: 1em;
+  padding: 0 0.5em;
+  text-shadow: none !important;
+  line-height: 1.5;
+  -webkit-transform-origin: left center;
+  transform-origin: left center;
+  -webkit-transform: translateY(-50%);
+  transform: translateY(-50%);
+}
+
+.danmaku-x-paused {
+  -webkit-animation-play-state: paused !important;
+  animation-play-state: paused !important;
+}
+
+/* 弹幕整体显隐（挂在引擎层 .danmaku-layer / .danmaku-canvas 上，由 setVisible 切换） */
+.danmaku-x-hide {
+  opacity: 0;
+}
+
+@keyframes roll {
+  0% {
+    -webkit-transform: translateX(0) translateZ(0);
+    transform: translateX(0) translateZ(0);
+  }
+  100% {
+    -webkit-transform: translateX(var(--translateX)) translateZ(0);
+    transform: translateX(var(--translateX)) translateZ(0);
+  }
+}
+
+@keyframes fixed-x-center {
+  0% {
+    opacity: 0;
+  }
+  1% {
+    opacity: 1;
+  }
+  99% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.nova-player-row-dm-wrap.danmaku-x-paused {
+  .danmaku-x-dm {
+    -webkit-animation-play-state: paused !important;
+    animation-play-state: paused !important;
+  }
+}
+
+/* ============================================
+ * 引擎层（DanmakuManager DOM 引擎挂载层）
+ * 弹幕样式唯一来源：全部类 + CSS 变量驱动，不在 TS 内联样式
+ * ============================================ */
+
+/* 引擎弹幕层基础样式（替代 domEngine 内联 cssText） */
+.danmaku-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* 悬停弹幕置顶显示（原 injectCSSStyles 移植，并入类体系） */
+.danmaku-x-dm:hover {
+  z-index: 1000;
+  opacity: 1 !important;
+}
+
+/* 本人发送的弹幕（白框高亮，原 isSelf 内联样式类化） */
+.danmaku-x-self {
+  border: 2px solid #ffffff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  box-sizing: border-box;
+}
+
+/* 引擎层暂停：与根容器 .nova-player-row-dm-wrap.danmaku-x-paused 同一机制 */
+.danmaku-layer.danmaku-x-paused {
+  .danmaku-x-dm {
+    -webkit-animation-play-state: paused !important;
+    animation-play-state: paused !important;
+  }
+}
+
+/* 单条弹幕暂停（悬停 Tip 展示时由 DanmakuTip 挂到弹幕元素上，原版 danmaku-x-paused 机制） */
+.danmaku-x-dm.danmaku-x-paused {
+  -webkit-animation-play-state: paused !important;
+  animation-play-state: paused !important;
+}
+
+/* ============================================
+ * 弹幕悬停操作条 Tip（原版 player-dm-tip 移植）
+ * 结构：nova-player-dm-tip-wrap（覆盖层）> nova-player-dm-tip（操作条）
+ * 挂载：由 DanmakuTip 运行时创建于弹幕容器内，显隐走 nova-player-showB / nova-player-hide
+ * ============================================ */
+.nova-player-dm-tip-wrap {
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  // 层叠根因修复：弹幕层 .danmaku-layer 为 z-index:auto（不创建层叠上下文），
+  // 其内弹幕元素 z-index:200/300 直接参与本容器层叠竞争；原 z-index:12 被滚动
+  // 弹幕盖住且抢走鼠标命中，tip 的 mouseenter 永不触发（outTimer 到期必隐藏，
+  // 观感即「鼠标移到 tip 上直接消失」）。提升到 1000：与 hover 弹幕同级，且
+  // wrap 在弹幕层之后创建（DOM 顺序居上），tip 恒压全部弹幕保证可命中可点击
+  z-index: 1000;
+
+  .nova-player-dm-tip {
+    height: 48px;
+    left: 0;
+    margin-top: 6px;
+    opacity: 0;
+    position: absolute;
+    top: 0;
+    -webkit-transform: translateX(-50%);
+    transform: translateX(-50%);
+    visibility: hidden;
+    width: 162px;
+    z-index: 999999;
+
+    .nova-player-dm-tip-svgl,
+    .nova-player-dm-tip-svgm {
+      height: 100%;
+      left: 0;
+      opacity: 0;
+      position: absolute;
+      top: 0;
+      -webkit-transform-origin: center;
+      transform-origin: center;
+      width: 100%;
+
+      /* 底板 SVG 铺满底板盒（preserveAspectRatio 默认 meet 居中）：
+       * svgm 162×48 精确铺满；svgl 145×42 经 162/145 宽度缩放，
+       * 尾尖渲染于条内 x≈29.8（position() 的尾尖对准数学依赖此规则） */
+      svg {
+        display: block;
+        height: 100%;
+        width: 100%;
+      }
+    }
+
+    .nova-player-dm-tip-back,
+    .nova-player-dm-tip-copy,
+    .nova-player-dm-tip-like,
+    .nova-player-dm-tip-recall {
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+      cursor: pointer;
+      height: 23px;
+      left: 20px;
+      position: absolute;
+      text-align: center;
+      top: 16px;
+      width: 23px;
+      z-index: 2;
+    }
+
+    .nova-player-dm-tip-like-num {
+      color: #fff;
+      left: 40px;
+      position: absolute;
+      top: 13px;
+    }
+
+    .nova-player-dm-tip-copy {
+      left: 70px;
+    }
+
+    .nova-player-dm-tip-recall {
+      display: none;
+    }
+
+    .nova-player-dm-tip-back,
+    .nova-player-dm-tip-recall {
+      left: 120px;
+    }
+  }
+
+  .nova-player-dm-tip.nova-player-dm-tip-master {
+    .nova-player-dm-tip-recall {
+      display: block;
+    }
+    .nova-player-dm-tip-back {
+      display: none;
+    }
+  }
+
+  .nova-player-dm-tip.nova-player-showB {
+    -webkit-animation: danmaku-x-tip-show 0.25s forwards;
+    animation: danmaku-x-tip-show 0.25s forwards;
+    pointer-events: auto;
+    visibility: visible;
+
+    /* 默认底板：svgm（尾尖居中指向弹幕中心） */
+    .nova-player-dm-tip-svgm {
+      opacity: 1;
+    }
+  }
+
+  /* 弹幕靠左场景（position() 挂 nova-player-dm-tip-left）：
+   * 中心尾尖被左边界钳制拉离弹幕 → 切换 svgl 底板（尾尖偏左对准弹幕） */
+  .nova-player-dm-tip.nova-player-showB.nova-player-dm-tip-left {
+    .nova-player-dm-tip-svgm {
+      opacity: 0;
+    }
+
+    .nova-player-dm-tip-svgl {
+      opacity: 1;
+    }
+  }
+
+  .nova-player-dm-tip.nova-player-hide {
+    -webkit-animation: danmaku-x-tip-hide 0.25s forwards;
+    animation: danmaku-x-tip-hide 0.25s forwards;
+    pointer-events: none;
+    visibility: hidden;
+  }
+}
+
+@keyframes danmaku-x-tip-show {
+  0% {
+    opacity: 0;
+    -webkit-transform: translateX(-50%) scale(0.6);
+    transform: translateX(-50%) scale(0.6);
+  }
+  50% {
+    -webkit-transform: translateX(-50%) scale(1.05);
+    transform: translateX(-50%) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    -webkit-transform: translateX(-50%) scale(1);
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes danmaku-x-tip-hide {
+  0% {
+    opacity: 1;
+    -webkit-transform: translateX(-50%) scale(1);
+    transform: translateX(-50%) scale(1);
+  }
+  20% {
+    -webkit-transform: translateX(-50%) scale(1.05);
+    transform: translateX(-50%) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    -webkit-transform: translateX(-50%) scale(0.6);
+    transform: translateX(-50%) scale(0.6);
+  }
+}
+
+/* ============================================
+ * Tip 按钮 SVG 基础形态（铺满按钮热区）
+ * ============================================ */
+.nova-player-dm-tip-wrap {
+  .nova-player-dm-tip {
+    .nova-player-dm-tip-like svg,
+    .nova-player-dm-tip-copy svg,
+    .nova-player-dm-tip-recall svg,
+    .nova-player-dm-tip-back svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 点赞按钮：描边版与实心版双 SVG 叠放，经点赞态类切换显隐 */
+    .nova-player-dm-tip-like svg {
+      position: absolute;
+      inset: 0;
+    }
+
+    .nova-player-dm-tip-like svg:last-of-type {
+      display: none;
+    }
+
+    /* 点赞后图标填充白色（实心拇指替换描边拇指） */
+    .nova-player-dm-tip-like.nova-player-dm-tip-liked svg:first-of-type {
+      display: none;
+    }
+
+    .nova-player-dm-tip-like.nova-player-dm-tip-liked svg:last-of-type {
+      display: block;
+    }
+  }
+}
+
+/* ============================================
+ * Tip 按钮悬停气泡（纯 CSS 底板：黑底圆角 + 上三角尾尖指向按钮）
+ * 气泡在 Tip 正下方按按钮中心对齐（Tip 内坐标）：
+ * - like   → x≈31.5（点赞热区 left:20 + 半宽 11.5）
+ * - copy   → x≈81.5（复制按钮 left:70 + 半宽 11.5）
+ * - recall / report → x≈131.5（撤回/举报按钮 left:120 + 半宽 11.5，
+ *   两按钮互斥展示但气泡位置相同）
+ * 注：svgl/svgm 为操作条本体外框的两场景形态，不用于子图标气泡
+ * ============================================ */
+.nova-player-dm-tip-wrap {
+  .nova-player-dm-tip-bubble {
+    -webkit-align-items: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 6px;
+    display: flex;
+    height: 28px;
+    opacity: 0;
+    padding: 0 12px;
+    pointer-events: none;
+    position: absolute;
+    top: 100%;
+    -webkit-transform: translateX(-50%);
+    transform: translateX(-50%);
+    -webkit-transition: opacity 0.12s ease, visibility 0.12s ease;
+    transition: opacity 0.12s ease, visibility 0.12s ease;
+    visibility: hidden;
+    white-space: nowrap;
+    z-index: 3;
+
+    /* 上三角尾尖：指向正上方的对应按钮 */
+    &::before {
+      border-color: transparent transparent rgba(0, 0, 0, 0.7) transparent;
+      border-style: solid;
+      border-width: 0 4px 5px;
+      content: "";
+      height: 0;
+      left: 50%;
+      position: absolute;
+      top: -5px;
+      -webkit-transform: translateX(-50%);
+      transform: translateX(-50%);
+      width: 0;
+    }
+
+    .nova-player-dm-tip-bubble-text {
+      color: #fff;
+      display: block;
+      font-size: 12px;
+      line-height: 1;
+      user-select: none;
+      -webkit-user-select: none;
+      white-space: nowrap;
+    }
+  }
+
+  .nova-player-dm-tip-bubble.nova-player-dm-tip-bubble-show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* 按钮中心对齐：点赞 31.5 / 复制 81.5 / 撤回|举报 131.5 */
+  .nova-player-dm-tip .nova-player-dm-tip-bubble-like {
+    left: 31.5px;
+  }
+
+  .nova-player-dm-tip .nova-player-dm-tip-bubble-copy {
+    left: 81.5px;
+  }
+
+  .nova-player-dm-tip .nova-player-dm-tip-bubble-recall,
+  .nova-player-dm-tip .nova-player-dm-tip-bubble-report {
+    left: 131.5px;
+  }
+}
+
+/* ============================================
+ * 弹幕操作 toast（复制成功等提示，覆盖层居中）
+ * ============================================ */
+.nova-player-dm-toast {
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  left: 50%;
+  line-height: 1.4;
+  opacity: 0;
+  padding: 8px 16px;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  -webkit-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+  visibility: hidden;
+  white-space: nowrap;
+  z-index: 999999;
+}
+
+.nova-player-dm-toast.nova-player-dm-toast-show {
+  visibility: visible;
+  -webkit-animation: danmaku-x-toast 1.6s forwards;
+  animation: danmaku-x-toast 1.6s forwards;
+}
+
+@keyframes danmaku-x-toast {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 弹幕元素可交互（原 domEngine 内联 cursor:pointer 移植） */
+.danmaku-layer .danmaku-x-dm {
+  cursor: pointer;
+}
+
+/* Canvas 引擎画布（原 canvasEngine 内联 cssText 移植，含 CSS 硬件加速） */
+.danmaku-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  will-change: transform;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* 全屏切换过渡用快照画布（原 canvasEngine 内联 cssText 移植） */
+.danmaku-canvas-resize-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}

@@ -1,7 +1,7 @@
 {
-  "name": "@hili-player/plugins",
+  "name": "@lumina/plugins",
   "version": "1.0.0",
-  "description": "hili-player 官方插件集合",
+  "description": "Lumina official plugins collection",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -58,7 +58,7 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@hili-player/player": "workspace:*"
+    "@lumina/nova": "workspace:*"
   },
   "dependencies": {
     "dashjs": "^5.1.1",

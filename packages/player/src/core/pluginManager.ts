@@ -7,7 +7,7 @@
  */
 
 import type { Plugin, PluginContext } from "./plugin";
-import type { VideoPlayer } from "@/hili-player/index";
+import type { VideoPlayer } from "@/nova/index";
 import type { StreamPlugin } from "@/types/streamPlugin";
 import { createStateManager } from "@/core/state";
 import { createTypedEventBus } from "@/core/eventBus";
@@ -86,7 +86,7 @@ export class PluginManager {
    */
   install(plugin: Plugin): void {
     if (this.plugins.has(plugin.name)) {
-      logger.warn(`插件 "${plugin.name}" 已安装`);
+      logger.warn(`Plugin "${plugin.name}" already installed`);
       return;
     }
 
@@ -128,7 +128,7 @@ export class PluginManager {
     }
 
     this.plugins.set(plugin.name, plugin);
-    logger.info(`插件 "${plugin.name}" 安装成功`);
+    logger.info(`Plugin "${plugin.name}" installed successfully`);
   }
 
   /**
@@ -148,7 +148,7 @@ export class PluginManager {
       plugin.uninstall(this.player);
     }
     this.plugins.delete(name);
-    logger.info(`插件 "${name}" 卸载成功`);
+    logger.info(`Plugin "${name}" uninstalled successfully`);
   }
 
   /**

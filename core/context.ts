@@ -192,7 +192,7 @@ const MAX_PROVIDER_STACK_DEPTH = 100;
 export function pushProviderStack(providers: ProviderEntry[]): void {
   if (__providerStack.length >= MAX_PROVIDER_STACK_DEPTH) {
     throw new Error(
-      `[HiliFramework/context] Provider 栈深度超过最大限制 ${MAX_PROVIDER_STACK_DEPTH}，可能存在无限递归`,
+      `[Lumina/context] Provider stack depth exceeded maximum limit ${MAX_PROVIDER_STACK_DEPTH}, possible infinite recursion`,
     );
   }
   __providerStack.push(providers);

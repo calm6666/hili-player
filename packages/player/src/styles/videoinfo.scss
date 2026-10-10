@@ -1,5 +1,5 @@
-.player-container {
-  .player-info-container {
+.nova-player-container {
+  .nova-player-info-container {
     -webkit-font-smoothing: antialiased;
     background-color: rgba(33, 33, 33, 0.9);
     border-radius: 4px;
@@ -19,13 +19,13 @@
       font-weight: 400;
     }
 
-    .player-info-title {
+    .nova-player-info-title {
       border-bottom: 1px solid hsla(0, 0%, 100%, 0.1);
       font-size: 16px;
       line-height: 40px;
       text-align: center;
 
-      .player-info-close {
+      .nova-player-info-close {
         fill: #fff;
         color: #fff;
         cursor: pointer;
@@ -38,7 +38,7 @@
       }
     }
 
-    .player-info-panel {
+    .nova-player-info-panel {
       padding: 15px 26px 0;
       position: relative;
 

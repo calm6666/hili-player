@@ -1,14 +1,14 @@
-.ui-checkbox {
+.nova-player-container .ui-checkbox {
   cursor: pointer;
   display: inline-flex;
   position: relative;
 
   &:hover .ui-checkbox-name {
-    color: var(--player-primary-color, #00a1d6);
+    color: var(--nova-player-primary-color, #00a1d6);
   }
 
   &:hover .ui-checkbox-icon svg {
-    fill: var(--player-primary-color, #00a1d6);
+    fill: var(--nova-player-primary-color, #00a1d6);
   }
 
   .ui-checkbox-area {
@@ -70,7 +70,7 @@
   }
 
   .ui-checkbox-input:checked + .ui-checkbox-label .ui-checkbox-icon svg {
-    fill: var(--player-primary-color, #00a1d6);
+    fill: var(--nova-player-primary-color, #00a1d6);
   }
 
   .ui-checkbox-input:checked + .ui-checkbox-label .ui-checkbox-icon-default {

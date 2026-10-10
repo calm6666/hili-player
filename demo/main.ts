@@ -17,56 +17,35 @@
  * 组件覆盖清单（核心 SSR + 水合测试）
  * 1.  CounterDisplay   - 纯展示组件 + ref 获取子组件 DOM
  * 2.  CounterPanel     - onClick + Context + 生命周期 + useState 手动 DOM 更新
- * 3.  UserInfo         - useContext 多 Context 消费
- * 4.  ThemeSwitcher    - lifecycle.emit + 状态管理
- * 5.  TaskList         - each() 列表渲染
- * 6.  ConditionalSection - when() 条件渲染
- * 7.  ChildWithExpose  - ref + expose API
- * 8.  NestedLevel3/2/Container - 3 层嵌套 Context 透传
- * 9.  SearchBox        - 表单输入（onInput/onFocus/onBlur/onKeyDown）
- * 10. TodoApp          - CRUD 完整操作
- * 11. EventLog         - ref 回调 + 事件总线
- * 12. HydrationPanel   - 客户端水合检测面板（SSR 占位，水合后填充）
- * 13. PlayerSection    - VideoPlayer SSR 原生渲染 + 水合（非占位，直接输出播放器 HTML）
- * 14. App              - 根组件
- * 15. RootLayout       - 根布局（注入 Context）
+ * 3.  ThemeSwitcher    - lifecycle.emit + 状态管理
+ * 4.  EventLog         - ref 回调 + 事件总线
+ * 5.  PlayerSection    - VideoPlayer SSR 原生渲染 + 水合（非占位，直接输出播放器 HTML）
+ * 6.  App              - 根组件
+ * 7.  RootLayout       - 根布局（注入 Context）
  */
 
 import {
   h,
   defineComponent,
-  Fragment,
-  when,
-  each,
   useTemplateRef,
   createContext,
-  useContext,
   provide,
   createTypedStateManager,
   createTypedEventBus,
   useState,
 } from "@/core";
-import { VideoPlayer } from "@/hili-player/player";
+import { VideoPlayer } from "@/nova/player";
 
 // SVG 图标组件（替代 Unicode emoji）
 import {
-  IconCheck,
-  IconX,
-  IconSquare,
   IconSun,
   IconMoon,
-  IconLock,
-  IconUser,
-  IconHome,
   IconSettings,
   IconPlus,
   IconMinus,
   IconRefresh,
   IconTrash,
-  IconSearch,
   IconTerminal,
-  IconZap,
-  IconServer,
   IconVideo,
 } from "./icons";
 
@@ -78,8 +57,6 @@ interface AppStateMap {
   "app.count": number;
   "app.theme": string;
   "app.lastAction": string;
-  "app.searchQuery": string;
-  "app.activeTab": string;
 }
 
 interface AppEventMap {
@@ -87,9 +64,6 @@ interface AppEventMap {
   COUNT_DECREMENT: { count: number };
   THEME_CHANGE: { theme: string };
   ACTION_LOG: { action: string; timestamp: number };
-  SEARCH_INPUT: { query: string };
-  TAB_CHANGE: { tab: string };
-  HYDRATION_CHECK: { id: string; pass: boolean; detail?: string };
 }
 
 interface ThemeContextValue {
@@ -97,17 +71,6 @@ interface ThemeContextValue {
   bgColor: string;
   textColor: string;
   fontSize: string;
-}
-
-interface UserContextValue {
-  username: string;
-  role: string;
-  loggedIn: boolean;
-}
-
-interface NestLevelContextValue {
-  level: number;
-  label: string;
 }
 
 // ============================================
@@ -121,17 +84,6 @@ const ThemeContext = createContext<ThemeContextValue>({
   fontSize: "14px",
 });
 
-const UserContext = createContext<UserContextValue>({
-  username: "Guest",
-  role: "visitor",
-  loggedIn: true,
-});
-
-const NestLevelContext = createContext<NestLevelContextValue>({
-  level: 0,
-  label: "根层",
-});
-
 // ============================================
 // 事件总线和状态管理器
 // ============================================
@@ -143,8 +95,6 @@ export const appState = createTypedStateManager<AppStateMap>({
     count: 0,
     theme: "dark",
     lastAction: "init",
-    searchQuery: "",
-    activeTab: "home",
   },
 });
 
@@ -157,12 +107,6 @@ const darkTheme: ThemeContextValue = {
   bgColor: "#1a1a2e",
   textColor: "#e0e0e0",
   fontSize: "14px",
-};
-
-const userInfoValue: UserContextValue = {
-  username: "HiliDev",
-  role: "admin",
-  loggedIn: true,
 };
 
 // ============================================
@@ -194,11 +138,6 @@ const CounterDisplay = defineComponent<CounterDisplayProps>(
       appEventBus.emit("ACTION_LOG", {
         action: "CounterDisplay: onMounted",
         timestamp: Date.now(),
-      });
-      appEventBus.emit("HYDRATION_CHECK", {
-        id: "CounterDisplay:ref",
-        pass: !!counterRef.value,
-        detail: "ref.current 应指向 span.counter-value",
       });
       lifecycle.expose?.(counterRef.value);
     };
@@ -241,14 +180,6 @@ const CounterPanel = defineComponent<
     appEventBus.emit("ACTION_LOG", {
       action: "CounterPanel: onMounted",
       timestamp: Date.now(),
-    });
-    appEventBus.emit("HYDRATION_CHECK", {
-      id: "CounterPanel:lifecycle.onMounted",
-      pass: true,
-    });
-    appEventBus.emit("HYDRATION_CHECK", {
-      id: "CounterPanel:ref(子组件DOM)",
-      pass: !!counterRef.value,
     });
 
     useState(
@@ -326,60 +257,6 @@ const CounterPanel = defineComponent<
         },
         h(IconRefresh, { size: 14 }),
         "重置",
-      ),
-    ),
-  );
-});
-
-// ============================================
-// 子组件3：用户信息（多 Context 消费）
-// ============================================
-
-const UserInfo = defineComponent(() => {
-  const user = useContext(UserContext);
-
-  return h(
-    "div",
-    { class: "panel user-info" },
-    h("div", { class: "panel-title" }, h(IconUser, { size: 16 }), "用户信息（useContext）"),
-    h(
-      "div",
-      {
-        class: "user-info-row",
-      },
-      h(
-        "div",
-        { class: "user-info-item" },
-        h(IconUser, { size: 14, color: "var(--text-secondary)" }),
-        h("span", { class: "user-info-label" }, "用户:"),
-        h("span", { class: "user-info-value" }, user.username),
-      ),
-      h(
-        "div",
-        { class: "user-info-item" },
-        h(IconLock, { size: 14, color: "var(--text-secondary)" }),
-        h("span", { class: "user-info-label" }, "角色:"),
-        h(
-          "span",
-          {
-            class: "user-role-badge",
-          },
-          user.role,
-        ),
-      ),
-      h(
-        "div",
-        { class: "user-info-item" },
-        user.loggedIn
-          ? h(IconCheck, { size: 14, color: "#4ade80" })
-          : h(IconX, { size: 14, color: "#f87171" }),
-        h(
-          "span",
-          {
-            class: user.loggedIn ? "user-status-online" : "user-status-offline",
-          },
-          user.loggedIn ? "已登录" : "未登录",
-        ),
       ),
     ),
   );
@@ -470,144 +347,6 @@ const ThemeSwitcher = defineComponent<
 });
 
 // ============================================
-// 子组件5：列表渲染
-// ============================================
-
-interface TaskListProps {
-  tasks: Array<{ id: number; text: string; done: boolean }>;
-}
-
-const TaskList = defineComponent<TaskListProps>((props) => {
-  return h(
-    "div",
-    { class: "panel task-list" },
-    h("div", { class: "panel-title" }, h(IconCheck, { size: 16 }), "列表渲染（each）"),
-    h(
-      "ul",
-      {
-        class: "task-list-ul",
-      },
-      ...each(
-        props.tasks,
-        (task) =>
-          h(
-            "li",
-            {
-              key: String(task.id),
-              class: "task-item",
-            },
-            task.done
-              ? h(IconCheck, { size: 14, color: "#4ade80" })
-              : h(IconSquare, { size: 14, color: "var(--text-secondary)" }),
-            h(
-              "span",
-              task.done ? { class: "task-text-done" } : {},
-              task.text,
-            ),
-          ),
-      ),
-    ),
-  );
-});
-
-// ============================================
-// 子组件6：条件渲染
-// ============================================
-
-interface ConditionalSectionProps {
-  showAdmin: boolean;
-}
-
-const ConditionalSection = defineComponent<ConditionalSectionProps>(
-  (props) => {
-    return h(
-      "div",
-      { class: "panel conditional-section" },
-      h("div", { class: "panel-title" }, h(IconZap, { size: 16 }), "条件渲染（when）"),
-      when(
-        props.showAdmin,
-        h(
-          "div",
-          {
-            class: "admin-panel",
-          },
-          h(IconLock, { size: 14 }),
-          "管理员面板（showAdmin=true 时显示）",
-        ),
-      ),
-      when(
-        !props.showAdmin,
-        h(
-          "div",
-          {
-            class: "guest-panel",
-          },
-          h(IconUser, { size: 14 }),
-          "访客面板（showAdmin=false 时显示）",
-        ),
-      ),
-    );
-  },
-);
-
-// ============================================
-// 子组件7：ref + expose API
-// ============================================
-
-interface ChildWithExposeProps {
-  initialValue?: string;
-}
-
-interface ChildWithExposeEvents {
-  valueChange: { value: string };
-}
-
-const ChildWithExpose = defineComponent<
-  ChildWithExposeProps,
-  ChildWithExposeEvents
->((props, lifecycle) => {
-  const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
-  let value = props.initialValue ?? "";
-
-  lifecycle.onMounted = () => {
-    appEventBus.emit("HYDRATION_CHECK", {
-      id: "ChildWithExpose:ref(input)",
-      pass: !!inputRef.value,
-    });
-
-    // expose API：父组件可以通过 ref.current 调用子组件方法
-    lifecycle.expose?.({
-      getValue: () => value,
-      setValue: (v: string) => {
-        value = v;
-        if (inputRef.value) inputRef.value.value = v;
-      },
-      focus: () => inputRef.value?.focus(),
-    });
-  };
-
-  const handleInput = (e: Event) => {
-    value = (e.target as HTMLInputElement).value;
-    lifecycle.emit?.("valueChange", { value });
-  };
-
-  return h(
-    "div",
-    {
-      class: "input-row",
-    },
-    h("input", {
-      ref: 'inputRef',
-      type: "text",
-      value: props.initialValue ?? "",
-      onInput: handleInput,
-      placeholder: "输入值，父组件通过 expose 读取",
-      class: "input-field",
-    }),
-  );
-});
-
-// ============================================
 // 子组件8：事件日志（ref 回调 + 事件总线）
 // ============================================
 
@@ -634,469 +373,6 @@ const EventLog = defineComponent((_props, _lifecycle) => {
     ),
     h("div", {
       class: "log-content",
-    }),
-  );
-});
-
-// ============================================
-// 子组件9-11：3 层嵌套（Context 透传）
-// ============================================
-
-const NestedLevel3 = defineComponent(() => {
-  const nestLevel = useContext(NestLevelContext);
-
-  return h(
-    "div",
-    {
-      class: "nested-level-3",
-    },
-    h(IconServer, { size: 12, color: "var(--accent)" }),
-    h("span", {}, "第 " + nestLevel.level + " 层: " + nestLevel.label),
-    h(
-      "span",
-      { class: "nested-level-hint" },
-      "（Context 从第 1 层透传到第 3 层）",
-    ),
-  );
-});
-
-const NestedLevel2 = defineComponent(() => {
-  return h(
-    "div",
-    {
-      class: "nested-level-2",
-    },
-    h(
-      "span",
-      {
-        class: "nested-level-label",
-      },
-      "第 2 层（中间层，不消费 NestLevelContext）",
-    ),
-    h(NestedLevel3, {}),
-  );
-});
-
-const NestedContainer = defineComponent(() => {
-  return h(
-    "div",
-    { class: "panel nested-container" },
-    h("div", { class: "panel-title" }, h(IconServer, { size: 16 }), "3 层嵌套（Context 透传）"),
-    h(
-      "div",
-      {
-        class: "nested-inner",
-      },
-      h(
-        "span",
-        {
-          class: "nested-level-label",
-        },
-        "第 1 层（provide NestLevelContext）",
-      ),
-      // provide 在 NestedContainer 中注入，NestedLevel3 通过 useContext 消费
-      provide(
-        [{ contextId: NestLevelContext.id, value: { level: 3, label: "深层节点" } }],
-        () => h(NestedLevel2, {}),
-      ),
-    ),
-  );
-});
-
-// ============================================
-// 子组件12：搜索框（表单输入）
-// ============================================
-
-interface SearchBoxEvents {
-  search: { query: string };
-}
-
-const SearchBox = defineComponent<Record<string, unknown>, SearchBoxEvents>(
-  (_props, lifecycle) => {
-    const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
-    const hintRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'hintRef');
-
-    lifecycle.onMounted = () => {
-      appEventBus.emit("HYDRATION_CHECK", {
-        id: "SearchBox:ref(input)",
-        pass: !!inputRef.value,
-      });
-
-      useState(
-        appState,
-        "app.searchQuery",
-        (query: string) => {
-          if (hintRef.value) {
-            hintRef.value.textContent = query
-              ? "当前查询: " + query
-              : "等待输入...";
-          }
-        },
-        lifecycle,
-      );
-    };
-
-    const handleInput = (e: Event) => {
-      const value = (e.target as HTMLInputElement).value;
-      appState.set("app.searchQuery", value);
-      appEventBus.emit("SEARCH_INPUT", { query: value });
-      lifecycle.emit?.("search", { query: value });
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        appEventBus.emit("ACTION_LOG", {
-          action: "SearchBox: Enter 按下",
-          timestamp: Date.now(),
-        });
-      }
-    };
-
-    return h(
-      "div",
-      { class: "panel search-box" },
-      h("div", { class: "panel-title" }, h(IconSearch, { size: 16 }), "表单输入（onInput + onKeyDown）"),
-      h(
-        "div",
-        { class: "search-row" },
-        h(
-          "div",
-          {
-            class: "search-container",
-          },
-          h("span", {
-            class: "search-icon",
-          }, h(IconSearch, { size: 14 })),
-          h("input", {
-            ref: 'inputRef',
-            type: "text",
-            placeholder: "输入内容，回车确认...",
-            onInput: handleInput,
-            onKeyDown: handleKeyDown,
-            class: "search-input",
-          }),
-        ),
-        h(
-          "span",
-          {
-            ref: 'hintRef',
-            class: "search-hint",
-          },
-          "等待输入...",
-        ),
-      ),
-    );
-  },
-);
-
-// ============================================
-// 子组件13：TodoApp（CRUD 完整操作）
-// ============================================
-
-interface TodoItem {
-  id: number;
-  text: string;
-  done: boolean;
-}
-
-interface TodoAppEvents {
-  add: { text: string };
-  toggle: { id: number };
-  delete: { id: number };
-}
-
-const TodoApp = defineComponent<Record<string, unknown>, TodoAppEvents>(
-  (_props, lifecycle) => {
-    const inputRef = useTemplateRef<HTMLInputElement>(lifecycle, 'inputRef');
-    const listRef = useTemplateRef<HTMLUListElement>(lifecycle, 'listRef');
-    let nextId = 1;
-    let todos: TodoItem[] = [
-      { id: 0, text: "学习 h() 函数", done: true },
-    ];
-
-    const renderList = () => {
-      if (!listRef.value) return;
-      // 简化：直接通过事件日志反馈，DOM 操作由用户点击触发
-    };
-
-    lifecycle.onMounted = () => {
-      appEventBus.emit("HYDRATION_CHECK", {
-        id: "TodoApp:ref(input+list)",
-        pass: !!inputRef.value && !!listRef.value,
-      });
-      renderList();
-    };
-
-    const handleAdd = () => {
-      if (!inputRef.value || !inputRef.value.value.trim()) return;
-      const text = inputRef.value.value.trim();
-      todos = [...todos, { id: nextId++, text, done: false }];
-      inputRef.value.value = "";
-      appEventBus.emit("ACTION_LOG", {
-        action: "TodoApp: 添加 - " + text,
-        timestamp: Date.now(),
-      });
-      lifecycle.emit?.("add", { text });
-      // 重新渲染列表
-      appendTodoItem(text);
-    };
-
-    const appendTodoItem = (text: string) => {
-      if (!listRef.value) return;
-      const li = document.createElement("li");
-      li.className = "todo-item";
-      li.textContent = text;
-      listRef.value.appendChild(li);
-    };
-
-    const handleInputKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") handleAdd();
-    };
-
-    return h(
-      "div",
-      { class: "panel todo-app" },
-      h("div", { class: "panel-title" }, h(IconCheck, { size: 16 }), "Todo App（CRUD 完整操作）"),
-      h(
-        "div",
-        { class: "todo-add-row" },
-        h("input", {
-          ref: 'inputRef',
-          type: "text",
-          placeholder: "输入待办事项，回车添加...",
-          onKeyDown: handleInputKeyDown,
-          class: "todo-input",
-        }),
-        h(
-          "button",
-          { onClick: handleAdd, class: "btn-accent" },
-          h(IconPlus, { size: 14 }),
-          "添加",
-        ),
-      ),
-      h(
-        "ul",
-        {
-          ref: 'listRef',
-          class: "todo-list",
-        },
-        ...each(todos, (todo) =>
-          h(
-            "li",
-            {
-              key: String(todo.id),
-              class: "todo-item",
-            },
-            todo.done
-              ? h(IconCheck, { size: 14, color: "#4ade80" })
-              : h(IconSquare, { size: 14, color: "var(--text-secondary)" }),
-            h(
-              "span",
-              {
-                class: todo.done ? "todo-text-done" : "todo-text",
-              },
-              todo.text,
-            ),
-            h(
-              "button",
-              {
-                onClick: () => {
-                  todos = todos.filter((t) => t.id !== todo.id);
-                  lifecycle.emit?.("delete", { id: todo.id });
-                  appEventBus.emit("ACTION_LOG", {
-                    action: "TodoApp: 删除 - " + todo.text,
-                    timestamp: Date.now(),
-                  });
-                },
-                class: "todo-delete-btn",
-                "aria-label": "删除",
-              },
-              h(IconTrash, { size: 14 }),
-            ),
-          ),
-        ),
-      ),
-    );
-  },
-);
-
-// ============================================
-// 子组件14：Fragment 演示
-// ============================================
-
-const FragmentDemo = defineComponent(() => {
-  return h(
-    "div",
-    { class: "panel fragment-demo" },
-    h("div", { class: "panel-title" }, h(IconZap, { size: 16 }), "Fragment 演示"),
-    h(
-      Fragment,
-      {},
-      h(
-        "span",
-        {
-          class: "fragment-item-1",
-        },
-        "Fragment 子项 1",
-      ),
-      h(
-        "span",
-        {
-          class: "fragment-item-2",
-        },
-        "Fragment 子项 2",
-      ),
-      h(
-        "span",
-        {
-          class: "fragment-item-3",
-        },
-        "Fragment 子项 3",
-      ),
-    ),
-  );
-});
-
-// ============================================
-// 子组件15：Tabs（标签页切换）
-// ============================================
-
-const Tabs = defineComponent((_props, lifecycle) => {
-  const contentRef = useTemplateRef<HTMLDivElement>(lifecycle, 'contentRef');
-
-  lifecycle.onMounted = () => {
-    appEventBus.emit("HYDRATION_CHECK", {
-      id: "Tabs:ref(content)",
-      pass: !!contentRef.value,
-    });
-  };
-
-  const tabs = [
-    { id: "home", label: "首页", icon: IconHome },
-    { id: "profile", label: "个人", icon: IconUser },
-    { id: "settings", label: "设置", icon: IconSettings },
-  ];
-
-  const contents: Record<string, () => ReturnType<typeof h>> = {
-    home: () =>
-      h(
-        "div",
-        { class: "tab-content" },
-        h(IconHome, { size: 14, color: "var(--accent)" }),
-        " 首页内容：欢迎来到 Hili Framework",
-      ),
-    profile: () =>
-      h(
-        "div",
-        { class: "tab-content" },
-        h(IconUser, { size: 14, color: "var(--accent)" }),
-        " 个人信息：HiliDev - 前端开发者",
-      ),
-    settings: () =>
-      h(
-        "div",
-        { class: "tab-content" },
-        h(IconSettings, { size: 14, color: "var(--accent)" }),
-        " 设置：主题切换、语言选择等",
-      ),
-  };
-
-  const handleClick = (tabId: string) => {
-    appState.set("app.activeTab", tabId);
-    appEventBus.emit("TAB_CHANGE", { tab: tabId });
-    // 通过 ref 手动更新内容
-    if (contentRef.value) {
-      contentRef.value.innerHTML = "";
-      // 简化：直接通过 textContent 显示
-      const text: string = {
-        home: "首页内容：欢迎来到 Hili Framework",
-        profile: "个人信息：HiliDev - 前端开发者",
-        settings: "设置：主题切换、语言选择等",
-      }[tabId] ?? "";
-      contentRef.value.textContent = text;
-    }
-  };
-
-  const activeTab = appState.get("app.activeTab") ?? "home";
-
-  return h(
-    "div",
-    { class: "panel tabs" },
-    h("div", { class: "panel-title" }, h(IconSettings, { size: 16 }), "标签页（onClick + 条件渲染）"),
-    h(
-      "div",
-      {
-        class: "tabs-container",
-      },
-      ...tabs.map((tab) =>
-        h(
-          "button",
-          {
-            key: tab.id,
-            onClick: () => handleClick(tab.id),
-            class: activeTab === tab.id ? "tab-btn-active" : "tab-btn",
-          },
-          h(tab.icon, { size: 14 }),
-          tab.label,
-        ),
-      ),
-    ),
-    h(
-      "div",
-      {
-        ref: 'contentRef',
-        class: "tab-content",
-      },
-      contents[activeTab]?.() ?? contents.home(),
-    ),
-  );
-});
-
-// ============================================
-// 子组件16：水合检测面板（SSR 占位，水合后填充）
-// ============================================
-
-const HydrationPanel = defineComponent((_props, _lifecycle) => {
-  return h(
-    "div",
-    {
-      class: "panel hydration-panel",
-    },
-    h(
-      "div",
-      { class: "panel-title-between" },
-      h(
-        "div",
-        { class: "log-header-row" },
-        h(IconZap, { size: 16 }),
-        "水合检测面板",
-      ),
-      h(
-        "span",
-        {
-          class: "hydration-summary",
-        },
-        "等待水合...",
-      ),
-    ),
-    h(
-      "div",
-      {
-        class: "hydration-info",
-      },
-      h(
-        "span",
-        {},
-        "SSR 渲染耗时: ",
-        h(
-          "span",
-          { class: "hydration-time" },
-          "—",
-        ),
-      ),
-    ),
-    h("div", {
-      class: "hydration-list",
     }),
   );
 });
@@ -1158,6 +434,42 @@ const PlayerSection = defineComponent(() => {
       {
         class: "player-controls",
       },
+      // 语言切换按钮组（测试 i18n 动态切换：播放器暴露 setLocale API，
+      // 切换后所有 t() 文案经编译期 _reactiveText 包装精准更新 DOM）
+      h(
+        "button",
+        {
+          id: "btn-locale-zh",
+          class: "btn-locale active",
+        },
+        "中文",
+      ),
+      h(
+        "button",
+        {
+          id: "btn-locale-en",
+          class: "btn-locale",
+        },
+        "English",
+      ),
+      // 运行期注册新语言包演示：点击时 registerLocale("ja-JP", ...) 后切换
+      h(
+        "button",
+        {
+          id: "btn-locale-ja",
+          class: "btn-locale",
+        },
+        "日本語",
+      ),
+      // 查询当前语言：getLocale() + getLocaleSignal().value 对照
+      h(
+        "button",
+        {
+          id: "btn-locale-info",
+          class: "btn-locale",
+        },
+        "i18n 状态",
+      ),
       h(
         "button",
         {
@@ -1234,6 +546,454 @@ const PlayerSection = defineComponent(() => {
       h("h3", { class: "source-card-title" }, "来源列表"),
       h("ul", { id: "source-list", class: "source-list" }),
     ),
+    // 弹幕列表面板：mock-server 拉取的弹幕 + 本地发送的弹幕
+    // （时间点 + 内容；entry-client 水合后渲染并随发送动态追加）
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "弹幕列表（mock 拉取 + 本地发送）"),
+      h("ul", { id: "danmaku-list", class: "danmaku-list" }),
+    ),
+    // 插件 API 演示：调用 player 公开方法 / 插件运行时 API
+    // （按钮 id 由 SSR 输出，entry-client.ts 水合后绑定事件）
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "插件 API 演示"),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h(
+          "button",
+          { id: "btn-danmaku-toggle", class: "btn" },
+          "切换弹幕显隐",
+        ),
+        h(
+          "button",
+          { id: "btn-danmaku-opacity", class: "btn" },
+          "弹幕透明度 0.5",
+        ),
+        h(
+          "button",
+          { id: "btn-subtitle-style", class: "btn" },
+          "字幕字号 24px",
+        ),
+        h(
+          "button",
+          { id: "btn-subtitle-toggle", class: "btn" },
+          "切换字幕显隐",
+        ),
+        h(
+          "button",
+          { id: "btn-quality-auto", class: "btn" },
+          "画质 auto",
+        ),
+        h(
+          "button",
+          { id: "btn-display-wide", class: "btn" },
+          "宽屏模式",
+        ),
+        h(
+          "button",
+          { id: "btn-display-normal", class: "btn" },
+          "普通模式",
+        ),
+      ),
+    ),
+    // 交互卡片：展示 / 编辑双模式切换
+    // 展示模式（默认）：卡片按时间窗口纯展示，注册全部交互监听
+    // 编辑模式：卡片常驻可拖拽、运行期添加四类卡片，点击类监听不注册
+    // 切换实现：mode 为构造期配置 → 卸载旧实例 + 携带数据快照重建
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "交互卡片 · 展示 / 编辑模式"),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h(
+          "button",
+          { id: "btn-interaction-view", class: "btn" },
+          "展示模式",
+        ),
+        h(
+          "button",
+          { id: "btn-interaction-edit", class: "btn" },
+          "编辑模式",
+        ),
+      ),
+      h(
+        "div",
+        {
+          id: "interaction-edit-row",
+          class: "demo-btn-row is-hidden",
+        },
+        h(
+          "button",
+          { id: "btn-add-guide", class: "btn" },
+          "+ 点赞关注卡片",
+        ),
+        h(
+          "button",
+          { id: "btn-add-link", class: "btn" },
+          "+ 外链卡片",
+        ),
+        h(
+          "button",
+          { id: "btn-add-vote", class: "btn" },
+          "+ 投票卡片",
+        ),
+        h(
+          "button",
+          { id: "btn-add-score", class: "btn" },
+          "+ 评分卡片",
+        ),
+        h(
+          "button",
+          { id: "btn-interaction-dump", class: "btn" },
+          "导出交互数据",
+        ),
+      ),
+      // 通用工具行（展示 / 编辑两模式均可用）：
+      // updateData 重置 / closeCard 关闭指定卡片 / getContainer 查询容器
+      h(
+        "div",
+        {
+          id: "interaction-extra-row",
+          class: "demo-btn-row",
+        },
+        h(
+          "button",
+          { id: "btn-interaction-reset", class: "btn" },
+          "重置交互数据",
+        ),
+        h(
+          "button",
+          { id: "btn-interaction-close", class: "btn" },
+          "关闭投票卡片#0",
+        ),
+        h(
+          "button",
+          { id: "btn-interaction-container", class: "btn" },
+          "获取交互容器",
+        ),
+      ),
+      // 内容编辑面板：仅编辑模式显示，entry-client 水合后按
+      // getStatus() 动态渲染每张卡片的文本编辑表单（input 实时调
+      // updateCardContent，结构操作后全量重建面板）
+      h("div", {
+        id: "interaction-content-panel",
+        class: "interaction-content-panel is-hidden",
+      }),
+    ),
+    // 弹幕插件运行时 API 全量演示（DanmakuPluginAPI 27 个方法）：
+    // 控制（send/sendBatch/play/pause/stop/clear/seek/getStats/getManager）
+    // 渲染样式（setRenderMode/setFontSize/setAutoScale/setMaskConfig/setFilter/setScreenMode）
+    // 参数与数据源（setSpeed/setSpeedMultiplier/setArea/setAreaRatio/setDensity/load/loadDanmaku）
+    // （setVisible/setOpacity 经上方播放器级按钮 setDanmakuVisible/setDanmakuOpacity 覆盖）
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "弹幕插件 API 演示"),
+      h(
+        "div",
+        { class: "demo-btn-row" },
+        h("button", { id: "btn-dm-send", class: "btn" }, "插件发送弹幕"),
+        h("button", { id: "btn-dm-sendbatch", class: "btn" }, "插件批量发送"),
+        h("button", { id: "btn-dm-pause", class: "btn" }, "弹幕动画暂停"),
+        h("button", { id: "btn-dm-play", class: "btn" }, "弹幕动画恢复"),
+        h("button", { id: "btn-dm-stop", class: "btn" }, "停止弹幕调度"),
+        h("button", { id: "btn-dm-clear", class: "btn" }, "清空屏幕弹幕"),
+        h("button", { id: "btn-dm-seek", class: "btn" }, "重置弹幕调度"),
+        h("button", { id: "btn-dm-stats", class: "btn" }, "弹幕性能统计"),
+      ),
+      h(
+        "div",
+        { class: "demo-btn-row" },
+        h("button", { id: "btn-dm-render", class: "btn" }, "切换渲染引擎"),
+        h("button", { id: "btn-dm-font", class: "btn" }, "切换字号档位"),
+        h("button", { id: "btn-dm-autoscale", class: "btn" }, "随屏缩放开/关"),
+        h("button", { id: "btn-dm-mask", class: "btn" }, "智能防挡开/关"),
+        h("button", { id: "btn-dm-filter", class: "btn" }, "循环类型过滤"),
+        h("button", { id: "btn-dm-screen", class: "btn" }, "弹幕屏幕模式"),
+      ),
+      h(
+        "div",
+        { class: "demo-btn-row" },
+        h("button", { id: "btn-dm-speedgear", class: "btn" }, "速度档位循环"),
+        h("button", { id: "btn-dm-speedmul", class: "btn" }, "速度倍率循环"),
+        h("button", { id: "btn-dm-area", class: "btn" }, "区域档位/比例"),
+        h("button", { id: "btn-dm-density", class: "btn" }, "弹幕密度循环"),
+        h("button", { id: "btn-dm-fontscale", class: "btn" }, "字号缩放循环"),
+        h("button", { id: "btn-dm-resize", class: "btn" }, "重算弹幕布局"),
+        h("button", { id: "btn-dm-load", class: "btn" }, "重装弹幕数据源"),
+        h("button", { id: "btn-dm-loaddanmaku", class: "btn" }, "直接装填弹幕"),
+      ),
+    ),
+    // 字幕插件运行时 API 全量演示（SubtitlePluginAPI）：
+    // AI 识别（isAiEnabled/enableAi/disableAi/startLocalAi/stopLocalAi/
+    //         switchLocalAiLanguage/refreshAiSubtitle/refreshRange）
+    // 状态查询（getCurrentSubtitle/getFullTranscript/listTracks/activateTrack/
+    //          setTranslationTrack/getStatus）
+    // 样式与数据源（setStyle/setFontSize/setColor/setBackgroundColor/setStroke/
+    //               setPosition/setOffset/switchLanguage/toggle/show/hide/
+    //               seek/load/unload）
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "字幕插件 API 演示"),
+      h(
+        "div",
+        { class: "demo-btn-row" },
+        h("button", { id: "btn-sub-ai", class: "btn" }, "AI 字幕总开关"),
+        h("button", { id: "btn-sub-localai-start", class: "btn" }, "启动本地识别"),
+        h("button", { id: "btn-sub-localai-stop", class: "btn" }, "停止本地识别"),
+        h("button", { id: "btn-sub-localai-lang", class: "btn" }, "切换识别语言"),
+        h("button", { id: "btn-sub-refresh", class: "btn" }, "刷新识别/区间"),
+      ),
+      h(
+        "div",
+        { class: "demo-btn-row" },
+        h("button", { id: "btn-sub-current", class: "btn" }, "当前字幕"),
+        h("button", { id: "btn-sub-transcript", class: "btn" }, "完整字幕稿"),
+        h("button", { id: "btn-sub-tracks", class: "btn" }, "字幕轨列表"),
+        h("button", { id: "btn-sub-track-next", class: "btn" }, "切换激活轨"),
+        h("button", { id: "btn-sub-translation", class: "btn" }, "翻译轨开/关"),
+        h("button", { id: "btn-sub-status", class: "btn" }, "字幕插件状态"),
+      ),
+      h(
+        "div",
+        { class: "demo-btn-row" },
+        h("button", { id: "btn-sub-style", class: "btn" }, "循环字幕配色"),
+        h("button", { id: "btn-sub-pos", class: "btn" }, "循环字幕位置"),
+        h("button", { id: "btn-sub-offset", class: "btn" }, "循环字幕偏移"),
+        h("button", { id: "btn-sub-langswitch", class: "btn" }, "切换语言轨"),
+        h("button", { id: "btn-sub-toggle", class: "btn" }, "字幕显隐切换"),
+        h("button", { id: "btn-sub-load", class: "btn" }, "装填内联字幕"),
+        h("button", { id: "btn-sub-unload", class: "btn" }, "卸载字幕"),
+        h("button", { id: "btn-sub-seek", class: "btn" }, "字幕重定位"),
+      ),
+    ),
+    // 分段进度条运行时编辑：分段数据经构造配置 progress.segments 传入，
+    // 运行时更新走 player.setConfig({ progress: { segments } }) 深合并，
+    // 播放器内部 syncSegmentsToControls 同步到进度条控件
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "分段进度条 API"),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h(
+          "button",
+          { id: "btn-seg-add", class: "btn" },
+          "追加 30 秒分段",
+        ),
+        h(
+          "button",
+          { id: "btn-seg-edit", class: "btn" },
+          "末段标记已编辑",
+        ),
+        h(
+          "button",
+          { id: "btn-seg-reset", class: "btn" },
+          "重新拉取分段",
+        ),
+        h(
+          "button",
+          { id: "btn-seg-apply", class: "btn" },
+          "应用分段 (setConfig)",
+        ),
+      ),
+      // 分段列表面板：entry-client 水合后按 demoSegments 渲染
+      // （标题 + 起止时间 + 删除按钮），任何编辑操作后全量重建
+      h("div", { id: "segment-list", class: "seg-list-panel" }),
+    ),
+    // 播放器核心 API 全量演示（VideoPlayer 公开方法）：
+    // 播放控制 / 音量 / 倍速循环 / 画面 / 设置 / 画质 / 播放列表 /
+    // 状态查询 / 弹幕与字幕代理 / 插件与事件 / setConfig 深合并
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "播放器核心 API"),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-play", class: "btn" }, "播放 play()"),
+        h("button", { id: "btn-api-pause", class: "btn" }, "暂停 pause()"),
+        h("button", { id: "btn-api-toggle", class: "btn" }, "播放/暂停切换"),
+        h("button", { id: "btn-api-seek", class: "btn" }, "跳到当前+30s"),
+        h("button", { id: "btn-api-seekby", class: "btn" }, "相对跳转 +10s"),
+        h("button", { id: "btn-api-reload", class: "btn" }, "重新加载"),
+        h("button", { id: "btn-api-autoplay", class: "btn" }, "尝试自动播放"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-volume", class: "btn" }, "音量轮换"),
+        h("button", { id: "btn-api-getvolume", class: "btn" }, "查音量"),
+        h("button", { id: "btn-api-mute", class: "btn" }, "静音切换"),
+        h("button", { id: "btn-api-setmuted", class: "btn" }, "设置静音轮换"),
+        h("button", { id: "btn-api-ismuted", class: "btn" }, "是否静音"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-rate", class: "btn" }, "倍速轮换"),
+        h("button", { id: "btn-api-getrate", class: "btn" }, "查倍速"),
+        h("button", { id: "btn-api-loop", class: "btn" }, "循环开关"),
+        h("button", { id: "btn-api-playmode", class: "btn" }, "播放模式轮换"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-fullscreen", class: "btn" }, "全屏切换"),
+        h("button", { id: "btn-api-isfullscreen", class: "btn" }, "全屏状态"),
+        h("button", { id: "btn-api-webfs", class: "btn" }, "网页全屏切换"),
+        h("button", { id: "btn-api-iswebfs", class: "btn" }, "网页全屏状态"),
+        h("button", { id: "btn-api-pip", class: "btn" }, "画中画切换"),
+        h("button", { id: "btn-api-enterpip", class: "btn" }, "进入画中画"),
+        h("button", { id: "btn-api-exitpip", class: "btn" }, "退出画中画"),
+        h("button", { id: "btn-api-displaymode", class: "btn" }, "显示模式轮换"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-mirror", class: "btn" }, "镜像开关"),
+        h("button", { id: "btn-api-autostart", class: "btn" }, "自动连播开关"),
+        h("button", { id: "btn-api-lightoff", class: "btn" }, "关灯开关"),
+        h("button", { id: "btn-api-ratio", class: "btn" }, "画面比例轮换"),
+        h("button", { id: "btn-api-codec", class: "btn" }, "编码偏好轮换"),
+        h("button", { id: "btn-api-loudness", class: "btn" }, "音量均衡轮换"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-getquality", class: "btn" }, "当前画质"),
+        h("button", { id: "btn-api-qualities", class: "btn" }, "画质列表"),
+        h("button", { id: "btn-api-qualitymode", class: "btn" }, "画质能力"),
+        h("button", { id: "btn-api-setqualitymode", class: "btn" }, "画质模式轮换"),
+        h("button", { id: "btn-api-qualitylimits", class: "btn" }, "画质上限 2000"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-next", class: "btn" }, "下一集"),
+        h("button", { id: "btn-api-prev", class: "btn" }, "上一集"),
+        h("button", { id: "btn-api-playlist", class: "btn" }, "播放列表"),
+        h("button", { id: "btn-api-index", class: "btn" }, "当前索引"),
+        h("button", { id: "btn-api-poster", class: "btn" }, "设置封面"),
+        h("button", { id: "btn-api-load", class: "btn" }, "加载首项源"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-time", class: "btn" }, "当前时间"),
+        h("button", { id: "btn-api-duration", class: "btn" }, "总时长"),
+        h("button", { id: "btn-api-buffered", class: "btn" }, "缓冲进度"),
+        h("button", { id: "btn-api-ispause", class: "btn" }, "是否暂停"),
+        h("button", { id: "btn-api-isplaying", class: "btn" }, "是否播放中"),
+        h("button", { id: "btn-api-resize", class: "btn" }, "广播尺寸"),
+        h("button", { id: "btn-api-state", class: "btn" }, "状态快照"),
+        h("button", { id: "btn-api-config", class: "btn" }, "playback 配置"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-dmvisible", class: "btn" }, "弹幕显隐轮换"),
+        h("button", { id: "btn-api-dmvisstate", class: "btn" }, "弹幕显隐状态"),
+        h("button", { id: "btn-api-dmspeed", class: "btn" }, "弹幕速度轮换"),
+        h("button", { id: "btn-api-dmsource", class: "btn" }, "弹幕数据源"),
+        h("button", { id: "btn-api-dmclear", class: "btn" }, "清空弹幕"),
+        h("button", { id: "btn-api-dmsend", class: "btn" }, "发送弹幕"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-subvisible", class: "btn" }, "字幕显隐轮换"),
+        h("button", { id: "btn-api-subvisstate", class: "btn" }, "字幕显隐状态"),
+        h("button", { id: "btn-api-sublang", class: "btn" }, "字幕语言轮换"),
+        h("button", { id: "btn-api-sublist", class: "btn" }, "装填内联字幕轨"),
+      ),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-api-pluginapi", class: "btn" }, "弹幕插件实例"),
+        h("button", { id: "btn-api-once", class: "btn" }, "once 绑定 play"),
+        h("button", { id: "btn-api-onoff", class: "btn" }, "on/off 切换 pause"),
+        h("button", { id: "btn-api-applysetting", class: "btn" }, "设置项 loop 轮换"),
+        h("button", { id: "btn-api-setconfig", class: "btn" }, "setConfig 音量 0.8"),
+      ),
+    ),
+    // 音效插件 API（AudioEffectPlugin，经 getPluginAPI("audioEffect") 获取）：
+    // 五种效果开关（EQ/混响/A3D/电话/压缩器）、EQ 与混响预设、
+    // 音效音量（dB）、组合预设、效果列表与效果链查询
+    h(
+      "section",
+      {
+        class: "source-card",
+      },
+      h("h3", { class: "source-card-title" }, "音效插件 API"),
+      h(
+        "div",
+        {
+          class: "demo-btn-row",
+        },
+        h("button", { id: "btn-ae-eq", class: "btn" }, "EQ 开/关"),
+        h("button", { id: "btn-ae-reverb", class: "btn" }, "混响 开/关"),
+        h("button", { id: "btn-ae-a3d", class: "btn" }, "A3D 开/关"),
+        h("button", { id: "btn-ae-phone", class: "btn" }, "电话 开/关"),
+        h("button", { id: "btn-ae-compressor", class: "btn" }, "压缩器 开/关"),
+        h("button", { id: "btn-ae-eqpreset", class: "btn" }, "EQ 预设轮换"),
+        h("button", { id: "btn-ae-revpreset", class: "btn" }, "混响预设轮换"),
+        h("button", { id: "btn-ae-volume", class: "btn" }, "音效音量轮换"),
+        h("button", { id: "btn-ae-combo", class: "btn" }, "组合预设轮换"),
+        h("button", { id: "btn-ae-list", class: "btn" }, "效果名列表"),
+        h("button", { id: "btn-ae-chain", class: "btn" }, "效果链状态"),
+      ),
+    ),
     h(
       "p",
       {
@@ -1249,16 +1009,6 @@ const PlayerSection = defineComponent(() => {
 // ============================================
 
 const App = defineComponent((_props, lifecycle) => {
-  const user = useContext(UserContext);
-
-  const tasks = [
-    { id: 1, text: "学习 h() 函数", done: true },
-    { id: 2, text: "理解 defineComponent", done: true },
-    { id: 3, text: "掌握 Context 上下文", done: true },
-    { id: 4, text: "实现 SSR 渲染", done: false },
-    { id: 5, text: "完成 Hydrate 水合", done: false },
-  ];
-
   const appRootRef = useTemplateRef<HTMLElement>(lifecycle, 'appRootRef');
 
   /**
@@ -1281,14 +1031,6 @@ const App = defineComponent((_props, lifecycle) => {
     appEventBus.emit("ACTION_LOG", {
       action: "App: onMounted (水合完成)",
       timestamp: Date.now(),
-    });
-    appEventBus.emit("HYDRATION_CHECK", {
-      id: "App:生命周期.onMounted",
-      pass: true,
-    });
-    appEventBus.emit("HYDRATION_CHECK", {
-      id: "App:ref(app-root)",
-      pass: !!appRootRef.value,
     });
 
     useState(
@@ -1328,7 +1070,7 @@ const App = defineComponent((_props, lifecycle) => {
         {
           class: "app-title",
         },
-        "Hili Framework",
+        "Lumina Framework",
       ),
       h(
         "p",
@@ -1348,11 +1090,7 @@ const App = defineComponent((_props, lifecycle) => {
       // VideoPlayer 集成测试
       h(PlayerSection, {}),
 
-      // 水合检测面板（最重要的调试工具）
-      h(HydrationPanel, {}),
-
-      // 用户信息 + 主题切换
-      h(UserInfo, {}),
+      // 主题切换
       h(ThemeSwitcher, {}),
 
       // 计数器
@@ -1377,37 +1115,6 @@ const App = defineComponent((_props, lifecycle) => {
         },
       }),
 
-      // 搜索 + Tabs + 条件渲染
-      h(SearchBox, {}),
-      h(Tabs, {}),
-      h(ConditionalSection, { showAdmin: user.loggedIn }),
-
-      // 列表 + Todo
-      h(TaskList, { tasks }),
-      h(TodoApp, {}),
-
-      // 嵌套 + Fragment
-      h(NestedContainer, {}),
-      h(FragmentDemo, {}),
-
-      // ref + expose
-      h(
-        "div",
-        {
-          class: "panel",
-        },
-        h("div", { class: "panel-title" }, h(IconLock, { size: 16 }), "ref & expose API"),
-        h(ChildWithExpose, {
-          initialValue: "Hello Hili",
-          onValueChange: (payload: { value: string }) => {
-            appEventBus.emit("ACTION_LOG", {
-              action: "子组件值变化: " + payload.value,
-              timestamp: Date.now(),
-            });
-          },
-        }),
-      ),
-
       // 事件日志
       h(EventLog, {}),
     ),
@@ -1418,7 +1125,7 @@ const App = defineComponent((_props, lifecycle) => {
       {
         class: "app-footer",
       },
-      "Hili Framework SSR + Hydrate Demo · 暗色主题 · SVG 图标",
+      "Lumina Framework SSR + Hydrate Demo · 暗色主题 · SVG 图标",
     ),
   );
 });
@@ -1432,10 +1139,7 @@ export const RootLayout = defineComponent(() => {
     "div",
     {},
     provide(
-      [
-        { contextId: ThemeContext.id, value: darkTheme },
-        { contextId: UserContext.id, value: userInfoValue },
-      ],
+      [{ contextId: ThemeContext.id, value: darkTheme }],
       () => h(App, {}),
     ),
   );

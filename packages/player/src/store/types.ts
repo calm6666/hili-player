@@ -68,7 +68,7 @@ export interface SubtitlePreferences {
 
 /**
  * 播放器持久化状态
- * 对应 localStorage 中的 hili_player_profile JSON 对象
+ * 对应 localStorage 中的 nova_player_profile JSON 对象
  *
  * 对照 store.txt:
  *   volume/isMuted/playbackRate ≈ bpx_player_profile.media
@@ -175,7 +175,7 @@ export interface PlayerState extends PlayerPersistentState, PlayerRuntimeState {
 export interface StoreOptions {
   /** 是否启用 localStorage 持久化，默认 true */
   persist?: boolean;
-  /** 自定义主 profile key，默认 hili_player_profile */
+  /** 自定义主 profile key，默认 nova_player_profile */
   persistKey?: string;
 }
 

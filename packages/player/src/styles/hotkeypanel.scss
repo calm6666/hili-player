@@ -1,5 +1,5 @@
-.player-container {
-  .player-hotkey-panel {
+.nova-player-container {
+  .nova-player-hotkey-panel {
     -webkit-font-smoothing: antialiased;
     background-color: rgba(33, 33, 33, 0.9);
     border-radius: 4px;
@@ -14,13 +14,13 @@
     z-index: 80;
     display: none;
 
-    .player-hotkey-panel-title {
+    .nova-player-hotkey-panel-title {
       border-bottom: 1px solid hsla(0, 0%, 100%, 0.1);
       font-size: 16px;
       line-height: 40px;
       text-align: center;
 
-      .player-hotkey-panel-close {
+      .nova-player-hotkey-panel-close {
         fill: #fff;
         color: #fff;
         cursor: pointer;
@@ -33,7 +33,7 @@
       }
     }
 
-    .player-hotkey-panel-area {
+    .nova-player-hotkey-panel-area {
       margin: 10px 0;
       max-height: 268px;
       overflow-y: scroll;
@@ -49,22 +49,22 @@
         display: none;
       }
 
-      .player-hotkey-panel-content {
+      .nova-player-hotkey-panel-content {
         padding: 0 20px;
 
-        .player-hotkey-panel-content-item {
+        .nova-player-hotkey-panel-content-item {
           font-size: 12px;
           height: 24px;
           line-height: 24px;
           min-width: 360px;
           text-align: center;
 
-          .player-hotkey-panel-content-name {
+          .nova-player-hotkey-panel-content-name {
             display: inline-block;
             width: 120px;
           }
 
-          .player-hotkey-panel-content-desc {
+          .nova-player-hotkey-panel-content-desc {
             color: #999;
             display: inline-block;
             width: 190px;

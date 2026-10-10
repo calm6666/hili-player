@@ -417,71 +417,71 @@ export enum PlayerStateKeyEnum {
 export enum PersistentKeyEnum {
   // 播放器设置
   /** 音量 */
-  VOLUME = 'hili_player_volume',
+  VOLUME = 'nova_player_volume',
   /** 是否静音 */
-  MUTED = 'hili_player_muted',
+  MUTED = 'nova_player_muted',
   /** 播放速度 */
-  PLAYBACK_RATE = 'hili_player_playback_rate',
+  PLAYBACK_RATE = 'nova_player_playback_rate',
   /** 默认画质 */
-  DEFAULT_QUALITY = 'hili_player_default_quality',
+  DEFAULT_QUALITY = 'nova_player_default_quality',
   /** 播放模式 */
-  PLAY_MODE = 'hili_player_play_mode',
+  PLAY_MODE = 'nova_player_play_mode',
 
   // 弹幕设置
   /** 弹幕显示状态 */
-  DANMAKU_VISIBLE = 'hili_player_danmaku_visible',
+  DANMAKU_VISIBLE = 'nova_player_danmaku_visible',
   /** 弹幕不透明度 */
-  DANMAKU_OPACITY = 'hili_player_danmaku_opacity',
+  DANMAKU_OPACITY = 'nova_player_danmaku_opacity',
   /** 弹幕速度 */
-  DANMAKU_SPEED = 'hili_player_danmaku_speed',
+  DANMAKU_SPEED = 'nova_player_danmaku_speed',
   /** 弹幕密度 */
-  DANMAKU_DENSITY = 'hili_player_danmaku_density',
+  DANMAKU_DENSITY = 'nova_player_danmaku_density',
   /** 弹幕屏蔽设置 */
-  DANMAKU_BLOCK = 'hili_player_danmaku_block',
+  DANMAKU_BLOCK = 'nova_player_danmaku_block',
 
   // 字幕设置
   /** 字幕显示状态 */
-  SUBTITLE_VISIBLE = 'hili_player_subtitle_visible',
+  SUBTITLE_VISIBLE = 'nova_player_subtitle_visible',
   /** 字幕语言 */
-  SUBTITLE_LANG = 'hili_player_subtitle_lang',
+  SUBTITLE_LANG = 'nova_player_subtitle_lang',
   /** 字幕大小 */
-  SUBTITLE_SIZE = 'hili_player_subtitle_size',
+  SUBTITLE_SIZE = 'nova_player_subtitle_size',
   /** 字幕颜色 */
-  SUBTITLE_COLOR = 'hili_player_subtitle_color',
+  SUBTITLE_COLOR = 'nova_player_subtitle_color',
 
   // 播放器偏好
   /** 自动播放 */
-  AUTO_PLAY = 'hili_player_auto_play',
+  AUTO_PLAY = 'nova_player_auto_play',
   /** 自动全屏 */
-  AUTO_FULLSCREEN = 'hili_player_auto_fullscreen',
+  AUTO_FULLSCREEN = 'nova_player_auto_fullscreen',
   /** 跳过片头片尾 */
-  SKIP_OP_ED = 'hili_player_skip_op_ed',
+  SKIP_OP_ED = 'nova_player_skip_op_ed',
   /** 连续播放 */
-  CONTINUOUS_PLAY = 'hili_player_continuous_play',
+  CONTINUOUS_PLAY = 'nova_player_continuous_play',
 
   // 视频播放历史
   /** 播放进度 */
-  PLAY_PROGRESS = 'hili_player_play_progress',
+  PLAY_PROGRESS = 'nova_player_play_progress',
   /** 观看历史 */
-  WATCH_HISTORY = 'hili_player_watch_history',
+  WATCH_HISTORY = 'nova_player_watch_history',
 
   // 编解码器偏好
   /** 编解码器偏好版本 */
-  CODEC_PREFER_VERSION = 'hili_player_codec_prefer_version',
+  CODEC_PREFER_VERSION = 'nova_player_codec_prefer_version',
   /** 编解码器偏好类型 */
-  CODEC_PREFER_TYPE = 'hili_player_codec_prefer_type',
+  CODEC_PREFER_TYPE = 'nova_player_codec_prefer_type',
 
   // ABR 用户偏好
   /** 智能码率用户偏好 */
-  SMART_ABR_PREFERENCE = 'hili_player_smart_abr_preference',
+  SMART_ABR_PREFERENCE = 'nova_player_smart_abr_preference',
 
   // GPU 渲染器信息
   /** GPU 渲染器 */
-  GPU_RENDERER = 'hili_player_gpu_renderer',
+  GPU_RENDERER = 'nova_player_gpu_renderer',
 
   // Dash 配置
   /** Dash Fawkes 配置 */
-  DASH_FAWKES_CONFIG = 'hili_player_dash_fawkes_config',
+  DASH_FAWKES_CONFIG = 'nova_player_dash_fawkes_config',
 }
 ```
 
@@ -7690,7 +7690,7 @@ export class VideoPlayer implements ComponentInstance<PlayerConfig>, PlayerMetho
      */
     this.store = createPlayerStore({
       persist: true,
-      persistKey: 'hili_player_state',
+      persistKey: 'nova_player_state',
     });
 
     /**

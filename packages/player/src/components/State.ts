@@ -4,8 +4,8 @@
  * ============================================
  */
 
-import { h, defineComponent, useTemplateRef } from '@/core';
-import type { ComponentLifecycle } from '@/types';
+import { h, defineComponent, signal, t, Show } from "@/core";
+import type { ComponentLifecycle } from "@/types";
 
 /**
  * 状态组件 Props 接口
@@ -20,142 +20,128 @@ export interface StateProps {
 /**
  * 播放器状态组件
  */
-export const State = defineComponent<StateProps>((props, lifecycle: ComponentLifecycle) => {
-  // ============================================
-  // DOM 引用
-  // ============================================
+export const State = defineComponent<StateProps>(
+  (props, lifecycle: ComponentLifecycle) => {
+    // ============================================
+    // 响应式信号（驱动缓冲图标/文本/速度的显隐与内容自动更新）
+    // ============================================
 
-  /** 播放图标元素引用 */
+    /**
+     * 缓冲速度信号（字节/秒）
+     * 替代旧的 lastValidSpeed + bufferSpeedRef.textContent/style.display 命令式操作
+     * 信号在 _reactiveText 与 Show when getter 中被读取，编译期/mount 时注册 effect，
+     * 信号变化时自动更新 Text 节点与 Show 分支切换
+     */
+    const bufferSpeedSignal = signal<number>(props.bufferSpeed ?? 0);
 
-  /** 缓冲图标元素引用 */
-  const bufferIconRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bufferIconRef');
+    /**
+     * 缓冲态信号
+     * 替代旧的 bufferIconRef.style.display / bufferTextRef.style.display 命令式操作
+     * 信号在 Show when 中被读取，mount 时注册 effect，信号变化时自动 mount/destroy 子节点
+     */
+    const bufferingSignal = signal<boolean>(props.buffering ?? false);
 
-  /** 缓冲速度文本元素引用 */
-  const bufferSpeedRef = useTemplateRef<HTMLSpanElement>(lifecycle, 'bufferSpeedRef');
+    // ============================================
+    // 工具函数
+    // ============================================
 
-  /** 缓冲文本容器元素引用 */
-  const bufferTextRef = useTemplateRef<HTMLDivElement>(lifecycle, 'bufferTextRef');
+    /**
+     * 将缓冲速度格式化为可读字符串（按量级自适应 KB/S 与 MB/S）
+     *
+     * 单位说明：入参为「字节/秒」（与 StreamStats.downloadSpeed 的单位一致），
+     * 1024 进制下除以 1024 得到的是 KB/S，除以 1024² 才是 MB/S。
+     * @param speed - 缓冲速度（字节/秒）
+     * @returns 格式化后的速度字符串；无有效数据（非正数 / NaN）时返回空串
+     */
+    const formatBufferSpeed = (speed: number): string => {
+      if (!Number.isFinite(speed) || speed <= 0) return "";
+      const kb = speed / 1024;
+      // 1MB/S（1024KB/S）以下按 KB/S 显示，避免出现「0.0MB/S」这类无信息量的文本
+      return kb < 1024
+        ? `${kb.toFixed(1)}KB/S`
+        : `${(kb / 1024).toFixed(1)}MB/S`;
+    };
 
-  // ============================================
-  // DOM 更新函数
-  // ============================================
+    // ============================================
+    // 对外 API（更新信号，由响应式系统自动驱动 DOM 更新）
+    // ============================================
 
-  /** 最近一次有效的缓冲速度（字节/秒），0 表示当前无有效数据 */
-  let lastValidSpeed = 0;
+    /**
+     * 更新缓冲速度显示文本
+     * @param speed - 缓冲速度（字节/秒）；无效（0 / NaN / 负数）时由 Show 隐藏速度文本
+     */
+    const updateBufferSpeed = (speed: number): void => {
+      bufferSpeedSignal.value = speed;
+    };
 
-  /**
-   * 将缓冲速度格式化为可读字符串（按量级自适应 KB/S 与 MB/S）
-   *
-   * 单位说明：入参为「字节/秒」（与 StreamStats.downloadSpeed 的单位一致），
-   * 1024 进制下除以 1024 得到的是 KB/S，除以 1024² 才是 MB/S。
-   * @param speed - 缓冲速度（字节/秒）
-   * @returns 格式化后的速度字符串；无有效数据（非正数 / NaN）时返回空串
-   */
-  const formatBufferSpeed = (speed: number): string => {
-    if (!Number.isFinite(speed) || speed <= 0) return '';
-    const kb = speed / 1024;
-    // 1MB/S（1024KB/S）以下按 KB/S 显示，避免出现「0.0MB/S」这类无信息量的文本
-    return kb < 1024 ? `${kb.toFixed(1)}KB/S` : `${(kb / 1024).toFixed(1)}MB/S`;
-  };
+    /**
+     * 显示缓冲状态图标和文本（信号变化后 Show 自动 mount 子节点）
+     */
+    const showBuffering = (): void => {
+      bufferingSignal.value = true;
+    };
 
-  /**
-   * 应用缓冲速度到速度文本
-   *
-   * 无有效数据时隐藏速度文本（`.player-state-buff-speed` 本身没有隐藏样式，
-   * 必须由这里控制显隐），避免出现假的「0.0MB/S」。
-   * @param speed - 缓冲速度（字节/秒）
-   */
-  const applyBufferSpeed = (speed: number): void => {
-    const text = formatBufferSpeed(speed);
-    lastValidSpeed = text ? speed : 0;
-    if (!bufferSpeedRef.value) return;
-    if (!text) {
-      bufferSpeedRef.value.textContent = '';
-      bufferSpeedRef.value.style.display = 'none';
-      return;
-    }
-    bufferSpeedRef.value.textContent = text;
-    bufferSpeedRef.value.style.display = '';
-  };
+    /**
+     * 隐藏缓冲状态图标和文本（信号变化后 Show 自动 destroy 子节点）
+     */
+    const hideBuffering = (): void => {
+      bufferingSignal.value = false;
+    };
 
-  /**
-   * 更新缓冲速度显示文本
-   * @param speed - 缓冲速度（字节/秒）；无效（0 / NaN / 负数）时隐藏速度文本
-   */
-  const updateBufferSpeed = (speed: number): void => {
-    applyBufferSpeed(speed);
-  };
+    lifecycle.onMounted = (): void => {
+      lifecycle.emit?.("stateMounted", {
+        updateBufferSpeed,
+        showBuffering,
+        hideBuffering,
+      });
+    };
 
-  /**
-   * 显示缓冲状态图标和文本
-   */
-  const showBuffering = (): void => {
-    if (bufferIconRef.value) {
-      bufferIconRef.value.style.display = '';
-    }
-    if (bufferTextRef.value) {
-      bufferTextRef.value.style.display = '';
-    }
-    // 文本容器重新显示时，按最近一次有效速度重新决定速度文本的显隐
-    applyBufferSpeed(lastValidSpeed);
-  };
+    lifecycle.onBeforeDestroy = (): void => {
+      // 组件销毁时引用自动释放
+    };
 
-  /**
-   * 隐藏缓冲状态图标和文本
-   */
-  const hideBuffering = (): void => {
-    if (bufferIconRef.value) {
-      bufferIconRef.value.style.display = 'none';
-    }
-    if (bufferTextRef.value) {
-      bufferTextRef.value.style.display = 'none';
-    }
-  };
+    // ============================================
+    // 主渲染函数
+    // ============================================
 
-  lifecycle.onMounted = (): void => {
-    // 初始状态：先按 props 速度决定速度文本显隐（无有效数据即隐藏）
-    applyBufferSpeed(props.bufferSpeed ?? 0);
-    // 缓冲状态：props.buffering 为真时显示缓冲图标与文本
-    if (props.buffering) {
-      showBuffering();
-    } else {
-      hideBuffering();
-    }
-
-    lifecycle.emit?.('stateMounted', {
-      updateBufferSpeed,
-      showBuffering,
-      hideBuffering,
-    });
-  };
-
-  lifecycle.onBeforeDestroy = (): void => {
-    // 组件销毁时引用自动释放
-  };
-
-  // ============================================
-  // 主渲染函数
-  // ============================================
-
-  return h(
-    'div',
-    { class: 'player-state-wrap' },
-    h('div', { class: 'player-state-play', ref: 'playIconRef' }),
-    h('div', { class: 'player-state-buff-icon', ref: 'bufferIconRef' }),
-    h(
-      'div',
-      { class: 'player-state-buff-text', ref: 'bufferTextRef' },
-      h('span', { class: 'player-state-buff-title' }, '正在缓冲...'),
+    return h(
+      "div",
+      { class: "nova-player-state-wrap" },
+      h("div", { class: "nova-player-state-play" }),
+      // 缓冲图标与文本：由 bufferingSignal 控制 mount/destroy
+      // 替代旧的 bufferIconRef.style.display / bufferTextRef.style.display 命令式操作
       h(
-        'span',
-        {
-          class: 'player-state-buff-speed',
-          ref: 'bufferSpeedRef',
-          // 初值无有效数据时先隐藏，onMounted 会按 props.bufferSpeed 重新判定
-          style: { display: 'none' },
-        },
-        formatBufferSpeed(props.bufferSpeed ?? 0)
-      )
-    )
-  );
-});
+        Show,
+        { when: bufferingSignal },
+        h("div", { class: "nova-player-state-buff-icon" }),
+        h(
+          "div",
+          { class: "nova-player-state-buff-text" },
+          h(
+            "span",
+            { class: "nova-player-state-buff-title" },
+            t("player.ui.state.buffering"),
+          ),
+          // 速度文本：仅在缓冲态且有有效速度时显示
+          // 外层 Show 由 bufferingSignal 控制；内层 Show 由速度有效性控制
+          h(
+            Show,
+            {
+              when: () =>
+                Number.isFinite(bufferSpeedSignal.value) &&
+                bufferSpeedSignal.value > 0,
+            },
+            h(
+              "span",
+              { class: "nova-player-state-buff-speed" },
+              // 零参箭头函数 = 显式响应式 getter 协议（与 Solid 的 {() => expr} 一致）：
+              // 编译器包装为 _reactiveText(() => formatBufferSpeed(...))，mount 建 Text 节点 + effect，
+              // bufferSpeedSignal 变化时自动更新 textContent
+              () => formatBufferSpeed(bufferSpeedSignal.value),
+            ),
+          ),
+        ),
+      ),
+    );
+  },
+);

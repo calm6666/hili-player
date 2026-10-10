@@ -16,51 +16,51 @@
  * 定义 localStorage 中每一类数据的 key 名称
  *
  * 存储原则：
- * - 主配置用一个 JSON 对象（hili_player_profile），包含所有通用设置
+ * - 主配置用一个 JSON 对象（nova_player_profile），包含所有通用设置
  * - 需要高频独立读取的标量值用独立 key
  * - 弹幕/字幕等插件设置由插件自己管理持久化，不在此处定义
  */
 export enum PersistentKeyEnum {
   /** 用户主配置 JSON —— 包含音量、静音、倍速、画面模式、GPU 信息等 */
-  profile = 'hili_player_profile',
+  profile = 'nova_player_profile',
 
   /** 编解码器偏好类型 —— 独立 key，对照 bilibili_player_codec_prefer_type */
-  codec_prefer_type = 'hili_player_codec_prefer_type',
+  codec_prefer_type = 'nova_player_codec_prefer_type',
 
   /** 编解码器重置版本号 —— 对照 bilibili_player_codec_prefer_reset */
-  codec_prefer_reset = 'hili_player_codec_prefer_reset',
+  codec_prefer_reset = 'nova_player_codec_prefer_reset',
 
   /** GPU 渲染器信息 —— 对照 bilibili_player_gpu_renderer */
-  gpu_renderer = 'hili_player_gpu_renderer',
+  gpu_renderer = 'nova_player_gpu_renderer',
 
   /** 播放信息（最高画质/音质等）—— 对照 bilibili_player_playback_info_v1 */
-  playback_info = 'hili_player_playback_info',
+  playback_info = 'nova_player_playback_info',
 
   /** 播放器版本 —— 对照 store.txt version 字段 */
-  player_version = 'hili_player_version',
+  player_version = 'nova_player_version',
 
   // ========== 进度条偏好 (PBP = Player Bar Progress) ==========
   /** 进度条高度，对照 pbp_height_v3 */
-  pbp_height = 'hili_player_pbp_height',
+  pbp_height = 'nova_player_pbp_height',
   /** 进度条不透明度，对照 pbp_opacity_v3 */
-  pbp_opacity = 'hili_player_pbp_opacity',
+  pbp_opacity = 'nova_player_pbp_opacity',
   /** 进度条固定，对照 pbp_pin_v3 */
-  pbp_pin = 'hili_player_pbp_pin',
+  pbp_pin = 'nova_player_pbp_pin',
   /** 进度条主题，对照 pbp_theme_v4 */
-  pbp_theme = 'hili_player_pbp_theme',
+  pbp_theme = 'nova_player_pbp_theme',
   /** 进度条版本，对照 pbp_version */
-  pbp_version = 'hili_player_pbp_version',
+  pbp_version = 'nova_player_pbp_version',
   /** 进度条开关状态，对照 pbpstate */
-  pbp_state = 'hili_player_pbp_state',
+  pbp_state = 'nova_player_pbp_state',
   /** 进度条清晰状态，对照 pbpstate_clear */
-  pbp_state_clear = 'hili_player_pbp_state_clear',
+  pbp_state_clear = 'nova_player_pbp_state_clear',
 
   // ============================================
   // 以下由各插件独立管理持久化，不纳入核心 store
   // ============================================
-  // 弹幕设置 → 由 DanmakuPlugin 管理，key: hili_player_danmaku
-  // 字幕设置 → 由 SubtitlePlugin 管理，key: hili_player_subtitle
-  // 交互设置 → 由 InteractionPlugin 管理，key: hili_player_interaction
+  // 弹幕设置 → 由 DanmakuPlugin 管理，key: nova_player_danmaku
+  // 字幕设置 → 由 SubtitlePlugin 管理，key: nova_player_subtitle
+  // 交互设置 → 由 InteractionPlugin 管理，key: nova_player_interaction
 }
 
 /**
